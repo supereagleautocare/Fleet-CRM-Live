@@ -6,6 +6,6 @@
     "start": "node fleet-crm-backend-v2/server.js"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": "22.x"
   }
 }
