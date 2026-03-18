@@ -955,7 +955,7 @@ export default function RoutePlanner({ embedded = false }) {
                                     background:target?bufferOk?'#f0fdf4':'#fef2f2':'white'}}/>
                                 {target && <button onClick={()=>setArriveAt(p=>{ const n={...p}; delete n[stop.id]; return n; })}
                                   style={{fontSize:11,color:'var(--gray-400)',background:'none',border:'none',cursor:'pointer',padding:'0 2px',lineHeight:1}}>✕</button>}
-                              </div>}
+                              </div>
 
                               {/* Smart timing message */}
                               {target && info && (() => {
