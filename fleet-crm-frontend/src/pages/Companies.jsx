@@ -1,0 +1,820 @@
+import { useState, useEffect, useRef } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import AddressAutocomplete from '../components/AddressAutocomplete.jsx';
+import { api, fmtPhone, fmtDate } from '../api.js';
+import { useApp } from '../App.jsx';
+import ScoreCardModal from '../components/ScoreCardModal.jsx';
+
+// ── Pipeline stage bar shown at top of every company profile ─────────────────
+const STAGES = [
+  { key:'new',      label:'New',      icon:'🆕', color:'#64748b', bg:'#f8fafc' },
+  { key:'call',     label:'Call',     icon:'📞', color:'#1e40af', bg:'#eff6ff' },
+  { key:'mail',     label:'Mail',     icon:'✉️',  color:'#065f46', bg:'#ecfdf5' },
+  { key:'email',    label:'Email',    icon:'📧', color:'#6b21a8', bg:'#faf5ff' },
+  { key:'visit',    label:'Visit',    icon:'📍', color:'#92400e', bg:'#fffbeb' },
+  { key:'customer', label:'Customer', icon:'✅', color:'#166534', bg:'#f0fdf4' },
+  { key:'dead',     label:'Dead',     icon:'💀', color:'#6b7280', bg:'#f9fafb' },
+];
+
+function PipelineBar({ company, onMove, onStar }) {
+  const [showMove, setShowMove] = useState(false);
+  const [moveForm, setMoveForm] = useState({ stage:'', due_date:'', notes:'' });
+  const stage = STAGES.find(s => s.key === (company.pipeline_stage || 'new')) || STAGES[0];
+
+  async function handleMove(e) {
+    e.preventDefault();
+    await onMove(moveForm.stage, moveForm.due_date || null, moveForm.notes || null);
+    setShowMove(false);
+    setMoveForm({ stage:'', due_date:'', notes:'' });
+  }
+
+  return (
+    <div style={{ background:'white', border:`2px solid ${stage.bg === '#f8fafc' ? '#e2e8f0' : stage.bg}`, borderRadius:10, padding:'12px 16px' }}>
+      <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
+        {/* Stage pills */}
+        <div style={{ display:'flex', gap:4, flex:1, flexWrap:'wrap' }}>
+          {STAGES.map(s => (
+            <div key={s.key} style={{
+              padding:'4px 10px', borderRadius:16, fontSize:12, fontWeight:700,
+              background: s.key === company.pipeline_stage ? s.bg : 'var(--gray-50)',
+              color: s.key === company.pipeline_stage ? s.color : 'var(--gray-400)',
+              border: s.key === company.pipeline_stage ? `1.5px solid ${s.color}` : '1.5px solid transparent',
+              display:'flex', alignItems:'center', gap:4,
+            }}>
+              {s.icon} {s.label}
+            </div>
+          ))}
+        </div>
+        {/* Star + Move */}
+        <div style={{ display:'flex', gap:6, flexShrink:0 }}>
+          <button onClick={onStar} title={company.is_starred ? 'Remove warm lead star' : 'Star as warm lead'}
+            style={{ padding:'5px 12px', borderRadius:8, border:'1px solid #fde68a', background: company.is_starred?'#fef9c3':'white', cursor:'pointer', fontSize:13, fontWeight:700, color:'#92400e' }}>
+            {company.is_starred ? '⭐ Starred' : '☆ Star'}
+          </button>
+          <button onClick={()=>setShowMove(!showMove)}
+            style={{ padding:'5px 12px', borderRadius:8, border:'1px solid var(--gray-200)', background:'white', cursor:'pointer', fontSize:13, fontWeight:600, color:'var(--gray-600)' }}>
+            ➡️ Move To
+          </button>
+        </div>
+      </div>
+
+      {/* Move form */}
+      {showMove && (
+        <form onSubmit={handleMove} style={{ marginTop:12, display:'flex', gap:8, alignItems:'flex-end', flexWrap:'wrap', padding:'12px', background:'var(--gray-50)', borderRadius:8, border:'1px solid var(--gray-200)' }}>
+          <div style={{ fontSize:11, color:'var(--gray-500)', width:'100%', marginBottom:4 }}>
+            💡 This moves the company without counting as a call. It will be saved to history.
+          </div>
+          <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
+            <label style={{ fontSize:11, fontWeight:700, color:'var(--gray-500)' }}>Stage *</label>
+            <select required className="form-input" style={{ width:140 }} value={moveForm.stage} onChange={e=>setMoveForm(f=>({...f,stage:e.target.value}))}>
+              <option value="">Choose…</option>
+              {STAGES.map(s=><option key={s.key} value={s.key}>{s.icon} {s.label}</option>)}
+            </select>
+          </div>
+          <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
+            <label style={{ fontSize:11, fontWeight:700, color:'var(--gray-500)' }}>Due Date</label>
+            <input type="date" className="form-input" style={{ width:150 }} value={moveForm.due_date} onChange={e=>setMoveForm(f=>({...f,due_date:e.target.value}))}/>
+          </div>
+          <div style={{ display:'flex', flexDirection:'column', gap:4, flex:1, minWidth:120 }}>
+            <label style={{ fontSize:11, fontWeight:700, color:'var(--gray-500)' }}>Reason</label>
+            <input className="form-input" placeholder="Optional note…" value={moveForm.notes} onChange={e=>setMoveForm(f=>({...f,notes:e.target.value}))}/>
+          </div>
+          <button type="submit" className="btn btn-primary btn-sm">Move</button>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={()=>setShowMove(false)}>Cancel</button>
+        </form>
+      )}
+    </div>
+  );
+}
+
+// ── Contact Form (inline add/edit) ────────────────────────────────────────────
+function ContactForm({ companyId, contact, onSave, onCancel }) {
+  const [form, setForm] = useState({
+    name:        contact?.name        || '',
+    role_title:  contact?.role_title  || '',
+    direct_line: contact?.direct_line || '',
+    email:       contact?.email       || '',
+    notes:       contact?.notes       || '',
+    is_preferred: contact?.is_preferred ? true : false,
+  });
+  const [saving, setSaving] = useState(false);
+  const { showToast } = useApp();
+
+  function set(f, v) { setForm(p => ({...p, [f]: v})); }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!form.name.trim()) return;
+    setSaving(true);
+    try {
+      if (contact?.id) {
+        await api.updateContact(contact.id, form);
+      } else {
+        await api.addContact(companyId, form);
+      }
+      onSave();
+    } catch(err) {
+      showToast(err.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div style={{ background:'var(--gray-50)', border:'1px solid var(--gray-200)', borderRadius:10, padding:'16px 18px', margin:'8px 0' }}>
+      <div style={{ fontWeight:700, fontSize:13, marginBottom:12, color:'var(--gray-700)' }}>
+        {contact?.id ? '✏️ Edit Contact' : '+ New Contact'}
+      </div>
+      <form onSubmit={handleSubmit}>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:10 }}>
+          <div className="form-group" style={{ margin:0 }}>
+            <label className="form-label">Name *</label>
+            <input className="form-input" required value={form.name} onChange={e=>set('name',e.target.value)} placeholder="Mary Johnson"/>
+          </div>
+          <div className="form-group" style={{ margin:0 }}>
+            <label className="form-label">Title / Role</label>
+            <input className="form-input" value={form.role_title} onChange={e=>set('role_title',e.target.value)} placeholder="Fleet Manager, Gatekeeper…"/>
+          </div>
+          <div className="form-group" style={{ margin:0 }}>
+            <label className="form-label">Direct Line</label>
+            <input className="form-input" value={form.direct_line} onChange={e=>set('direct_line',e.target.value)} placeholder="(704) 555-0101"/>
+          </div>
+          <div className="form-group" style={{ margin:0 }}>
+            <label className="form-label">Email</label>
+            <input className="form-input" type="email" value={form.email} onChange={e=>set('email',e.target.value)} placeholder="mary@company.com"/>
+          </div>
+        </div>
+        <div className="form-group" style={{ marginBottom:10 }}>
+          <label className="form-label">Description / Notes</label>
+          <textarea className="form-textarea" rows={2} value={form.notes} onChange={e=>set('notes',e.target.value)} placeholder="e.g. Gatekeeper — always answers, routes to John Smith. Best time to call: mornings."/>
+        </div>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', fontSize:13, color:'var(--gray-700)' }}>
+            <input type="checkbox" checked={form.is_preferred} onChange={e=>set('is_preferred',e.target.checked)}
+              style={{ width:15, height:15, accentColor:'var(--gold-500)' }}/>
+            ⭐ Set as preferred contact (used as default when calling)
+          </label>
+          <div style={{ display:'flex', gap:8 }}>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={onCancel}>Cancel</button>
+            <button type="submit" className="btn btn-primary btn-sm" disabled={saving||!form.name.trim()}>
+              {saving ? 'Saving…' : contact?.id ? 'Save Changes' : 'Add Contact'}
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+// ── Contact Card ──────────────────────────────────────────────────────────────
+function ContactCard({ contact, companyId, onRefresh }) {
+  const [editing, setEditing] = useState(false);
+  const { showToast } = useApp();
+
+  async function handleDelete() {
+    if (!confirm(`Delete ${contact.name}?`)) return;
+    try {
+      await api.deleteContact(contact.id);
+      onRefresh();
+    } catch(e) { showToast(e.message, 'error'); }
+  }
+
+  async function togglePreferred() {
+    try {
+      await api.updateContact(contact.id, { ...contact, is_preferred: !contact.is_preferred });
+      onRefresh();
+    } catch(e) { showToast(e.message, 'error'); }
+  }
+
+  if (editing) return (
+    <ContactForm companyId={companyId} contact={contact}
+      onSave={() => { setEditing(false); onRefresh(); }}
+      onCancel={() => setEditing(false)}/>
+  );
+
+  return (
+    <div style={{
+      padding:'14px 16px', borderBottom:'1px solid var(--gray-100)',
+      background: contact.is_preferred ? '#fefce8' : 'white',
+    }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12 }}>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:3 }}>
+            <span style={{ fontWeight:700, fontSize:14, color:'var(--gray-900)' }}>{contact.name}</span>
+            {contact.is_preferred && (
+              <span style={{ background:'#fef3c7', color:'#92400e', border:'1px solid #fde68a', borderRadius:10, padding:'1px 8px', fontSize:10, fontWeight:700 }}>
+                ⭐ Preferred
+              </span>
+            )}
+            {contact.role_title && (
+              <span className="badge badge-gray" style={{ fontSize:11 }}>{contact.role_title}</span>
+            )}
+          </div>
+          <div style={{ display:'flex', gap:16, flexWrap:'wrap', fontSize:12, color:'var(--gray-600)' }}>
+            {contact.direct_line && <span>📱 {fmtPhone(contact.direct_line)}</span>}
+            {contact.email && <span>✉️ {contact.email}</span>}
+          </div>
+          {contact.notes && (
+            <div style={{ fontSize:12, color:'var(--gray-500)', marginTop:5, fontStyle:'italic', borderLeft:'2px solid var(--gray-200)', paddingLeft:8 }}>
+              {contact.notes}
+            </div>
+          )}
+        </div>
+        <div style={{ display:'flex', gap:6, flexShrink:0 }}>
+          <button onClick={togglePreferred} title={contact.is_preferred?'Remove preferred':'Set as preferred'}
+            style={{ padding:'4px 8px', borderRadius:6, border:'1px solid var(--gray-200)', background:'white', cursor:'pointer', fontSize:14 }}>
+            {contact.is_preferred ? '⭐' : '☆'}
+          </button>
+          <button onClick={() => setEditing(true)} className="pill-btn pill-btn-ghost" style={{ fontSize:11 }}>Edit</button>
+          <button onClick={handleDelete} style={{ padding:'4px 8px', borderRadius:6, border:'1px solid #fca5a5', background:'#fef2f2', color:'#ef4444', cursor:'pointer', fontSize:11, fontWeight:600 }}>✕</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Main Component ────────────────────────────────────────────────────────────
+export default function Companies() {
+  const [companies, setCompanies]   = useState([]);
+  const [loading, setLoading]       = useState(true);
+  const [search, setSearch]         = useState('');
+  const [selected, setSelected]       = useState(null);
+  const [followupEdit, setFollowupEdit] = useState(null);
+  const [followupAction, setFollowupAction] = useState('Call');
+  const [followupSaving, setFollowupSaving] = useState(false);
+  const [contacts, setContacts]     = useState([]);
+  const [history, setHistory]       = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [scorecardView, setScorecardView] = useState(null); // { entityName, entityId } — open manual scorecard
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [showAddContact, setShowAddContact] = useState(false);
+  const [addForm, setAddForm]       = useState({ name:'', main_phone:'', industry:'', address:'', city:'', state:'' });
+  const [nameMatches, setNameMatches] = useState([]);
+  const [multiLocPrompt, setMultiLocPrompt] = useState(false);
+  const [locationName, setLocationName] = useState('');
+  const [isMultiLoc, setIsMultiLoc] = useState(false);
+  const nameSearchTimer = useRef(null);
+  const [saving, setSaving]         = useState(false);
+  const [addToQueue, setAddToQueue] = useState(true);
+  const [editingCompany, setEditingCompany] = useState(false);
+  const [editForm, setEditForm]     = useState({});
+  const { showToast, refreshCounts } = useApp();
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+
+  // Auto-open company by ?company=<id> param (from queue links)
+  useEffect(() => {
+    const id = searchParams.get('company');
+    if (id) selectCompany({ id: Number(id) });
+  }, []); // eslint-disable-line
+
+  async function load() {
+    setLoading(true);
+    try { setCompanies(await api.companies({ search })); }
+    finally { setLoading(false); }
+  }
+
+  useEffect(() => { load(); }, [search]);
+
+  async function selectCompany(c) {
+    setSelected(c);
+    setShowAddContact(false);
+    setEditingCompany(false);
+    setHistoryLoading(true);
+    try {
+      const [full, hist] = await Promise.all([api.company(c.id), api.companyHistory(c.id)]);
+      setSelected(full);
+      setContacts(full.contacts || []);
+      setHistory(hist);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }
+
+  async function refreshContacts() {
+    if (!selected) return;
+    const full = await api.company(selected.id);
+    // Load current followup
+    try { const fu = await api.companyFollowup(full.id); setFollowupEdit(fu ? fu.due_date : null); } catch(_) {}
+    setContacts(full.contacts || []);
+    setSelected(full);
+  }
+
+  async function handleAddToQueue(companyId) {
+    try {
+      await api.addToCompanyQueue(companyId);
+      showToast('Added to calling queue');
+      // Refresh the selected company so the button updates to "In Queue"
+      const updated = await api.company(companyId);
+      setSelected(updated);
+      await refreshCounts();
+    } catch(err) { showToast(err.message, 'error'); }
+  }
+
+  function onAddFormNameChange(val) {
+    setAddForm(f => ({...f, name: val}));
+    setMultiLocPrompt(false); setIsMultiLoc(false); setLocationName('');
+    clearTimeout(nameSearchTimer.current);
+    if (val.trim().length >= 2) {
+      nameSearchTimer.current = setTimeout(async () => {
+        try { const m = await api.searchCompanyName(val.trim()); setNameMatches(m); }
+        catch(_) { setNameMatches([]); }
+      }, 350);
+    } else { setNameMatches([]); }
+  }
+
+  async function handleAddCompany(e) {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      const payload = {
+        ...addForm,
+        is_multi_location: isMultiLoc ? 1 : 0,
+        location_name: isMultiLoc ? locationName.trim() : '',
+        location_group: isMultiLoc ? addForm.name.trim() : '',
+      };
+      const company = await api.createCompany(payload);
+      if (isMultiLoc && nameMatches.length > 0) {
+        for (const m of nameMatches) {
+          await api.updateCompany(m.id, {
+            is_multi_location: 1,
+            location_group: addForm.name.trim(),
+            location_name: m.location_name || m.city || m.name,
+          });
+        }
+      }
+      if (addToQueue) await api.addToCompanyQueue(company.id);
+      showToast(company.name + ' added' + (addToQueue ? ' and queued' : ''));
+      setShowAddForm(false);
+      setAddForm({ name:'', main_phone:'', industry:'', address:'', city:'', state:'' });
+      setNameMatches([]); setMultiLocPrompt(false); setIsMultiLoc(false); setLocationName('');
+      await load();
+      await refreshCounts();
+    } catch(err) { showToast(err.message, 'error'); }
+    finally { setSaving(false); }
+  }
+
+  async function handleSaveCompanyEdit(e) {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      await api.updateCompany(selected.id, editForm);
+      showToast('Company updated');
+      setEditingCompany(false);
+      await selectCompany({ id: selected.id });
+      await load();
+    } catch(err) { showToast(err.message, 'error'); }
+    finally { setSaving(false); }
+  }
+
+  return (
+    <>
+      <div className="page-header">
+        <div>
+          <div className="page-title">🗂️ Companies</div>
+          <div className="page-subtitle">{companies.length} companies in database</div>
+        </div>
+        <div className="header-actions">
+          <div className="search-bar">
+            <span style={{ color:'var(--gray-400)' }}>🔍</span>
+            <input placeholder="Search name, industry…" value={search} onChange={e=>setSearch(e.target.value)}/>
+          </div>
+          <button className="btn btn-primary" onClick={()=>setShowAddForm(true)}>+ Add Company</button>
+        </div>
+      </div>
+
+      <div className="page-body" style={{ display:'flex', gap:16, alignItems:'flex-start' }}>
+
+        {/* Company list */}
+        <div className="table-card" style={{ flex: selected ? '0 0 380px' : '1' }}>
+          <div className="table-card-header">
+            <span className="table-card-title">All Companies</span>
+          </div>
+          {loading ? (
+            <div className="loading-wrap"><div className="spinner"/></div>
+          ) : companies.length === 0 ? (
+            <div className="empty-state"><div className="icon">🏢</div><div className="title">No companies yet</div></div>
+          ) : (
+            <div className="table-wrapper">
+              <table>
+                <thead><tr><th>Company</th><th>Phone</th><th>Industry</th><th></th></tr></thead>
+                <tbody>
+                  {companies.map(c => (
+                    <tr key={c.id} onClick={()=>selectCompany(c)} style={selected?.id===c.id?{background:'#fef3c7'}:{}}>
+                      <td>
+                        <div style={{ fontWeight:600, fontSize:13 }}>{c.name}</div>
+                        <div className="company-id">{c.company_id}</div>
+                      </td>
+                      <td><span className="phone-num">{fmtPhone(c.main_phone)}</span></td>
+                      <td>{c.industry?<span className="badge badge-gray">{c.industry}</span>:'—'}</td>
+                      <td>
+                        <div className="row-actions">
+                          <button className="pill-btn pill-btn-ghost" onClick={e=>{e.stopPropagation();handleAddToQueue(c.id);}}>+ Queue</button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* Detail panel */}
+        {selected && (
+          <div style={{ flex:1, display:'flex', flexDirection:'column', gap:14 }}>
+
+            {/* Pipeline status bar */}
+            <PipelineBar company={selected} onMove={async (stage, due_date, notes) => {
+              await api.pipelineMove(selected.id, { stage, due_date, notes });
+              const updated = await api.company(selected.id);
+              setSelected(updated);
+            }} onStar={async () => {
+              await api.pipelineStar(selected.id);
+              const updated = await api.company(selected.id);
+              setSelected(updated);
+            }} />
+
+            {/* Header card */}
+            <div className="table-card" style={{ padding:'18px 20px' }}>
+              {!editingCompany ? (
+                <>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
+                    <div>
+                      <div style={{ fontSize:20, fontWeight:800, color:'var(--gray-900)', display:'flex', alignItems:'center', gap:8 }}>
+                        {selected.name}
+                        {selected.is_starred ? <span title="Warm Lead" style={{ fontSize:18, cursor:'default' }}>⭐</span> : null}
+                      </div>
+                      <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:3, flexWrap:'wrap' }}>
+                        <div className="company-id" style={{ fontSize:12 }}>{selected.company_id}</div>
+                        {selected.is_multi_location ? (
+                          <span className="badge badge-blue" style={{ fontSize:10 }}>🏢 Multi-Location{selected.location_name ? ` · ${selected.location_name}` : ''}</span>
+                        ) : null}
+                      </div>
+                      {selected.location_group && (
+                        <div style={{ fontSize:12, color:'var(--gray-400)', marginTop:2 }}>Chain: <strong>{selected.location_group}</strong></div>
+                      )}
+                    </div>
+                    <div style={{ display:'flex', gap:8 }}>
+                      {selected.in_queue ? (
+                        <span style={{ fontSize:12, color:'#15803d', fontWeight:700, padding:'5px 12px', background:'#dcfce7', borderRadius:8, border:'1px solid #bbf7d0' }}>
+                          ✓ In Queue{selected.follow_up?.due_date ? ` · due ${fmtDate(selected.follow_up.due_date)}` : ''}
+                        </span>
+                      ) : (
+                        <button className="btn btn-primary btn-sm" onClick={()=>handleAddToQueue(selected.id)}>+ Add to Queue</button>
+                      )}
+                      <button className="btn btn-ghost btn-sm" onClick={()=>{ setEditForm({name:selected.name,main_phone:selected.main_phone||'',industry:selected.industry||'',address:selected.address||'',city:selected.city||'',state:selected.state||'',website:selected.website||'',notes:selected.notes||'',is_multi_location:selected.is_multi_location||0,location_group:selected.location_group||'',location_name:selected.location_name||''}); setEditingCompany(true); }}>✏️ Edit</button>
+                      <button className="pill-btn pill-btn-ghost" onClick={()=>setSelected(null)}>✕</button>
+                    </div>
+                  </div>
+                  <div style={{ marginTop:14, display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+                    {[
+                      ['📱 Main Phone', fmtPhone(selected.main_phone)],
+                      ['🏭 Industry',   selected.industry||'—'],
+                      ['📍 Address',    selected.address?`${selected.address}${selected.city?', '+selected.city:''}` : '—'],
+                      ['🌐 Website',    selected.website||'—'],
+                      ['📊 Total Calls',selected.stats?.total_calls||0],
+                      ['📅 Last Contact',fmtDate(selected.stats?.last_contacted)],
+                    ].map(([label,val]) => (
+                      <div key={label} className="info-row">
+                        <span className="info-label">{label}</span>
+                        <span className="info-value">{val}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {selected.notes && (
+                    <div style={{ marginTop:12, padding:'10px 14px', background:'var(--gray-50)', borderRadius:8, fontSize:13, color:'var(--gray-600)', borderLeft:'3px solid var(--gold-400)' }}>
+                      {selected.notes}
+                    </div>
+                  )}
+
+                  {/* Follow-up scheduler */}
+                  <div style={{ marginTop:14, padding:'14px 16px', background:'#fffbeb', borderRadius:8, border:'1px solid #fde68a' }}>
+                    <div style={{ fontSize:12, fontWeight:700, color:'#92400e', marginBottom:10 }}>📅 Schedule Follow-Up</div>
+                    {/* Action type row */}
+                    <div style={{ display:'flex', gap:6, marginBottom:10, flexWrap:'wrap' }}>
+                      {[['Call','📞 Call'],['Visit','📍 Visit'],['Mail','✉️ Mail'],['Email','📧 Email']].map(([val,label])=>(
+                        <button key={val} type="button"
+                          onClick={()=>setFollowupAction(val)}
+                          style={{
+                            padding:'5px 12px', borderRadius:6, fontSize:12, fontWeight:600, cursor:'pointer',
+                            border:`1.5px solid ${followupAction===val?'#92400e':'#fde68a'}`,
+                            background:followupAction===val?'#92400e':'white',
+                            color:followupAction===val?'white':'#92400e',
+                          }}>
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    {/* Date row */}
+                    <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+                      <input type="date" className="form-input" style={{ width:160, fontSize:13, padding:'4px 8px' }}
+                        value={followupEdit || ''}
+                        onChange={e => setFollowupEdit(e.target.value)}
+                      />
+                      <button className="btn btn-sm btn-primary" disabled={followupSaving || !followupEdit}
+                        style={{background:'#92400e',borderColor:'#92400e'}}
+                        onClick={async () => {
+                          setFollowupSaving(true);
+                          try {
+                            await api.updateFollowupDate(selected.id, followupEdit);
+                            showToast(`${followupAction} follow-up set for ${followupEdit}`);
+                            load();
+                          } catch(e) { showToast(e.message, 'error'); }
+                          finally { setFollowupSaving(false); }
+                        }}>
+                        {followupSaving ? 'Saving…' : `Schedule ${followupAction}`}
+                      </button>
+                      {selected.followup_due && (
+                        <span style={{ fontSize:11, color:'#a16207' }}>
+                          Current: {new Date(selected.followup_due + 'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize:11, color:'#a16207', marginTop:8 }}>Sets date manually — overrides auto-schedule</div>
+                  </div>
+
+                  {/* Other branches in the chain */}
+                  {selected.branches?.length > 0 && (
+                    <div style={{ marginTop:14, padding:'12px 14px', background:'#eff6ff', borderRadius:8, border:'1px solid #bfdbfe' }}>
+                      <div style={{ fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'.07em', color:'#1d4ed8', marginBottom:8 }}>
+                        🏢 Other {selected.location_group} Branches ({selected.branches.length})
+                      </div>
+                      <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                        {selected.branches.map(b => (
+                          <div key={b.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'6px 10px', background:'white', borderRadius:6, border:'1px solid #bfdbfe' }}>
+                            <div>
+                              <span style={{ fontWeight:600, fontSize:13 }}>{b.location_name || b.name}</span>
+                              {b.city && <span style={{ fontSize:11, color:'var(--gray-400)', marginLeft:6 }}>{b.city}</span>}
+                              {b.main_phone && <div style={{ fontSize:11, color:'var(--gray-500)', marginTop:1 }}>{fmtPhone(b.main_phone)}</div>}
+                            </div>
+                            {b.last_contact_type && (
+                              <span style={{ fontSize:11, padding:'2px 8px', borderRadius:10, background: b.last_contact_type==='Spoke To'?'#dcfce7':'var(--gray-100)', color: b.last_contact_type==='Spoke To'?'#166534':'var(--gray-500)', fontWeight:600 }}>
+                                {b.last_contact_type}
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <form onSubmit={handleSaveCompanyEdit}>
+                  <div style={{ fontWeight:700, fontSize:14, marginBottom:14 }}>✏️ Edit Company</div>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:10 }}>
+                    {[['name','Company Name'],['main_phone','Main Phone'],['industry','Industry'],['address','Address'],['city','City'],['website','Website']].map(([f,l])=>(
+                      <div key={f} className="form-group" style={{ margin:0 }}>
+                        <label className="form-label">{l}</label>
+                        <input className="form-input" value={editForm[f]||''} onChange={e=>setEditForm(p=>({...p,[f]:e.target.value}))}/>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Multi-location */}
+                  <div style={{ marginBottom:10, padding:'12px 14px', background:'var(--gray-50)', borderRadius:8, border:'1px solid var(--gray-200)' }}>
+                    <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', fontSize:13, fontWeight:600, marginBottom:8 }}>
+                      <input type="checkbox" checked={!!editForm.is_multi_location} onChange={e=>setEditForm(p=>({...p,is_multi_location:e.target.checked?1:0}))} style={{ width:15,height:15,accentColor:'var(--gold-500)' }}/>
+                      🏢 This is part of a multi-location chain
+                    </label>
+                    {!!editForm.is_multi_location && (
+                      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginTop:4 }}>
+                        <div className="form-group" style={{ margin:0 }}>
+                          <label className="form-label">Chain / Group Name</label>
+                          <input className="form-input" placeholder="e.g. Hendrick Automotive" value={editForm.location_group||''} onChange={e=>setEditForm(p=>({...p,location_group:e.target.value}))}/>
+                        </div>
+                        <div className="form-group" style={{ margin:0 }}>
+                          <label className="form-label">This Location Name</label>
+                          <input className="form-input" placeholder="e.g. Concord Branch" value={editForm.location_name||''} onChange={e=>setEditForm(p=>({...p,location_name:e.target.value}))}/>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <div className="form-group" style={{ marginBottom:10 }}>
+                    <label className="form-label">Notes</label>
+                    <textarea className="form-textarea" rows={2} value={editForm.notes||''} onChange={e=>setEditForm(p=>({...p,notes:e.target.value}))}/>
+                  </div>
+                  <div style={{ display:'flex', gap:8 }}>
+                    <button type="submit" className="btn btn-primary btn-sm" disabled={saving}>{saving?'Saving…':'Save'}</button>
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={()=>setEditingCompany(false)}>Cancel</button>
+                  </div>
+                </form>
+              )}
+            </div>
+
+            {/* ── CONTACTS SECTION ──────────────────────────────────── */}
+            <div className="table-card" style={{ padding:0 }}>
+              <div className="table-card-header" style={{ padding:'12px 16px' }}>
+                <span style={{ fontSize:15 }}>👥</span>
+                <span className="table-card-title">Contacts / Employees</span>
+                <span className="table-card-count">{contacts.length} people</span>
+                <button className="btn btn-primary btn-sm" style={{ marginLeft:'auto' }}
+                  onClick={()=>setShowAddContact(v=>!v)}>
+                  {showAddContact ? 'Cancel' : '+ Add Contact'}
+                </button>
+              </div>
+
+              {showAddContact && (
+                <div style={{ padding:'0 16px' }}>
+                  <ContactForm
+                    companyId={selected.id}
+                    onSave={()=>{ setShowAddContact(false); refreshContacts(); }}
+                    onCancel={()=>setShowAddContact(false)}
+                  />
+                </div>
+              )}
+
+              {contacts.length === 0 && !showAddContact ? (
+                <div style={{ padding:'20px 16px', textAlign:'center', fontSize:13, color:'var(--gray-400)' }}>
+                  No contacts yet — add employees, managers, or gatekeepers
+                </div>
+              ) : (
+                contacts.map(c => (
+                  <ContactCard key={c.id} contact={c} companyId={selected.id} onRefresh={refreshContacts}/>
+                ))
+              )}
+
+              {/* How this works explainer */}
+              <div style={{ padding:'10px 16px', borderTop:'1px solid var(--gray-100)', fontSize:11, color:'var(--gray-400)', background:'var(--gray-50)' }}>
+                💡 <strong>How contacts work:</strong> Add anyone you've encountered here — gatekeepers, decision makers, assistants. 
+                The ⭐ preferred contact is used as the default when calling. When logging a call you can note who you spoke with for that call only, without saving them here.
+              </div>
+            </div>
+
+            {/* ── CALL HISTORY ──────────────────────────────────────── */}
+            <div className="table-card">
+              <div className="table-card-header">
+                <span className="table-card-title">📋 Call & Visit History</span>
+                <span className="table-card-count">({history.length} entries)</span>
+              </div>
+              {historyLoading ? (
+                <div className="loading-wrap"><div className="spinner"/></div>
+              ) : history.length === 0 ? (
+                <div className="empty-state" style={{ padding:24 }}><div className="desc">No calls logged yet</div></div>
+              ) : (
+                <div className="table-wrapper">
+                  <table>
+                    <thead><tr><th>#</th><th>Date</th><th>By</th><th>Type</th><th>Outcome</th><th>Spoke With</th><th>Contact Got</th><th>Next Action</th><th>Score</th><th>Notes</th></tr></thead>
+                    <tbody>
+                      {history.map(h => (
+                        <tr key={h.id}>
+                          <td style={{ color:'var(--gray-400)', fontSize:11 }}>{h.attempt_number}</td>
+                          <td style={{ fontSize:12 }}>{h.logged_at?.slice(0,10)}</td>
+                          <td style={{ fontSize:11, color:'var(--gray-500)', whiteSpace:'nowrap' }}>{h.logged_by_name||'—'}</td>
+                          <td><span className={`badge ${h.action_type==='Visit'?'badge-gold':'badge-company'}`}>{h.action_type==='Visit'?'📍 Visit':'📞 Call'}</span></td>
+                          <td style={{ fontSize:12, fontWeight:500 }}>{h.contact_type}{h.mail_piece ? ` — ${h.mail_piece}` : ''}</td>
+                          <td style={{ fontSize:12 }}>
+                            {h.contact_name||'—'}
+                            {h.role_title && <span style={{ color:'var(--gray-400)', fontSize:10, marginLeft:4 }}>({h.role_title})</span>}
+                          </td>
+                          <td style={{ fontSize:12 }}>
+                            {h.referral_name ? (
+                              <div>
+                                <div style={{ fontWeight:600 }}>{h.referral_name}{h.referral_role ? <span style={{ fontWeight:400, color:'var(--gray-400)', fontSize:10, marginLeft:4 }}>({h.referral_role})</span> : null}</div>
+                                {h.referral_phone && <div style={{ fontSize:11, color:'var(--gray-500)' }}>📱 {fmtPhone(h.referral_phone)}</div>}
+                                {h.referral_email && <div style={{ fontSize:11, color:'var(--gray-500)' }}>✉️ {h.referral_email}</div>}
+                              </div>
+                            ) : '—'}
+                          </td>
+                          <td style={{ fontSize:12 }}>{h.next_action||'—'}{h.next_action_date&&<span style={{color:'var(--gray-400)',fontSize:10,marginLeft:4}}>{fmtDate(h.next_action_date)}</span>}</td>
+                          <td style={{ fontSize:12, whiteSpace:'nowrap' }}>
+                            {h.scorecard_id ? (() => {
+                              const pct = h.scorecard_max > 0 ? Math.round((h.scorecard_total / h.scorecard_max) * 100) : 0;
+                              const color = pct >= 80 ? '#15803d' : pct >= 60 ? '#d97706' : '#dc2626';
+                              const bg    = pct >= 80 ? '#dcfce7' : pct >= 60 ? '#fef9c3' : '#fee2e2';
+                              return (
+                                <button onClick={()=>navigate('/settings?tab=scorecard&subtab=history')}
+                                  title="View in scorecard history"
+                                  style={{ padding:'2px 10px',borderRadius:20,background:bg,color,fontWeight:800,fontSize:12,border:'none',cursor:'pointer' }}>
+                                  {pct}%
+                                </button>
+                              );
+                            })() : (
+                              <button onClick={()=>setScorecardView({ entityName:selected?.name, entityId:selected?.id })}
+                                title="Add scorecard for this call"
+                                style={{ padding:'2px 8px',borderRadius:20,background:'var(--gray-100)',color:'var(--gray-400)',fontWeight:600,fontSize:11,border:'1px dashed var(--gray-300)',cursor:'pointer' }}>
+                                + Score
+                              </button>
+                            )}
+                          </td>
+                          <td style={{ fontSize:11, color:'var(--gray-500)', maxWidth:180 }} className="truncate">{h.notes||'—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Add company drawer */}
+      {showAddForm && (
+        <div className="drawer-overlay" onClick={e=>e.target===e.currentTarget&&setShowAddForm(false)}>
+          <div className="drawer">
+            <div className="drawer-header" style={{ position:'relative' }}>
+              <button className="drawer-close" onClick={()=>setShowAddForm(false)}>✕</button>
+              <div className="drawer-title">Add New Company</div>
+              <div className="drawer-subtitle">Manually add a company to the database</div>
+            </div>
+            <div className="drawer-body">
+              <form onSubmit={handleAddCompany}>
+                <div className="form-group">
+                  <label className="form-label">Company Name *</label>
+                  <input className="form-input" required value={addForm.name}
+                    onChange={e => onAddFormNameChange(e.target.value)}
+                    placeholder="Acme Fleet Services"/>
+                  {/* Name-match warning */}
+                  {nameMatches.length > 0 && !isMultiLoc && (
+                    <div style={{marginTop:8,padding:'10px 12px',background:'#fffbeb',border:'1px solid #fde68a',borderRadius:8,fontSize:12}}>
+                      <div style={{fontWeight:700,color:'#92400e',marginBottom:6}}>
+                        ⚠ {nameMatches.length} existing {nameMatches.length===1?'company':'companies'} with a similar name:
+                      </div>
+                      {nameMatches.map(m => (
+                        <div key={m.id} style={{color:'#78350f',marginBottom:3,fontSize:11}}>
+                          • <b>{m.name}</b>{m.city ? ' — '+m.city : ''}{m.location_name ? ' ('+m.location_name+')' : ''}
+                        </div>
+                      ))}
+                      <div style={{marginTop:8,display:'flex',gap:6}}>
+                        <button type="button" className="btn btn-sm btn-primary"
+                          onClick={()=>{ setIsMultiLoc(true); setMultiLocPrompt(true); }}
+                          style={{fontSize:11,padding:'3px 10px'}}>
+                          Yes, it's a chain / multi-location
+                        </button>
+                        <button type="button" className="btn btn-sm btn-ghost"
+                          onClick={()=>setNameMatches([])}
+                          style={{fontSize:11,padding:'3px 10px'}}>
+                          No, different company
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {/* Multi-location name fields */}
+                  {isMultiLoc && (
+                    <div style={{marginTop:8,padding:'10px 12px',background:'#eff6ff',border:'1px solid #bfdbfe',borderRadius:8,fontSize:12}}>
+                      <div style={{fontWeight:700,color:'#1e40af',marginBottom:6}}>🏢 Multi-location chain: <b>{addForm.name}</b></div>
+                      <div style={{marginBottom:6,color:'#1e3a8a',fontSize:11}}>Give this new location a specific name (e.g. "North Charlotte" or "Concord"):</div>
+                      <input className="form-input" value={locationName}
+                        onChange={e=>setLocationName(e.target.value)}
+                        placeholder="e.g. North Charlotte, Downtown, Concord…"
+                        style={{fontSize:12,marginBottom:6}}/>
+                      {nameMatches.length > 0 && (
+                        <div style={{fontSize:11,color:'#1e40af'}}>
+                          The existing location{nameMatches.length>1?'s':''} will also be updated to show as part of this chain.
+                        </div>
+                      )}
+                      <button type="button" style={{marginTop:6,fontSize:11,background:'none',border:'none',color:'#64748b',cursor:'pointer',padding:0}}
+                        onClick={()=>{ setIsMultiLoc(false); setMultiLocPrompt(false); setLocationName(''); }}>
+                        ✕ Cancel multi-location
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Main Phone</label>
+                  <input className="form-input" value={addForm.main_phone} onChange={e=>setAddForm(f=>({...f,main_phone:e.target.value}))} placeholder="(704) 555-0100"/>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Industry</label>
+                  <input className="form-input" value={addForm.industry} onChange={e=>setAddForm(f=>({...f,industry:e.target.value}))} placeholder="HVAC / Plumbing…"/>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Address</label>
+                  <AddressAutocomplete value={addForm.address} onChange={val=>setAddForm(f=>({...f,address:val}))} onSelect={({address,city})=>setAddForm(f=>({...f,address,city:city||f.city}))} placeholder="Start typing address…"/>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">City</label>
+                  <input className="form-input" value={addForm.city} onChange={e=>setAddForm(f=>({...f,city:e.target.value}))} placeholder="Charlotte"/>
+                </div>
+                <div className="form-group" style={{ flexDirection:'row', alignItems:'center', gap:8 }}>
+                  <input type="checkbox" id="addqueue" checked={addToQueue} onChange={e=>setAddToQueue(e.target.checked)} style={{ width:16, height:16, accentColor:'var(--gold-500)' }}/>
+                  <label htmlFor="addqueue" style={{ fontSize:13, color:'var(--gray-700)', cursor:'pointer' }}>Also add to Company Calling Queue</label>
+                </div>
+                <button type="submit" className="btn btn-primary btn-lg" style={{ width:'100%', marginTop:8 }} disabled={saving}>
+                  {saving ? 'Saving…' : '+ Add Company'}
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {scorecardView && (
+        <ScoreCardModal
+          entityName={scorecardView.entityName}
+          entityId={scorecardView.entityId}
+          callLogId={null}
+          onClose={()=>setScorecardView(null)}
+          onSaved={()=>{
+            setScorecardView(null);
+            // Reload history to show new score
+            if (selected) {
+              api.companyHistory(selected.id).then(h=>setHistory(h)).catch(()=>{});
+            }
+          }}
+        />
+      )}
+    </>
+  );
+}
