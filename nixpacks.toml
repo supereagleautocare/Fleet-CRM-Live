@@ -1,0 +1,14 @@
+﻿[phases.install]
+cmds = [
+  "cd fleet-crm-backend-v2 && npm install",
+  "cd fleet-crm-frontend && npm install"
+]
+
+[phases.build]
+cmds = [
+  "cd fleet-crm-frontend && npm run build",
+  "cp -r fleet-crm-frontend/dist fleet-crm-backend-v2/dist"
+]
+
+[start]
+cmd = "node fleet-crm-backend-v2/server.js"
