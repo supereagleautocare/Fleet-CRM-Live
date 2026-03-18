@@ -2,7 +2,7 @@
   "name": "fleet-crm",
   "version": "1.0.0",
   "scripts": {
-    "build": "cd fleet-crm-frontend && npm install && npm run build",
+    "build": "cd fleet-crm-backend-v2 && npm install && cd ../fleet-crm-frontend && npm install && npm run build",
     "start": "node fleet-crm-backend-v2/server.js"
   },
   "engines": {
