@@ -296,19 +296,26 @@ router.post('/move/:id', (req, res) => {
   const { stage, notes, due_date } = req.body;
   if (!STAGES.includes(stage)) return res.status(400).json({ error: 'Invalid stage.' });
 
-  const company = moveCompany(req.params.id, stage, req.user.id, req.user.name, notes);
+const company = moveCompany(req.params.id, stage, req.user.id, req.user.name, notes);
   if (!company) return res.status(404).json({ error: 'Company not found.' });
 
-  if (['call','mail','email','visit'].includes(stage)) {
+  try {
+    db.exec('BEGIN TRANSACTION');
     clearAllCompanyQueues(company.id);
-    const autoDate = due_date || calcFollowUpDate('company',
-      stage === 'call' ? 'Call Back' : stage === 'mail' ? 'Mail' : stage === 'email' ? 'Email' : 'Visit'
-    );
-    db.prepare(`
-      INSERT INTO follow_ups (source_type, entity_id, entity_name, phone, industry, due_date, next_action)
-      VALUES ('company', ?, ?, ?, ?, ?, ?)
-    `).run(company.id, company.name, company.main_phone, company.industry, autoDate,
-      stage === 'call' ? 'Call' : stage === 'mail' ? 'Mail' : stage === 'email' ? 'Email' : 'Visit');
+    if (['call','mail','email','visit'].includes(stage)) {
+      const autoDate = due_date || calcFollowUpDate('company',
+        stage === 'call' ? 'Call Back' : stage === 'mail' ? 'Mail' : stage === 'email' ? 'Email' : 'Visit'
+      );
+      db.prepare(`
+        INSERT OR REPLACE INTO follow_ups (source_type, entity_id, entity_name, phone, industry, due_date, next_action)
+        VALUES ('company', ?, ?, ?, ?, ?, ?)
+      `).run(company.id, company.name, company.main_phone, company.industry, autoDate,
+        stage === 'call' ? 'Call' : stage === 'mail' ? 'Mail' : stage === 'email' ? 'Email' : 'Visit');
+    }
+    db.exec('COMMIT');
+  } catch(e) {
+    db.exec('ROLLBACK');
+    return res.status(500).json({ error: 'Move failed: ' + e.message });
   }
 
   res.json(company);
