@@ -6,6 +6,7 @@ import UpcomingList from '../components/UpcomingList.jsx';
 import CompanyPanel from '../components/CompanyPanel.jsx';
 import ScoreCardModal from '../components/ScoreCardModal.jsx';
 import QueueFilter from '../components/QueueFilter.jsx';
+import ForecastStrip from '../components/ForecastStrip.jsx';
 
 const FILTERS = [
   { key: 'all',      label: '📋 All Due' },
@@ -111,7 +112,8 @@ export default function CallingQueue() {
     <>
       <div className="page-header">
         <div>
-          <div className="page-title">📞 Calling Queue</div>
+           <div className="page-title">📞 Calling Queue</div>
+          <ForecastStrip forecast={forecast} queueKey="calling" />
           <div className="page-subtitle">{rows.length} companies due · {overdue.length} overdue</div>
         </div>
         <div className="header-actions">
