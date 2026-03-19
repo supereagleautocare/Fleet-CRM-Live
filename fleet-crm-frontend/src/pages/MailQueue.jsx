@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { api, fmtPhone, fmtDate } from '../api.js';
 import { useApp } from '../App.jsx';
 import UpcomingList from '../components/UpcomingList.jsx';
-import MoveModal from '../components/MoveModal.jsx';
+import MoveModal from '../components/MoveModal.jsx'; 
+import QueueFilter from '../components/QueueFilter.jsx';
 
 export default function MailQueue() {
   const [rows, setRows]           = useState([]);
@@ -12,7 +13,9 @@ export default function MailQueue() {
   const [selected, setSelected]   = useState(null);
   const [saving, setSaving]       = useState(false);
   const [movingId, setMovingId]   = useState(null);
-  const [showAll, setShowAll]     = useState(false);
+  const [qFilter, setQFilter]     = useState('today');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo]     = useState('');
   const [forecast, setForecast]   = useState([]);
   const [allRows, setAllRows]     = useState([]);
   const [form, setForm]           = useState({ mail_piece:'', notes:'', next_action:'Call', next_action_date_override:'', show_date:false });
@@ -26,12 +29,22 @@ export default function MailQueue() {
       setForecast(fc || []);
       setAllRows(ar || []);
       const today = new Date().toISOString().split('T')[0];
-      setRows(showAll ? r : r.filter(row => !row.due_date || row.due_date <= today));
+     const today = new Date().toISOString().split('T')[0];
+      const weekEnd = new Date(); weekEnd.setDate(weekEnd.getDate() + (6 - weekEnd.getDay())); const weekEndStr = weekEnd.toISOString().split('T')[0];
+      const monthEnd = new Date(new Date().getFullYear(), new Date().getMonth()+1, 0).toISOString().split('T')[0];
+      setRows(r.filter(row => {
+        if (!row.due_date) return qFilter === 'all';
+        if (qFilter === 'today') return row.due_date <= today;
+        if (qFilter === 'week')  return row.due_date <= weekEndStr;
+        if (qFilter === 'month') return row.due_date <= monthEnd;
+        if (qFilter === 'custom') return (!customFrom || row.due_date >= customFrom) && (!customTo || row.due_date <= customTo);
+        return true;
+      }));
       setPieces(p);
     } finally { setLoading(false); }
   }
 
-  useEffect(() => { load(); }, [showAll]);
+  useEffect(() => { load(); }, [qFilter, customFrom, customTo]);
 
   function set(f, v) { setForm(p => ({ ...p, [f]: v })); }
 
@@ -61,11 +74,7 @@ export default function MailQueue() {
           <div className="page-subtitle">{rows.length} companies to mail</div>
         </div>
         <div className="header-actions">
-          <button onClick={() => setShowAll(p=>!p)}
-            className={`btn btn-sm ${showAll?'btn-navy':'btn-ghost'}`}
-            style={{border: showAll?'none':'1px solid var(--gray-200)'}}>
-            {showAll ? '📅 All Upcoming' : '📅 Due Today'}
-          </button>
+          <QueueFilter value={qFilter} onChange={setQFilter} customFrom={customFrom} customTo={customTo} onCustomFrom={setCustomFrom} onCustomTo={setCustomTo} />
         </div>
       </div>
 
