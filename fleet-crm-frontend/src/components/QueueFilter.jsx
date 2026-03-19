@@ -10,7 +10,7 @@
  */
 export default function QueueFilter({ value, onChange, customFrom, customTo, onCustomFrom, onCustomTo }) {
   return (
-    <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+    <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
       <select
         value={value}
         onChange={e => onChange(e.target.value)}
@@ -24,19 +24,19 @@ export default function QueueFilter({ value, onChange, customFrom, customTo, onC
         <option value="custom">🗓️ Custom Range</option>
       </select>
       {value === 'custom' && (
-        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:4, flexWrap:'wrap' }}>
           <input
             type="date"
             className="form-input"
-            style={{ width:140, fontSize:12, padding:'4px 8px' }}
+            style={{ width:120, fontSize:11, padding:'3px 6px' }}
             value={customFrom}
             onChange={e => onCustomFrom(e.target.value)}
           />
-          <span style={{ fontSize:12, color:'var(--gray-400)' }}>to</span>
+          <span style={{ fontSize:11, color:'var(--gray-400)' }}>to</span>
           <input
             type="date"
             className="form-input"
-            style={{ width:140, fontSize:12, padding:'4px 8px' }}
+            style={{ width:120, fontSize:11, padding:'3px 6px' }}
             value={customTo}
             onChange={e => onCustomTo(e.target.value)}
           />
