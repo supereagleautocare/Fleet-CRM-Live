@@ -10,7 +10,6 @@ import { api } from '../api.js';
 import { useApp } from '../App.jsx';
 
 const STAGES = [
-  { key:'new',      label:'🆕 New' },
   { key:'call',     label:'📞 Call' },
   { key:'mail',     label:'✉️ Mail' },
   { key:'email',    label:'📧 Email' },
