@@ -461,6 +461,26 @@ router.post('/queue/:queueId/complete', (req, res) => {
         email        || preferred?.email || null,
         logEntry.id
       );
+   } else if (next_action === 'Mail') {
+      cancelOldFollowUps('company', company.id);
+      const mailDate = next_action_date_override || calcFollowUpDate('company', 'Mail');
+      db.prepare(`
+        INSERT INTO follow_ups
+          (source_type, entity_id, company_id_str, entity_name, phone, direct_line, industry, contact_name, due_date, source_log_id, next_action)
+        VALUES ('company', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Mail')
+      `).run(company.id, company.company_id, company.name, company.main_phone,
+             direct_line || null, company.industry, contact_name || null, mailDate, logEntry.id);
+
+    } else if (next_action === 'Email') {
+      cancelOldFollowUps('company', company.id);
+      const emailDate = next_action_date_override || calcFollowUpDate('company', 'Email');
+      db.prepare(`
+        INSERT INTO follow_ups
+          (source_type, entity_id, company_id_str, entity_name, phone, direct_line, industry, contact_name, due_date, source_log_id, next_action)
+        VALUES ('company', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Email')
+      `).run(company.id, company.company_id, company.name, company.main_phone,
+             direct_line || null, company.industry, contact_name || null, emailDate, logEntry.id);
+
     } else if (next_action === 'Stop') {
       cancelOldFollowUps('company', company.id);
     }
