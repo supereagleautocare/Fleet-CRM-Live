@@ -299,12 +299,15 @@ router.post('/move/:id', (req, res) => {
   const company = moveCompany(req.params.id, stage, req.user.id, req.user.name, notes);
   if (!company) return res.status(404).json({ error: 'Company not found.' });
 
-  if (due_date && ['call','mail','email','visit'].includes(stage)) {
+  if (['call','mail','email','visit'].includes(stage)) {
     clearAllCompanyQueues(company.id);
+    const autoDate = due_date || calcFollowUpDate('company',
+      stage === 'call' ? 'Call Back' : stage === 'mail' ? 'Mail' : stage === 'email' ? 'Email' : 'Visit'
+    );
     db.prepare(`
       INSERT INTO follow_ups (source_type, entity_id, entity_name, phone, industry, due_date, next_action)
       VALUES ('company', ?, ?, ?, ?, ?, ?)
-    `).run(company.id, company.name, company.main_phone, company.industry, due_date,
+    `).run(company.id, company.name, company.main_phone, company.industry, autoDate,
       stage === 'call' ? 'Call' : stage === 'mail' ? 'Mail' : stage === 'email' ? 'Email' : 'Visit');
   }
 
