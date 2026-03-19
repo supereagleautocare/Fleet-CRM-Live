@@ -115,7 +115,16 @@ const mail  = db.prepare("SELECT COUNT(*) as cnt FROM companies WHERE pipeline_s
 
 // ── 7-day forecast — due counts per day per queue type ──────────────────────
 router.get('/forecast', (req, res) => {
-  const days = [];
+  const today = new Date().toISOString().split('T')[0];
+  const overdue = {
+    label: 'Overdue',
+    isOverdue: true,
+    calling: db.prepare("SELECT COUNT(*) as cnt FROM follow_ups WHERE source_type='company' AND due_date < ?").get(today).cnt,
+    mail:    db.prepare("SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='mail'  AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND due_date < ?)").get(today).cnt,
+    email:   db.prepare("SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='email' AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND due_date < ?)").get(today).cnt,
+    visits:  db.prepare("SELECT COUNT(*) as cnt FROM visit_queue WHERE scheduled_date < ?").get(today).cnt,
+  };
+  const days = [overdue];
   for (let i = 0; i < 7; i++) {
     const d = new Date();
     d.setDate(d.getDate() + i);
@@ -135,7 +144,7 @@ router.get('/forecast', (req, res) => {
       "SELECT COUNT(*) as cnt FROM visit_queue WHERE scheduled_date=?"
     ).get(ds).cnt;
 
-    days.push({ date: ds, label, calling, mail, email, visits, total: calling + mail + email + visits });
+    days.push({ date: ds, label, calling, mail, email, visits, total: calling + mail + email + visits, isToday: i === 0 });
   }
   res.json(days);
 });
