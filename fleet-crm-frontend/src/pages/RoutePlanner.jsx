@@ -3,6 +3,7 @@ import { api, fmtPhone, fmtDate } from '../api.js';
 import { useApp } from '../App.jsx';
 import AddressAutocomplete from '../components/AddressAutocomplete.jsx';
 import QueueFilter from '../components/QueueFilter.jsx';
+import ForecastStrip from '../components/ForecastStrip.jsx';
 import { useNavigate } from 'react-router-dom';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -99,6 +100,7 @@ export default function RoutePlanner({ embedded = false }) {
   const [queueStatus, setQueueStatus] = useState(null); // {inCalling,inMail,inEmail,stage,followupDate}
   const [error, setError]           = useState('');
   const [loading, setLoading]       = useState(true);
+  const [forecast, setForecast]     = useState([]);
 
   // ── Active route state ────────────────────────────────────────────────────
   const [contactTypes, setContactTypes] = useState([]);
@@ -159,6 +161,7 @@ export default function RoutePlanner({ embedded = false }) {
       }
     } catch(_) {}
 
+    api.pipelineForecast().then(fc => setForecast(fc || [])).catch(()=>{});
     Promise.all([api.visitsAll(), api.contactTypes(), api.settings()])
       .then(([data, ct, settings]) => {
         setVisits(data);
@@ -583,6 +586,7 @@ export default function RoutePlanner({ embedded = false }) {
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 20px 0',gap:12}}>
           <div>
             <div className="page-title" style={{fontSize:16}}>🗺️ Route Planner</div>
+            <ForecastStrip forecast={forecast} queueKey="visits" />
             <div className="page-subtitle">
               {route
                 ? `${route.stops.length} stops · ${route.totalMiles.toFixed(1)} mi · ${fmt(route.totalDrive+route.totalStop)} total`
