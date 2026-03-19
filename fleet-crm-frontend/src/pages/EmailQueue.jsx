@@ -116,7 +116,7 @@ export default function EmailQueue() {
                           <button onClick={async e=>{e.stopPropagation();await api.pipelineStar(row.id);load();}} style={{ border:'none', background:'none', cursor:'pointer', fontSize:14, opacity:row.is_starred?1:.2 }}>⭐</button>
                         </td>
                         <td><div
-    style={{ fontWeight:700, fontSize:13, color:'var(--navy-700)', cursor:'pointer', textDecoration:'underline', textDecorationStyle:'dotted', textUnderlineOffset:3 }}
+    style={{ fontWeight:700, fontSize:13, color:'var(--navy-700)', cursor:'pointer', textDecoration:'underline', textDecorationStyle:'dotted', textUnderlineOffset:3, display:'inline' }}
     onClick={e=>{ e.stopPropagation(); navigate('/companies?company='+row.id); }}
     title="Open company profile"
   >{row.name}</div><div className="company-id">{row.company_id}</div></td>
