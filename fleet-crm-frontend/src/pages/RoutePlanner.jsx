@@ -590,7 +590,6 @@ export default function RoutePlanner({ embedded = false }) {
             <div className="page-subtitle">
               {route
                 ? `${route.stops.length} stops · ${route.totalMiles.toFixed(1)} mi · ${fmt(route.totalDrive+route.totalStop)} total`
-                : `${visits.length} visit${visits.length!==1?'s':''} in queue · ${selected.size} selected`}
             </div>
           </div>
           <div style={{display:'flex',gap:8}}>
