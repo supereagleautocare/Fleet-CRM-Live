@@ -697,21 +697,48 @@ export default function RoutePlanner({ embedded = false }) {
           {/* ── STOP SELECTOR ── */}
           {!route && (
             <>
-              {/* Filter bar */}
-              <div style={{padding:'8px 10px',borderBottom:'1px solid var(--gray-200)',display:'flex',gap:4,flexWrap:'wrap',flexShrink:0}}>
-                {[
-                  {k:'all',     l:'All'},
-                  {k:'overdue', l:'🔴 Late'},
-                  {k:'today',   l:'🟡 Today'},
-                  {k:'week',    l:'📅 Week'},
-                  {k:'upcoming',l:'🔵 Later'},
-                ].map(f=>(
-                  <button key={f.k} onClick={()=>setStopFilter(f.k)}
-                    className={'btn btn-sm '+(stopFilter===f.k?'btn-navy':'btn-ghost')}
-                    style={{border:'none',fontSize:10,padding:'2px 8px'}}>
-                    {f.l}
-                  </button>
-                ))}
+             {/* Filter bar */}
+              {(() => {
+                const _td = new Date().toISOString().split('T')[0];
+                const _we = new Date(); _we.setDate(_we.getDate()+7);
+                const _ws = _we.toISOString().split('T')[0];
+                const counts = {
+                  all:     visits.length,
+                  overdue: visits.filter(v=>v.scheduled_date < _td).length,
+                  today:   visits.filter(v=>v.scheduled_date === _td).length,
+                  week:    visits.filter(v=>v.scheduled_date > _td && v.scheduled_date <= _ws).length,
+                  upcoming:visits.filter(v=>v.scheduled_date > _ws).length,
+                };
+                return (
+                  <div style={{padding:'10px 12px',borderBottom:'1px solid var(--gray-200)',flexShrink:0}}>
+                    <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:5}}>
+                      {[
+                        {k:'all',     l:'All',      dot:null,     color:'var(--navy-800)'},
+                        {k:'overdue', l:'Overdue',  dot:'#ef4444',color:'#ef4444'},
+                        {k:'today',   l:'Today',    dot:'#f59e0b',color:'#f59e0b'},
+                        {k:'week',    l:'This Week',dot:'#3b82f6',color:'#3b82f6'},
+                        {k:'upcoming',l:'Later',    dot:'#94a3b8',color:'#94a3b8'},
+                      ].map(f => {
+                        const active = stopFilter === f.k;
+                        const cnt = counts[f.k];
+                        return (
+                          <button key={f.k} onClick={()=>setStopFilter(f.k)} style={{
+                            display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
+                            gap:2, padding:'7px 4px', borderRadius:8, cursor:'pointer',
+                            border:`2px solid ${active?(f.dot||'var(--navy-700)'):'var(--gray-200)'}`,
+                            background: active?(f.dot||'var(--navy-800)'):'white',
+                            color: active?'white':(f.dot||'var(--gray-500)'),
+                            transition:'all .12s',
+                          }}>
+                            <span style={{fontSize:15,fontWeight:900,lineHeight:1}}>{cnt}</span>
+                            <span style={{fontSize:10,fontWeight:700,lineHeight:1,opacity:active?1:.7}}>{f.l}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
               </div>
               <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 14px',borderBottom:'1px solid var(--gray-200)',flexShrink:0}}>
                 {(() => {
@@ -1402,8 +1429,8 @@ function PersistentMap({ routeStops = [], startGeo = null, returnHome = false, n
         </div>`;
       const marker = L.marker([c.lat, c.lng], {
         icon: L.divIcon({
-          html: `<div style="width:${isInRoute?14:10}px;height:${isInRoute?14:10}px;border-radius:50%;background:${isInRoute?'#1e40af':col};border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,.3);cursor:pointer"></div>`,
-          className:'', iconAnchor:[isInRoute?7:5, isInRoute?7:5],
+          html: `<div style="width:${isInRoute?18:12}px;height:${isInRoute?18:12}px;border-radius:50%;background:${isInRoute?'#1e40af':col};border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,.3);cursor:pointer"></div>`,
+          className:'', iconAnchor:[isInRoute?9:6, isInRoute?9:6],
         })
       }).addTo(nearbyLayerRef.current).bindPopup(popup, { maxWidth:270 });
       if (!isInRoute && onAddNearby) window[`_addNearby_${c.id}`] = () => { onAddNearby(c); map.closePopup(); };
