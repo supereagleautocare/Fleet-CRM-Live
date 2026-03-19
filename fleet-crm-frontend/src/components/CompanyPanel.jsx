@@ -293,7 +293,8 @@ export default function CompanyPanel({ row, sourceType, contactTypes, onComplete
                         {h.email_to && <div style={{ fontSize:11, color:'#6b21a8', marginTop:1 }}>📧 to {h.email_to}</div>}
                         {h.referral_name && <div style={{ fontSize:11, color:'var(--green-600)', fontWeight:600, marginTop:1 }}>→ referred {h.referral_name}{h.referral_role?` · ${h.referral_role}`:''}</div>}
                         {h.notes && <div style={{ fontSize:11, color:'var(--gray-600)', marginTop:2, lineHeight:1.5 }}>{h.notes}</div>}
-                        {h.next_action && <div style={{ fontSize:10, color:'var(--gray-400)', marginTop:2 }}>Next: {h.next_action}{h.next_action_date?` · ${fmtDate(h.next_action_date)}`:''}</div>}
+                        {h.log_category === 'move' && h.notes && <div style={{ fontSize:11, fontWeight:700, color:'var(--navy-700)', marginTop:2 }}>{h.notes}</div>}
+                        {h.next_action && h.log_category !== 'move' && <div style={{ fontSize:10, color:'var(--gray-400)', marginTop:2 }}>Next: {h.next_action}{h.next_action_date?` · ${fmtDate(h.next_action_date)}`:''}</div>}
                       </div>
                     </div>
                   );
