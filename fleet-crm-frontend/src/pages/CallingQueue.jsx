@@ -194,7 +194,7 @@ export default function CallingQueue() {
                         <td style={{ color:'var(--gray-400)', fontSize:12 }}>{i+1}</td>
                         <td>
                           <div
-                            style={{ fontWeight:700, fontSize:13, color:'var(--navy-700)', cursor:'pointer', textDecoration:'underline', textDecorationStyle:'dotted', textUnderlineOffset:3 }}
+                            style={{ fontWeight:700, fontSize:13, color:'var(--navy-700)', cursor:'pointer', textDecoration:'underline', textDecorationStyle:'dotted', textUnderlineOffset:3, display:'inline' }}
                             onClick={e=>{ e.stopPropagation(); navigate('/companies?company='+row.id); }}
                             title="Open company profile"
                           >{row.name}</div>
