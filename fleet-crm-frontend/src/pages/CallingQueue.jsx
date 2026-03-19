@@ -115,9 +115,6 @@ export default function CallingQueue() {
           <div className="page-subtitle">{rows.length} companies due · {overdue.length} overdue</div>
         </div>
         <div className="header-actions">
-          <div style={{ display:'flex', background:'var(--gray-100)', borderRadius:8, padding:2, border:'1px solid var(--gray-200)', gap:2 }}>
-            <button onClick={()=>setView('queue')} className={`btn btn-sm ${view==='queue'?'btn-navy':'btn-ghost'}`} style={{ border:'none' }}>📞 Queue</button>
-          </div>
           <div className="search-bar">
             <span style={{ color:'var(--gray-400)' }}>🔍</span>
             <input placeholder="Search company or industry…" value={search} onChange={e=>setSearch(e.target.value)}/>
