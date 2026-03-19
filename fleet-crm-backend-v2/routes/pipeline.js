@@ -107,9 +107,8 @@ router.get('/counts', (req, res) => {
       )
   `).get().cnt;
 
-  const mail  = db.prepare("SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='mail'  AND status='active'").get().cnt;
-  const email = db.prepare("SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='email' AND status='active'").get().cnt;
-  const visits = db.prepare("SELECT COUNT(*) as cnt FROM visit_queue WHERE scheduled_date <= date('now')").get().cnt;
+const mail  = db.prepare("SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='mail'  AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND is_locked=0 AND due_date <= date('now'))").get().cnt;
+  const email = db.prepare("SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='email' AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND is_locked=0 AND due_date <= date('now'))").get().cnt;
 
   res.json({ calling, mail, email, visits });
 });
