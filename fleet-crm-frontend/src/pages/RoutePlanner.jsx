@@ -587,10 +587,11 @@ export default function RoutePlanner({ embedded = false }) {
           <div>
             <div className="page-title" style={{fontSize:16}}>🗺️ Route Planner</div>
             <ForecastStrip forecast={forecast} queueKey="visits" />
-            <div className="page-subtitle">
-              {route
-                ? `${route.stops.length} stops · ${route.totalMiles.toFixed(1)} mi · ${fmt(route.totalDrive+route.totalStop)} total`
-            </div>
+            {route && (
+              <div className="page-subtitle">
+                {`${route.stops.length} stops · ${route.totalMiles.toFixed(1)} mi · ${fmt(route.totalDrive+route.totalStop)} total`}
+              </div>
+            )}
           </div>
           <div style={{display:'flex',gap:8}}>
             {route && <button className="btn btn-ghost btn-sm" onClick={()=>setRoute(null)}>← Edit Stops</button>}
