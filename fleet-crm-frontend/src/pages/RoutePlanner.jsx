@@ -771,7 +771,7 @@ export default function RoutePlanner({ embedded = false }) {
                         <div style={{flex:1,minWidth:0}}>
                           <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
                             <div
-                              style={{fontWeight:600,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1,color:'var(--navy-700)',cursor:'pointer',textDecoration:'underline',textDecorationStyle:'dotted',textUnderlineOffset:3}}
+                              style={{fontWeight:600,fontSize:13,color:'var(--navy-700)',cursor:'pointer',textDecoration:'underline',textDecorationStyle:'dotted',textUnderlineOffset:3,display:'inline'}}
                               onClick={e=>{ e.stopPropagation(); navigate('/companies?company='+v.entity_id); }}
                               title="Open company profile"
                             >{v.entity_name}</div>
