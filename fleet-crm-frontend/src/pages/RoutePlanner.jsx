@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { api, fmtPhone, fmtDate } from '../api.js';
 import { useApp } from '../App.jsx';
 import AddressAutocomplete from '../components/AddressAutocomplete.jsx';
+import QueueFilter from '../components/QueueFilter.jsx';
 import { useNavigate } from 'react-router-dom';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -92,7 +93,9 @@ export default function RoutePlanner({ embedded = false }) {
   const [loggingStop, setLoggingStop] = useState(null); // stopId being quick-logged
   const [logging, setLogging]         = useState(false);
   const [logForm, setLogForm]         = useState({ contact_type:'', notes:'', contact_name:'', direct_line:'', next_action:'Call', next_action_date_override:'' });
-  const [stopFilter, setStopFilter]   = useState('all'); // all | overdue | today | week | upcoming
+  const [stopFilter, setStopFilter]   = useState('today');
+  const [customFrom, setCustomFrom]   = useState('');
+  const [customTo, setCustomTo]       = useState('');
   const [queueStatus, setQueueStatus] = useState(null); // {inCalling,inMail,inEmail,stage,followupDate}
   const [error, setError]           = useState('');
   const [loading, setLoading]       = useState(true);
@@ -698,57 +701,19 @@ export default function RoutePlanner({ embedded = false }) {
           {!route && (
             <>
              {/* Filter bar */}
-              {(() => {
-                const _td = new Date().toISOString().split('T')[0];
-                const _we = new Date(); _we.setDate(_we.getDate()+7);
-                const _ws = _we.toISOString().split('T')[0];
-                const counts = {
-                  all:     visits.length,
-                  overdue: visits.filter(v=>v.scheduled_date < _td).length,
-                  today:   visits.filter(v=>v.scheduled_date === _td).length,
-                  week:    visits.filter(v=>v.scheduled_date > _td && v.scheduled_date <= _ws).length,
-                  upcoming:visits.filter(v=>v.scheduled_date > _ws).length,
-                };
-                return (
-                  <div style={{padding:'10px 12px',borderBottom:'1px solid var(--gray-200)',flexShrink:0}}>
-                    <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:5}}>
-                      {[
-                        {k:'all',     l:'All',      dot:null,     color:'var(--navy-800)'},
-                        {k:'overdue', l:'Overdue',  dot:'#ef4444',color:'#ef4444'},
-                        {k:'today',   l:'Today',    dot:'#f59e0b',color:'#f59e0b'},
-                        {k:'week',    l:'This Week',dot:'#3b82f6',color:'#3b82f6'},
-                        {k:'upcoming',l:'Later',    dot:'#94a3b8',color:'#94a3b8'},
-                      ].map(f => {
-                        const active = stopFilter === f.k;
-                        const cnt = counts[f.k];
-                        return (
-                          <button key={f.k} onClick={()=>setStopFilter(f.k)} style={{
-                            display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
-                            gap:2, padding:'7px 4px', borderRadius:8, cursor:'pointer',
-                            border:`2px solid ${active?(f.dot||'var(--navy-700)'):'var(--gray-200)'}`,
-                            background: active?(f.dot||'var(--navy-800)'):'white',
-                            color: active?'white':(f.dot||'var(--gray-500)'),
-                            transition:'all .12s',
-                          }}>
-                            <span style={{fontSize:15,fontWeight:900,lineHeight:1}}>{cnt}</span>
-                            <span style={{fontSize:10,fontWeight:700,lineHeight:1,opacity:active?1:.7}}>{f.l}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })()}
+              <div style={{padding:'10px 12px',borderBottom:'1px solid var(--gray-200)',flexShrink:0}}>
+                <QueueFilter value={stopFilter} onChange={setStopFilter} customFrom={customFrom} customTo={customTo} onCustomFrom={setCustomFrom} onCustomTo={setCustomTo} />
+              </div>
               <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 14px',borderBottom:'1px solid var(--gray-200)',flexShrink:0}}>
                 {(() => {
                   const todayStr2 = new Date().toISOString().split('T')[0];
                   const weekEnd2 = new Date(); weekEnd2.setDate(weekEnd2.getDate()+7);
                   const weekEndStr2 = weekEnd2.toISOString().split('T')[0];
                   const filteredVisits = visits.filter(v => {
-                    if (stopFilter==='overdue')  return v.scheduled_date < todayStr2;
-                    if (stopFilter==='today')    return v.scheduled_date === todayStr2;
-                    if (stopFilter==='week')     return v.scheduled_date > todayStr2 && v.scheduled_date <= weekEndStr2;
-                    if (stopFilter==='upcoming') return v.scheduled_date > weekEndStr2;
+                    if (stopFilter==='today')  return v.scheduled_date <= todayStr2;
+                    if (stopFilter==='week')   return v.scheduled_date <= weekEndStr2;
+                    if (stopFilter==='month')  { const me=new Date(new Date().getFullYear(),new Date().getMonth()+1,0).toISOString().split('T')[0]; return v.scheduled_date <= me; }
+                    if (stopFilter==='custom') return (!customFrom||v.scheduled_date>=customFrom)&&(!customTo||v.scheduled_date<=customTo);
                     return true;
                   });
                   return <>
@@ -780,10 +745,10 @@ export default function RoutePlanner({ embedded = false }) {
                     const weekEndStr3 = weekEnd3.toISOString().split('T')[0];
                     const filteredIds = order.filter(id => {
                       const v = visits.find(v=>v.id===id); if(!v) return false;
-                      if (stopFilter==='overdue')  return v.scheduled_date < todayStr3;
-                      if (stopFilter==='today')    return v.scheduled_date === todayStr3;
-                      if (stopFilter==='week')     return v.scheduled_date > todayStr3 && v.scheduled_date <= weekEndStr3;
-                      if (stopFilter==='upcoming') return v.scheduled_date > weekEndStr3;
+                      if (stopFilter==='today')  return v.scheduled_date <= todayStr3;
+                      if (stopFilter==='week')   return v.scheduled_date <= weekEndStr3;
+                      if (stopFilter==='month')  { const me=new Date(new Date().getFullYear(),new Date().getMonth()+1,0).toISOString().split('T')[0]; return v.scheduled_date <= me; }
+                      if (stopFilter==='custom') return (!customFrom||v.scheduled_date>=customFrom)&&(!customTo||v.scheduled_date<=customTo);
                       return true;
                     });
                     if (filteredIds.length === 0) return (
