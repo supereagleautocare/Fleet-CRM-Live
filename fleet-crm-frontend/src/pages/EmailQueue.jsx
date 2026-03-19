@@ -31,7 +31,6 @@ export default function EmailQueue() {
       setAllRows(r || []);
       setContactTypes(ct || {});
       const today = new Date().toISOString().split('T')[0];
-      const today = new Date().toISOString().split('T')[0];
       const weekEnd = new Date(); weekEnd.setDate(weekEnd.getDate() + (6 - weekEnd.getDay())); const weekEndStr = weekEnd.toISOString().split('T')[0];
       const monthEnd = new Date(new Date().getFullYear(), new Date().getMonth()+1, 0).toISOString().split('T')[0];
       setRows(r.filter(row => {
