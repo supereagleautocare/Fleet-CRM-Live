@@ -70,7 +70,7 @@ export default function MailQueue() {
     <>
       <div className="page-header">
         <div>
-          <<div className="page-title">✉️ Mail Queue</div>
+          <div className="page-title">✉️ Mail Queue</div>
           <ForecastStrip forecast={forecast} queueKey="mail" />
           <div className="page-subtitle">{rows.length} companies to mail</div>
         </div>
