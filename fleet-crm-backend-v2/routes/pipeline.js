@@ -110,7 +110,7 @@ router.get('/counts', (req, res) => {
 const mail  = db.prepare("SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='mail'  AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND is_locked=0 AND due_date <= date('now'))").get().cnt;
   const email = db.prepare("SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='email' AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND is_locked=0 AND due_date <= date('now'))").get().cnt;
 
-  res.json({ calling, mail, email, visits });
+  const visits = db.prepare("SELECT COUNT(*) as cnt FROM visit_queue WHERE scheduled_date <= date('now')").get().cnt;   res.json({ calling, mail, email, visits });
 });
 
 // ── 7-day forecast — due counts per day per queue type ──────────────────────
@@ -298,9 +298,8 @@ router.post('/move/:id', (req, res) => {
 const company = moveCompany(req.params.id, stage, req.user.id, req.user.name, notes);
   if (!company) return res.status(404).json({ error: 'Company not found.' });
 
+ clearAllCompanyQueues(company.id);
   try {
-    db.exec('BEGIN TRANSACTION');
-    clearAllCompanyQueues(company.id);
     if (['call','mail','email','visit'].includes(stage)) {
       const autoDate = due_date || calcFollowUpDate('company',
         stage === 'call' ? 'Call Back' : stage === 'mail' ? 'Mail' : stage === 'email' ? 'Email' : 'Visit'
@@ -311,9 +310,7 @@ const company = moveCompany(req.params.id, stage, req.user.id, req.user.name, no
       `).run(company.id, company.name, company.main_phone, company.industry, autoDate,
         stage === 'call' ? 'Call' : stage === 'mail' ? 'Mail' : stage === 'email' ? 'Email' : 'Visit');
     }
-    db.exec('COMMIT');
-  } catch(e) {
-    db.exec('ROLLBACK');
+   } catch(e) {
     return res.status(500).json({ error: 'Move failed: ' + e.message });
   }
 
