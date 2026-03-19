@@ -5,6 +5,7 @@ import { useApp } from '../App.jsx';
 import UpcomingList from '../components/UpcomingList.jsx';
 import MoveModal from '../components/MoveModal.jsx';
 import QueueFilter from '../components/QueueFilter.jsx';
+import ForecastStrip from '../components/ForecastStrip.jsx';
 
 export default function EmailQueue() {
   const [rows, setRows]         = useState([]);
@@ -79,6 +80,7 @@ export default function EmailQueue() {
       <div className="page-header">
         <div>
           <div className="page-title">📧 Email Queue</div>
+          <ForecastStrip forecast={forecast} queueKey="email" />
           <div className="page-subtitle">{rows.length} companies to email</div>
         </div>
         <div className="header-actions">
