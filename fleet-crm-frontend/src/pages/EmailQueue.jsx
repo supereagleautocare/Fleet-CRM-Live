@@ -81,7 +81,6 @@ export default function EmailQueue() {
         <div>
           <div className="page-title">📧 Email Queue</div>
           <ForecastStrip forecast={forecast} queueKey="email" />
-          <div className="page-subtitle">{rows.length} companies to email</div>
         </div>
         <div className="header-actions">
           <QueueFilter value={qFilter} onChange={setQFilter} customFrom={customFrom} customTo={customTo} onCustomFrom={setCustomFrom} onCustomTo={setCustomTo} />
