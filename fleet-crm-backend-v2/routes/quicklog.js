@@ -107,6 +107,8 @@ router.post('/company/:id', (req, res) => {
   let next_action_date = null;
   if (next_action === 'Call')  next_action_date = next_action_date_override || calcFollowUpDate('company', contact_type);
   if (next_action === 'Visit') next_action_date = next_action_date_override || calcVisitDate();
+  if (next_action === 'Mail')  next_action_date = next_action_date_override || calcFollowUpDate('company', 'Mail');
+  if (next_action === 'Email') next_action_date = next_action_date_override || calcFollowUpDate('company', 'Email');
 
   const nextStage = next_action === 'Stop'  ? 'dead'
     : next_action === 'Visit' ? 'visit'
@@ -179,13 +181,29 @@ router.post('/company/:id', (req, res) => {
       `).run(company.id, company.company_id, company.name, company.main_phone,
              direct_line || null, company.industry, contact_name || null, next_action_date, logEntry.id);
 
-    } else if (next_action === 'Visit' && next_action_date) {
+     } else if (next_action === 'Visit' && next_action_date) {
       db.prepare(`
         INSERT INTO visit_queue
           (company_id, entity_id, entity_name, scheduled_date, address, city, contact_name, direct_line, email, source_log_id)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(company.company_id, company.id, company.name, next_action_date,
              company.address, company.city, contact_name || null, direct_line || null, email || null, logEntry.id);
+
+    } else if (next_action === 'Mail' && next_action_date) {
+      db.prepare(`
+        INSERT INTO follow_ups
+          (source_type, entity_id, company_id_str, entity_name, phone, direct_line, industry, contact_name, due_date, source_log_id, next_action)
+        VALUES ('company', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Mail')
+      `).run(company.id, company.company_id, company.name, company.main_phone,
+             direct_line || null, company.industry, contact_name || null, next_action_date, logEntry.id);
+
+    } else if (next_action === 'Email' && next_action_date) {
+      db.prepare(`
+        INSERT INTO follow_ups
+          (source_type, entity_id, company_id_str, entity_name, phone, direct_line, industry, contact_name, due_date, source_log_id, next_action)
+        VALUES ('company', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Email')
+      `).run(company.id, company.company_id, company.name, company.main_phone,
+             direct_line || null, company.industry, contact_name || null, next_action_date, logEntry.id);
     }
 
     // Update pipeline stage to match next action
