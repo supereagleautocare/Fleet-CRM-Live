@@ -5,6 +5,7 @@ import { useApp } from '../App.jsx';
 import UpcomingList from '../components/UpcomingList.jsx';
 import CompanyPanel from '../components/CompanyPanel.jsx';
 import ScoreCardModal from '../components/ScoreCardModal.jsx';
+import QueueFilter from '../components/QueueFilter.jsx';
 
 const FILTERS = [
   { key: 'all',      label: '📋 All Due' },
@@ -21,6 +22,9 @@ export default function CallingQueue() {
   const [contactTypes, setContactTypes] = useState([]);
   const [filter, setFilter]         = useState('all');
   const [showUpcoming, setShowUpcoming] = useState(false);
+  const [qFilter, setQFilter]           = useState('today');
+  const [customFrom, setCustomFrom]     = useState('');
+  const [customTo, setCustomTo]         = useState('');
   const [forecast, setForecast]       = useState([]);
   const [allRows, setAllRows]         = useState([]);
   const [industry, setIndustry]     = useState('');
@@ -141,11 +145,9 @@ export default function CallingQueue() {
             </select>
           )}
 
-          <button onClick={() => setShowUpcoming(p => !p)}
-            className={`btn btn-sm ${showUpcoming ? 'btn-navy' : 'btn-ghost'}`}
-            style={{ border: showUpcoming ? 'none' : '1px solid var(--gray-200)', marginLeft: 'auto' }}>
-            {showUpcoming ? '📅 All' : '📅 Due Today'}
-          </button>
+          <div style={{ marginLeft:'auto' }}>
+            <QueueFilter value={qFilter} onChange={v => { setQFilter(v); setShowUpcoming(v === 'all' || v === 'month' || v === 'week' || v === 'custom'); }} customFrom={customFrom} customTo={customTo} onCustomFrom={setCustomFrom} onCustomTo={setCustomTo} />
+          </div>
           {overdue.length > 0 && !showUpcoming && (
             <span className="badge badge-overdue">🔴 {overdue.length} OVERDUE</span>
           )}
