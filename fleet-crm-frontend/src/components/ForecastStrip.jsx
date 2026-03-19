@@ -9,12 +9,10 @@ export default function ForecastStrip({ forecast, queueKey }) {
 
   return (
     <div style={{ display:'flex', alignItems:'center', gap:4, flexWrap:'wrap', padding:'2px 0' }}>
-      {overdueCount > 0 && (
-        <span style={{ fontSize:11, fontWeight:700, color:'white', background:'#ef4444', padding:'1px 7px', borderRadius:5, whiteSpace:'nowrap' }}>
-          {overdueCount} Overdue
-        </span>
-      )}
-      {overdueCount > 0 && <span style={{ fontSize:11, color:'var(--gray-300)' }}>·</span>}
+      <span style={{ fontSize:11, fontWeight:700, color:'white', background:'#ef4444', padding:'1px 7px', borderRadius:5, whiteSpace:'nowrap' }}>
+        {overdueCount} Overdue
+      </span>
+      <span style={{ fontSize:11, color:'var(--gray-300)' }}>·</span>
       {days.map((day, i) => {
         const count = day[queueKey] || 0;
         const isToday = day.isToday;
