@@ -301,9 +301,9 @@ const company = moveCompany(req.params.id, stage, req.user.id, req.user.name, no
  clearAllCompanyQueues(company.id);
   try {
     if (['call','mail','email','visit'].includes(stage)) {
-      const autoDate = due_date || calcFollowUpDate('company',
-        stage === 'call' ? 'Call Back' : stage === 'mail' ? 'Mail' : stage === 'email' ? 'Email' : 'Visit'
-      ) || new Date(Date.now() + 30*24*60*60*1000).toISOString().split('T')[0];
+const autoDate = due_date || (() => {
+        try { return calcFollowUpDate('company', stage === 'call' ? 'Call Back' : stage === 'mail' ? 'Mail' : stage === 'email' ? 'Email' : 'Visit'); } catch(_) { return null; }
+      })() || new Date(Date.now() + 30*24*60*60*1000).toISOString().split('T')[0];
       db.prepare(`
         INSERT OR REPLACE INTO follow_ups (source_type, entity_id, entity_name, phone, industry, due_date, next_action)
         VALUES ('company', ?, ?, ?, ?, ?, ?)
