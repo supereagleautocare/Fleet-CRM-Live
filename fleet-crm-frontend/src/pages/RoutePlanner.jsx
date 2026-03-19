@@ -739,7 +739,6 @@ export default function RoutePlanner({ embedded = false }) {
                   </div>
                 );
               })()}
-              </div>
               <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 14px',borderBottom:'1px solid var(--gray-200)',flexShrink:0}}>
                 {(() => {
                   const todayStr2 = new Date().toISOString().split('T')[0];
