@@ -114,7 +114,6 @@ export default function CallingQueue() {
         <div>
            <div className="page-title">📞 Calling Queue</div>
           <ForecastStrip forecast={forecast} queueKey="calling" />
-          <div className="page-subtitle">{rows.length} companies due · {overdue.length} overdue</div>
         </div>
         <div className="header-actions">
           <div className="search-bar">
