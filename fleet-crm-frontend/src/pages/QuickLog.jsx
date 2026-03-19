@@ -436,7 +436,7 @@ export default function QuickLog() {
                 <div style={{ fontSize:48, marginBottom:12 }}>✅</div>
                 <div style={{ fontSize:20, fontWeight:800, marginBottom:6 }}>Logged for {selected.name}</div>
                 <div style={{ fontSize:13, color:'var(--gray-500)', marginBottom:24 }}>
-                  {form.contact_type} · {form.next_action==='Stop'?'No follow-up':form.next_action==='Call'?'Follow-up scheduled':'Visit scheduled'}
+                  {actionMode === 'mail' ? `Mail — ${form.mail_piece}` : actionMode === 'email' ? `Email — ${form.email_template}` : form.contact_type} · {form.next_action==='Stop'?'No follow-up scheduled':form.next_action==='Call'?'Follow-up call scheduled':form.next_action==='Visit'?'Visit scheduled':form.next_action==='Mail'?'Mail follow-up scheduled':form.next_action==='Email'?'Email follow-up scheduled':'Follow-up scheduled'}
                 </div>
                 <div style={{ display:'flex', gap:10, justifyContent:'center' }}>
                   <button className="btn btn-primary btn-lg" onClick={logAnother}>⚡ Log Another</button>
