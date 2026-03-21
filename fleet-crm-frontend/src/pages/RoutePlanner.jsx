@@ -3,6 +3,8 @@ import { api, fmtPhone, fmtDate } from '../api.js';
 import { useApp } from '../App.jsx';
 import AddressAutocomplete from '../components/AddressAutocomplete.jsx';
 import QueueFilter from '../components/QueueFilter.jsx';
+import RowActions from '../components/RowActions.jsx';
+import MoveModal from '../components/MoveModal.jsx';
 import ForecastStrip from '../components/ForecastStrip.jsx';
 import { useNavigate } from 'react-router-dom';
 
@@ -101,6 +103,7 @@ export default function RoutePlanner({ embedded = false }) {
   const [error, setError]           = useState('');
   const [loading, setLoading]       = useState(true);
   const [forecast, setForecast]     = useState([]);
+  const [movingId, setMovingId]     = useState(null);
 
   // ── Active route state ────────────────────────────────────────────────────
   const [contactTypes, setContactTypes] = useState([]);
@@ -802,7 +805,8 @@ export default function RoutePlanner({ embedded = false }) {
                             </div>
                           </div>
                           {/* Direct Log + Cancel without building a route */}
-                          <div style={{display:'flex',gap:4,marginTop:6}} onClick={e=>e.stopPropagation()}>
+                          <div style={{display:'flex',gap:4,marginTop:6,alignItems:'center'}} onClick={e=>e.stopPropagation()}>
+                            <RowActions isStarred={!!v.is_starred} onStar={async()=>{ await api.pipelineStar(v.entity_id); const d=await api.visitsAll(); setVisits(d); }} onMove={()=>setMovingId(v.entity_id)} />
                             <button className="btn btn-sm btn-primary" style={{flex:1,fontSize:10,padding:'3px 0'}}
                               onClick={()=>{ setLogForm({ contact_type:'', notes:'', contact_name:'', direct_line:'', next_action:'Call', next_action_date_override:'' }); setLoggingStop(v.id); }}>
                               ✅ Log Visit
@@ -1261,6 +1265,13 @@ export default function RoutePlanner({ embedded = false }) {
           </div>
         );
       })()}
+    {movingId && (
+        <MoveModal
+          companyId={movingId}
+          onClose={() => setMovingId(null)}
+          onMoved={() => { setMovingId(null); api.visitsAll().then(d=>setVisits(d)); refreshCounts(); }}
+        />
+      )}
     </div>
   );
 }
