@@ -654,7 +654,7 @@ export default function Companies() {
               ) : (
                 <div className="table-wrapper">
                   <table>
-                    <thead><tr><th>#</th><th>Date</th><th>By</th><th>Type</th><th>Outcome</th><th>Spoke With</th><th>Contact Got</th><th>Next Action</th><th>Score</th><th>Notes</th></tr></thead>
+                    <thead><tr><th>#</th><th>Date</th><th>By</th><th>Type</th><th>Outcome</th><th>Spoke With</th><th>Next Action</th><th>Score</th><th>Notes</th></tr></thead>
                     <tbody>
                       {history.map(h => (
                         <tr key={h.id}>
@@ -666,15 +666,6 @@ export default function Companies() {
                           <td style={{ fontSize:12 }}>
                             {h.contact_name||'—'}
                             {h.role_title && <span style={{ color:'var(--gray-400)', fontSize:10, marginLeft:4 }}>({h.role_title})</span>}
-                          </td>
-                          <td style={{ fontSize:12 }}>
-                            {h.referral_name ? (
-                              <div>
-                                <div style={{ fontWeight:600 }}>{h.referral_name}{h.referral_role ? <span style={{ fontWeight:400, color:'var(--gray-400)', fontSize:10, marginLeft:4 }}>({h.referral_role})</span> : null}</div>
-                                {h.referral_phone && <div style={{ fontSize:11, color:'var(--gray-500)' }}>📱 {fmtPhone(h.referral_phone)}</div>}
-                                {h.referral_email && <div style={{ fontSize:11, color:'var(--gray-500)' }}>✉️ {h.referral_email}</div>}
-                              </div>
-                            ) : '—'}
                           </td>
                           <td style={{ fontSize:12 }}>{h.next_action||'—'}{h.next_action_date&&<span style={{color:'var(--gray-400)',fontSize:10,marginLeft:4}}>{fmtDate(h.next_action_date)}</span>}</td>
                           <td style={{ fontSize:12, whiteSpace:'nowrap' }}>
