@@ -107,7 +107,7 @@ export default function EmailQueue() {
           ) : (
             <div className="table-wrapper">
               <table>
-                <thead><tr><th></th><th>Company</th><th>Phone</th><th>Industry</th><th>Email Contact</th><th>Due</th><th></th></tr></thead>
+                <thead><tr><th>Company</th><th>Phone</th><th>Industry</th><th>Email Contact</th><th>Due</th><th></th></tr></thead>
                 <tbody>
                   {rows.map(row => {
                     const isSel = selected?.id === row.id;
@@ -123,6 +123,8 @@ export default function EmailQueue() {
                         <td>{row.industry?<span className="badge badge-gray">{row.industry}</span>:'—'}</td>
                         <td style={{ fontSize:12 }}>
                           {row.preferred_contact_name ? <div><span style={{ fontWeight:600 }}>{row.preferred_contact_name}</span>{row.preferred_email && <div style={{ color:'var(--gray-400)', fontSize:11 }}>{row.preferred_email}</div>}</div> : '—'}
+                        </td>
+                        <td style={{ fontSize:12 }}>{row.due_date?fmtDate(row.due_date):'—'}</td>
                         <td onClick={e=>e.stopPropagation()} style={{textAlign:'right'}}>
                           <RowActions
                             isStarred={!!row.is_starred}
