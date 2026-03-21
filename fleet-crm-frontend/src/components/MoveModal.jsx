@@ -20,7 +20,7 @@ const STAGES = [
 export default function MoveModal({ companyId, onClose, onMoved }) {
   const [form, setForm] = useState({ stage: '', due_date: '', notes: '' });
   const [saving, setSaving] = useState(false);
-  const { showToast } = useApp();
+const { showToast, refreshCounts } = useApp();
 
   function set(f, v) { setForm(p => ({ ...p, [f]: v })); }
 
@@ -32,6 +32,7 @@ export default function MoveModal({ companyId, onClose, onMoved }) {
       await api.pipelineMove(companyId, form);
       showToast('Moved to ' + form.stage);
       onMoved();
+      refreshCounts();
     } catch (err) {
       showToast(err.message, 'error');
     } finally {
