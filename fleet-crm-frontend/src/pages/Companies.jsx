@@ -414,9 +414,15 @@ export default function Companies() {
                   background: selected?.id===c.id ? '#fef3c7' : 'white',
                   borderLeft: selected?.id===c.id ? '3px solid var(--gold-500)' : '3px solid transparent',
                 }}>
-                  <div style={{ display:'flex', alignItems:'center', gap:5, marginBottom:2 }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:5 }}>
                     {c.is_starred && <span style={{ fontSize:11 }}>⭐</span>}
-                    <div style={{ fontWeight:700, fontSize:13, color:'var(--gray-900)' }}>{c.name}</div>
+                    <div style={{ fontWeight:600, fontSize:13, color:'var(--gray-900)' }}>{c.name}</div>
+                  </div>
+                  <div style={{ fontSize:11, color:'var(--gray-400)', marginTop:2 }}>{fmtPhone(c.main_phone)}</div>
+                  {!selected && c.industry && <div style={{ fontSize:11, color:'var(--gray-400)', marginTop:2 }}>{c.industry}</div>}
+                  {!selected && c.preferred_contact_name && <div style={{ fontSize:11, color:'var(--gray-500)', marginTop:2 }}>👤 {c.preferred_contact_name}{c.preferred_contact_role ? ` · ${c.preferred_contact_role}` : ''}</div>}
+                  {!selected && c.last_contact_type && <div style={{ fontSize:11, color:'var(--gray-400)', marginTop:2 }}>📞 {c.last_contact_type} · {fmtDate(c.last_contacted)}</div>}
+                  {!selected && <div style={{ marginTop:4 }}><span style={{ fontSize:9, padding:'1px 6px', borderRadius:8, background:'var(--gray-100)', color:'var(--gray-500)', fontWeight:700, textTransform:'uppercase', letterSpacing:'.04em' }}>{c.pipeline_stage||'new'}</span></div>}
                   </div>
                   <div style={{ fontSize:11, color:'var(--gray-500)' }}>{fmtPhone(c.main_phone)}</div>
                   {c.industry && <div style={{ fontSize:10, color:'var(--gray-400)', marginTop:2 }}>{c.industry}</div>}
