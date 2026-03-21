@@ -409,8 +409,8 @@ export default function Companies() {
           ) : (
             <div style={{ overflowY:'auto', flex:1 }}>
               {!selected && (
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 120px 140px 160px 80px', gap:0, padding:'6px 14px', borderBottom:'2px solid var(--gray-200)', background:'var(--gray-50)' }}>
-                  {['Company','Phone','Contact','Last Call','Stage'].map(h => (
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 120px 120px 140px 160px 80px', gap:0, padding:'6px 14px', borderBottom:'2px solid var(--gray-200)', background:'var(--gray-50)' }}>
+                  {['Company','Industry','Phone','Contact','Last Call','Stage'].map(h => (
                     <div key={h} style={{ fontSize:10, fontWeight:700, color:'var(--gray-400)', textTransform:'uppercase', letterSpacing:'.06em' }}>{h}</div>
                   ))}
                 </div>
@@ -418,19 +418,20 @@ export default function Companies() {
               {companies.map(c => (
                 <div key={c.id} onClick={()=>selectCompany(c)} style={{
                   display: selected ? 'block' : 'grid',
-                  gridTemplateColumns: selected ? undefined : '1fr 120px 140px 160px 80px',
+                  gridTemplateColumns: selected ? undefined : '1fr 120px 120px 140px 160px 80px',
                   padding:'10px 14px', cursor:'pointer', borderBottom:'1px solid var(--gray-100)',
                   background: selected?.id===c.id ? '#fef3c7' : 'white',
                   borderLeft: selected?.id===c.id ? '3px solid var(--gold-500)' : '3px solid transparent',
                   alignItems:'center', gap:0,
                 }}>
-                  <div>
-                    <div style={{ display:'flex', alignItems:'center', gap:5 }}>
+                  <div style={{ textAlign: selected ? 'center' : 'left' }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:5, justifyContent: selected ? 'center' : 'flex-start' }}>
                       {!!c.is_starred && <span style={{ fontSize:11 }}>⭐</span>}
                       <div style={{ fontWeight:600, fontSize:13, color:'var(--gray-900)' }}>{c.name}</div>
                     </div>
                     {selected && <div style={{ fontSize:11, color:'var(--gray-400)', marginTop:1 }}>{fmtPhone(c.main_phone)}</div>}
                   </div>
+                  {!selected && <div style={{ fontSize:12, color:'var(--gray-500)' }}>{c.industry||'—'}</div>}
                   {!selected && <div style={{ fontSize:12, color:'var(--gray-500)' }}>{fmtPhone(c.main_phone)}</div>}
                   {!selected && <div style={{ fontSize:12, color:'var(--gray-500)' }}>{c.preferred_contact_name ? `${c.preferred_contact_name}${c.preferred_contact_role ? ' · '+c.preferred_contact_role : ''}` : '—'}</div>}
                   {!selected && <div style={{ fontSize:12, color:'var(--gray-500)' }}>{c.last_contact_type ? `${c.last_contact_type} · ${fmtDate(c.last_contacted)}` : '—'}</div>}
