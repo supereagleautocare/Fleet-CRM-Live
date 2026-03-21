@@ -652,15 +652,14 @@ export default function Companies() {
               ) : history.length === 0 ? (
                 <div className="empty-state" style={{ padding:24 }}><div className="desc">No calls logged yet</div></div>
               ) : (
-                <div className="table-wrapper">
-                  <table>
-                    <thead><tr><th>#</th><th>Date</th><th>By</th><th>Type</th><th>Outcome</th><th>Spoke With</th><th>Next Action</th><th>Score</th><th>Notes</th></tr></thead>
+                <div className="table-wrapper" style={{overflowX:'auto'}}>
+                  <table style={{minWidth:900}}>
+                    <thead><tr><th>#</th><th>Date</th><th>Type</th><th>Outcome</th><th>Spoke With</th><th>Contact Got</th><th>Next Action</th><th>Notes</th><th>Score</th><th>By</th></tr></thead>
                     <tbody>
                       {history.map(h => (
                         <tr key={h.id}>
                           <td style={{ color:'var(--gray-400)', fontSize:11 }}>{h.attempt_number}</td>
                           <td style={{ fontSize:12 }}>{h.logged_at?.slice(0,10)}</td>
-                          <td style={{ fontSize:11, color:'var(--gray-500)', whiteSpace:'nowrap' }}>{h.logged_by_name||'—'}</td>
                           <td><span className={`badge ${h.action_type==='Visit'?'badge-gold':h.action_type==='Move'?'badge-gray':'badge-company'}`}>{h.action_type==='Visit'?'📍 Visit':h.action_type==='Move'?'➡️ Move':'📞 Call'}</span></td>
                           <td style={{ fontSize:12, fontWeight:500 }}>{h.contact_type}{h.mail_piece ? ` — ${h.mail_piece}` : ''}</td>
                           <td style={{ fontSize:12 }}>
@@ -689,6 +688,7 @@ export default function Companies() {
                             )}
                           </td>
                           <td style={{ fontSize:11, color:'var(--gray-500)', maxWidth:180 }} className="truncate">{h.notes||'—'}</td>
+                          <td style={{ fontSize:11, color:'var(--gray-500)', whiteSpace:'nowrap' }}>{h.logged_by_name||'—'}</td>                           <td style={{ fontSize:11, color:'var(--gray-500)', whiteSpace:'nowrap' }}>{h.logged_by_name||'—'}</td>                           <td style={{ fontSize:11, color:'var(--gray-500)', whiteSpace:'nowrap' }}>{h.logged_by_name||'—'}</td>                           <td style={{ fontSize:11, color:'var(--gray-500)', whiteSpace:'nowrap' }}>{h.logged_by_name||'—'}</td>                           <td style={{ fontSize:11, color:'var(--gray-500)', whiteSpace:'nowrap' }}>{h.logged_by_name||'—'}</td>                           <td style={{ fontSize:11, color:'var(--gray-500)', whiteSpace:'nowrap' }}>{h.logged_by_name||'—'}</td>                           <td style={{ fontSize:11, color:'var(--gray-500)', whiteSpace:'nowrap' }}>{h.logged_by_name||'—'}</td>
                         </tr>
                       ))}
                     </tbody>
