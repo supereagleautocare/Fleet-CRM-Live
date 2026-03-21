@@ -34,7 +34,7 @@ export default function RowActions({ isStarred, onStar, onMove }) {
       {open && (
         <>
           <div style={{ position:'fixed', inset:0, zIndex:998 }} onClick={() => setOpen(false)} />
-          <div style={{ position:'absolute', right:0, top:'100%', zIndex:999, background:'white', borderRadius:10, boxShadow:'0 4px 20px rgba(0,0,0,.15)', border:'1px solid var(--gray-200)', minWidth:160, overflow:'hidden' }}>
+<div style={{ position:'fixed', right:20, zIndex:9999, background:'white', borderRadius:10, boxShadow:'0 4px 20px rgba(0,0,0,.15)', border:'1px solid var(--gray-200)', minWidth:160, overflow:'hidden' }}>
             <button
               onClick={handleStar}
               disabled={starring}
