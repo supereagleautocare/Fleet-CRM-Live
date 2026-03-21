@@ -688,6 +688,11 @@ export default function Companies() {
                             {h.role_title && <span style={{ color:'var(--gray-400)', fontSize:10, marginLeft:4 }}>({h.role_title})</span>}
                           </td>
                           <td style={{ fontSize:12 }}>{h.next_action||'—'}{h.next_action_date&&<span style={{color:'var(--gray-400)',fontSize:10,marginLeft:4}}>{fmtDate(h.next_action_date)}</span>}</td>
+                          <td style={{ fontSize:11, color:'var(--gray-500)', maxWidth:180 }}>
+                            {h.notes && h.notes.length > 80
+                              ? <NoteCell note={h.notes} />
+                              : h.notes || '—'}
+                          </td>
                           <td style={{ fontSize:12, whiteSpace:'nowrap' }}>
                             {h.scorecard_id ? (() => {
                               const pct = h.scorecard_max > 0 ? Math.round((h.scorecard_total / h.scorecard_max) * 100) : 0;
@@ -707,11 +712,6 @@ export default function Companies() {
                                 + Score
                               </button>
                             )}
-                          </td>
-                          <td style={{ fontSize:11, color:'var(--gray-500)', maxWidth:180 }}>
-                            {h.notes && h.notes.length > 80
-                              ? <NoteCell note={h.notes} />
-                              : h.notes || '—'}
                           </td>
                           <td style={{ fontSize:11, color:'var(--gray-500)', whiteSpace:'nowrap' }}>{h.logged_by_name||'—'}</td>
                         </tr>
