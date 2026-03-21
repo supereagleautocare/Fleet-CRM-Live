@@ -421,11 +421,6 @@ export default function Companies() {
                         <div className="row-actions" style={{marginTop:4}}>
                           <button className="pill-btn pill-btn-ghost" onClick={e=>{e.stopPropagation();handleAddToQueue(c.id);}}>+ Queue</button>
                         </div>
-                      </td>
-                        <div className="row-actions">
-                          <button className="pill-btn pill-btn-ghost" onClick={e=>{e.stopPropagation();handleAddToQueue(c.id);}}>+ Queue</button>
-                        </div>
-                      </td>
                     </tr>
                   ))}
                 </tbody>
