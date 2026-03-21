@@ -24,24 +24,31 @@ router.use(requireAuth);
 // GET /api/companies — list all companies
 router.get('/', (req, res) => {
   const { search, industry, status = 'active' } = req.query;
-  let sql = 'SELECT * FROM companies WHERE 1=1';
+  let where = 'WHERE 1=1';
   const params = [];
 
-  if (status !== 'all') {
-    sql += ' AND status = ?';
-    params.push(status);
-  }
+  if (status !== 'all') { where += ' AND c.status = ?'; params.push(status); }
   if (search) {
-    sql += ' AND (name LIKE ? OR main_phone LIKE ? OR industry LIKE ?)';
-    const s = `%${search}%`;
-    params.push(s, s, s);
+    where += ' AND (c.name LIKE ? OR c.main_phone LIKE ? OR c.industry LIKE ?)';
+    const s = `%${search}%`; params.push(s, s, s);
   }
-  if (industry) {
-    sql += ' AND industry = ?';
-    params.push(industry);
-  }
-  sql += ' ORDER BY name ASC';
+  if (industry) { where += ' AND c.industry = ?'; params.push(industry); }
 
+  const sql = `
+    SELECT c.*,
+      cc.name as preferred_contact_name,
+      cc.role_title as preferred_contact_role,
+      cl.contact_type as last_contact_type,
+      cl.logged_at as last_contacted
+    FROM companies c
+    LEFT JOIN company_contacts cc ON cc.company_id = c.company_id AND cc.is_preferred = 1
+    LEFT JOIN (
+      SELECT entity_id, contact_type, logged_at FROM call_log
+      WHERE log_type='company' AND id IN (SELECT MAX(id) FROM call_log WHERE log_type='company' GROUP BY entity_id)
+    ) cl ON cl.entity_id = c.id
+    ${where}
+    ORDER BY c.name ASC
+  `;
   res.json(db.prepare(sql).all(...params));
 });
 
