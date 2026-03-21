@@ -415,12 +415,13 @@ export default function Companies() {
                 <tbody>
                   {companies.map(c => (
                     <tr key={c.id} onClick={()=>selectCompany(c)} style={selected?.id===c.id?{background:'#fef3c7'}:{}}>
-                      <td>
+                    <td>
                         <div style={{ fontWeight:600, fontSize:13 }}>{c.name}</div>
                         <div style={{ fontSize:11, color:'var(--gray-400)', marginTop:2 }}>{fmtPhone(c.main_phone)}</div>
                         <div className="row-actions" style={{marginTop:4}}>
                           <button className="pill-btn pill-btn-ghost" onClick={e=>{e.stopPropagation();handleAddToQueue(c.id);}}>+ Queue</button>
                         </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
