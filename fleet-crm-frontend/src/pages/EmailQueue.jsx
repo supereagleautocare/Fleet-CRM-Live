@@ -89,7 +89,6 @@ export default function EmailQueue() {
       </div>
 
       <div className="page-body" style={{ display:'flex', flexDirection:'column', gap:12 }}>
-        <UpcomingList forecast={forecast} queueKey="email" label="Emails" color="#6b21a8" emoji="📧" upcomingRows={allRows} />
         <div className="table-card">
           <div className="table-card-header">
             <span>📧</span>
