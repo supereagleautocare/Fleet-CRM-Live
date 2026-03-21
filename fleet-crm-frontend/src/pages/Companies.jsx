@@ -411,15 +411,14 @@ export default function Companies() {
           ) : (
             <div className="table-wrapper">
               <table>
-                <thead><tr><th>Company</th><th>Phone</th><th>Industry</th><th></th></tr></thead>
+                <thead><tr><th>Company</th><th></th></tr></thead>
                 <tbody>
                   {companies.map(c => (
                     <tr key={c.id} onClick={()=>selectCompany(c)} style={selected?.id===c.id?{background:'#fef3c7'}:{}}>
                       <td>
                         <div style={{ fontWeight:600, fontSize:13 }}>{c.name}</div>
-                        <div className="company-id">{c.company_id}</div>
+                        <div style={{ fontSize:11, color:'var(--gray-400)', marginTop:2 }}>{fmtPhone(c.main_phone)}</div>
                       </td>
-                      <td><span className="phone-num">{fmtPhone(c.main_phone)}</span></td>
                       <td>{c.industry?<span className="badge badge-gray">{c.industry}</span>:'—'}</td>
                       <td>
                         <div className="row-actions">
