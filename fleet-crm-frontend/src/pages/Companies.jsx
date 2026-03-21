@@ -688,7 +688,7 @@ export default function Companies() {
                             )}
                           </td>
                           <td style={{ fontSize:11, color:'var(--gray-500)', maxWidth:180 }} className="truncate">{h.notes||'—'}</td>
-                          <td style={{ fontSize:11, color:'var(--gray-500)', whiteSpace:'nowrap' }}>{h.logged_by_name||'—'}</td>                           <td style={{ fontSize:11, color:'var(--gray-500)', whiteSpace:'nowrap' }}>{h.logged_by_name||'—'}</td>                           <td style={{ fontSize:11, color:'var(--gray-500)', whiteSpace:'nowrap' }}>{h.logged_by_name||'—'}</td>                           <td style={{ fontSize:11, color:'var(--gray-500)', whiteSpace:'nowrap' }}>{h.logged_by_name||'—'}</td>                           <td style={{ fontSize:11, color:'var(--gray-500)', whiteSpace:'nowrap' }}>{h.logged_by_name||'—'}</td>                           <td style={{ fontSize:11, color:'var(--gray-500)', whiteSpace:'nowrap' }}>{h.logged_by_name||'—'}</td>                           <td style={{ fontSize:11, color:'var(--gray-500)', whiteSpace:'nowrap' }}>{h.logged_by_name||'—'}</td>
+                          <td style={{ fontSize:11, color:'var(--gray-500)', whiteSpace:'nowrap' }}>{h.logged_by_name||'—'}</td><td style={{ fontSize:11, color:'var(--gray-500)', maxWidth:180 }} className="truncate">{h.notes||'—'}</td>
                         </tr>
                       ))}
                     </tbody>
