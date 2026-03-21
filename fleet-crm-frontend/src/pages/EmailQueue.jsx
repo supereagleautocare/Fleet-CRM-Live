@@ -5,6 +5,7 @@ import { useApp } from '../App.jsx';
 import UpcomingList from '../components/UpcomingList.jsx';
 import MoveModal from '../components/MoveModal.jsx';
 import QueueFilter from '../components/QueueFilter.jsx';
+import RowActions from '../components/RowActions.jsx';
 import ForecastStrip from '../components/ForecastStrip.jsx';
 
 export default function EmailQueue() {
@@ -113,9 +114,6 @@ export default function EmailQueue() {
                     return (
                       <tr key={row.id} onClick={() => setSelected(p => p?.id===row.id ? null : row)}
                         style={{ cursor:'pointer', background:isSel?'#faf5ff':undefined, borderLeft:isSel?'3px solid #a855f7':'3px solid transparent' }}>
-                        <td>
-                          <button onClick={async e=>{e.stopPropagation();await api.pipelineStar(row.id);load();}} style={{ border:'none', background:'none', cursor:'pointer', fontSize:14, opacity:row.is_starred?1:.2 }}>⭐</button>
-                        </td>
                         <td><div
     style={{ fontWeight:700, fontSize:13, color:'var(--navy-700)', cursor:'pointer', textDecoration:'underline', textDecorationStyle:'dotted', textUnderlineOffset:3, display:'inline' }}
     onClick={e=>{ e.stopPropagation(); navigate('/companies?company='+row.id); }}
@@ -125,10 +123,12 @@ export default function EmailQueue() {
                         <td>{row.industry?<span className="badge badge-gray">{row.industry}</span>:'—'}</td>
                         <td style={{ fontSize:12 }}>
                           {row.preferred_contact_name ? <div><span style={{ fontWeight:600 }}>{row.preferred_contact_name}</span>{row.preferred_email && <div style={{ color:'var(--gray-400)', fontSize:11 }}>{row.preferred_email}</div>}</div> : '—'}
-                        </td>
-                        <td style={{ fontSize:12 }}>{row.due_date?fmtDate(row.due_date):'—'}</td>
-                        <td onClick={e=>e.stopPropagation()}>
-                          <button className="pill-btn pill-btn-ghost" onClick={()=>{setMovingId(row.id);setMoveTarget({stage:'',due_date:'',notes:''});}}>Move</button>
+                        <td onClick={e=>e.stopPropagation()} style={{textAlign:'right'}}>
+                          <RowActions
+                            isStarred={!!row.is_starred}
+                            onStar={async()=>{ await api.pipelineStar(row.id); load(); }}
+                            onMove={()=>setMovingId(row.id)}
+                          />
                         </td>
                       </tr>
                     );
