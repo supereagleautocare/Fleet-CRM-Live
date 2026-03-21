@@ -418,9 +418,6 @@ export default function Companies() {
                     <td>
                         <div style={{ fontWeight:600, fontSize:13 }}>{c.name}</div>
                         <div style={{ fontSize:11, color:'var(--gray-400)', marginTop:2 }}>{fmtPhone(c.main_phone)}</div>
-                        <div className="row-actions" style={{marginTop:4}}>
-                          <button className="pill-btn pill-btn-ghost" onClick={e=>{e.stopPropagation();handleAddToQueue(c.id);}}>+ Queue</button>
-                        </div>
                       </td>
                     </tr>
                   ))}
