@@ -21,7 +21,6 @@ export default function MailQueue() {
   const [forecast, setForecast]   = useState([]);
   const [allRows, setAllRows]     = useState([]);
   const [form, setForm]           = useState({ mail_piece:'', notes:'', next_action:'Call', next_action_date_override:'', show_date:false });
-  const [movingId, setMovingId] = useState(null);
   const navigate = useNavigate();
   const { showToast, refreshCounts } = useApp();
 
