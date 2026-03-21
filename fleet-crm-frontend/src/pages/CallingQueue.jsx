@@ -6,6 +6,8 @@ import UpcomingList from '../components/UpcomingList.jsx';
 import CompanyPanel from '../components/CompanyPanel.jsx';
 import ScoreCardModal from '../components/ScoreCardModal.jsx';
 import QueueFilter from '../components/QueueFilter.jsx';
+import RowActions from '../components/RowActions.jsx';
+import MoveModal from '../components/MoveModal.jsx';
 import ForecastStrip from '../components/ForecastStrip.jsx';
 
 const FILTERS = [
@@ -38,8 +40,8 @@ export default function CallingQueue() {
   const [scoresLoading, setScoresLoading]       = useState(false);
   const [pendingScorecard, setPendingScorecard] = useState(null); // {entityName, entityId, callLogId}
   const [manualScorecard, setManualScorecard]   = useState(false);
+  const [movingId, setMovingId] = useState(null);
   const navigate = useNavigate();
-
   useEffect(() => {
     api.scorecardEnabled().then(r => setScorecardEnabled(r.enabled)).catch(()=>{});
   }, []);
@@ -178,7 +180,7 @@ export default function CallingQueue() {
                     <th>Type</th>
                     <th>Preferred Contact</th>
                     <th>Due</th>
-                    <th>Last Call</th>
+                    <th>Last Call</th><th></th></tr></thead>
                   </tr>
                 </thead>
                 <tbody>
@@ -224,6 +226,9 @@ export default function CallingQueue() {
                         </td>
                         <td style={{ fontSize:11, color:'var(--gray-500)', maxWidth:140 }} className="truncate">
                           {row.last_contact_type ? `${row.last_contact_type} · ${fmtDate(row.last_contacted)}` : '—'}
+                        </td>
+                        <td onClick={e=>e.stopPropagation()} style={{textAlign:'right'}}>
+                          <RowActions isStarred={!!row.is_starred} onStar={async()=>{ await api.pipelineStar(row.id); load(); }} onMove={()=>setMovingId(row.id)} />
                         </td>
                       </tr>
                     );
@@ -315,6 +320,13 @@ export default function CallingQueue() {
         </div>
       )}
 
+      {movingId && (
+        <MoveModal
+          companyId={movingId}
+          onClose={() => setMovingId(null)}
+          onMoved={() => { setMovingId(null); load(); }}
+        />
+      )}
       {/* Scorecard popups */}
       {(pendingScorecard || manualScorecard) && (
         <ScoreCardModal
