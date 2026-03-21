@@ -654,7 +654,7 @@ export default function Companies() {
               ) : (
                 <div className="table-wrapper" style={{overflowX:'auto'}}>
                   <table style={{minWidth:900}}>
-                    <thead><tr><th>#</th><th>Date</th><th>Type</th><th>Outcome</th><th>Spoke With</th><th>Contact Got</th><th>Next Action</th><th>Notes</th><th>Score</th><th>By</th></tr></thead>
+                    <thead><tr><th>#</th><th>Date</th><th>Type</th><th>Outcome</th><th>Spoke With</th><th>Next Action</th><th>Notes</th><th>Score</th><th>By</th></tr></thead>
                     <tbody>
                       {history.map(h => (
                         <tr key={h.id}>
