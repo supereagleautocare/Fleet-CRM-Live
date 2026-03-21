@@ -400,32 +400,41 @@ export default function Companies() {
       <div className="page-body" style={{ display:'flex', gap:16, alignItems:'flex-start' }}>
 
         {/* Company list */}
-        <div style={{ flex: selected ? '0 0 180px' : '1', minWidth:0, background:'white', borderRadius:10, border:'1px solid var(--gray-200)', overflow:'hidden', display:'flex', flexDirection:'column' }}>
+        <div style={{ flex: selected ? '0 0 150px' : '1', minWidth:0, background:'white', borderRadius:10, border:'1px solid var(--gray-200)', overflow:'hidden', display:'flex', flexDirection:'column' }}>
           <div style={{ padding:'10px 14px', borderBottom:'1px solid var(--gray-200)', fontWeight:700, fontSize:13, color:'var(--gray-700)' }}>All Companies</div>
-          {loading ? (
+         {loading ? (
             <div className="loading-wrap"><div className="spinner"/></div>
           ) : companies.length === 0 ? (
             <div style={{ padding:16, textAlign:'center', fontSize:12, color:'var(--gray-400)' }}>No companies yet</div>
           ) : (
             <div style={{ overflowY:'auto', flex:1 }}>
+              {!selected && (
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 120px 140px 160px 80px', gap:0, padding:'6px 14px', borderBottom:'2px solid var(--gray-200)', background:'var(--gray-50)' }}>
+                  {['Company','Phone','Contact','Last Call','Stage'].map(h => (
+                    <div key={h} style={{ fontSize:10, fontWeight:700, color:'var(--gray-400)', textTransform:'uppercase', letterSpacing:'.06em' }}>{h}</div>
+                  ))}
+                </div>
+              )}
               {companies.map(c => (
                 <div key={c.id} onClick={()=>selectCompany(c)} style={{
+                  display: selected ? 'block' : 'grid',
+                  gridTemplateColumns: selected ? undefined : '1fr 120px 140px 160px 80px',
                   padding:'10px 14px', cursor:'pointer', borderBottom:'1px solid var(--gray-100)',
                   background: selected?.id===c.id ? '#fef3c7' : 'white',
                   borderLeft: selected?.id===c.id ? '3px solid var(--gold-500)' : '3px solid transparent',
+                  alignItems:'center', gap:0,
                 }}>
-                  <div style={{ display:'flex', alignItems:'center', gap:5 }}>
-                    {c.is_starred && <span style={{ fontSize:11 }}>⭐</span>}
-                    <div style={{ fontWeight:600, fontSize:13, color:'var(--gray-900)' }}>{c.name}</div>
+                  <div>
+                    <div style={{ display:'flex', alignItems:'center', gap:5 }}>
+                      {!!c.is_starred && <span style={{ fontSize:11 }}>⭐</span>}
+                      <div style={{ fontWeight:600, fontSize:13, color:'var(--gray-900)' }}>{c.name}</div>
+                    </div>
+                    {selected && <div style={{ fontSize:11, color:'var(--gray-400)', marginTop:1 }}>{fmtPhone(c.main_phone)}</div>}
                   </div>
-                  <div style={{ fontSize:11, color:'var(--gray-400)', marginTop:2 }}>{fmtPhone(c.main_phone)}</div>
-                  {!selected && c.industry && <div style={{ fontSize:11, color:'var(--gray-400)', marginTop:2 }}>{c.industry}</div>}
-                  {!selected && c.preferred_contact_name && <div style={{ fontSize:11, color:'var(--gray-500)', marginTop:2 }}>👤 {c.preferred_contact_name}{c.preferred_contact_role ? ` · ${c.preferred_contact_role}` : ''}</div>}
-                  {!selected && c.last_contact_type && <div style={{ fontSize:11, color:'var(--gray-400)', marginTop:2 }}>📞 {c.last_contact_type} · {fmtDate(c.last_contacted)}</div>}
-                  {!selected && <div style={{ marginTop:4 }}><span style={{ fontSize:9, padding:'1px 6px', borderRadius:8, background:'var(--gray-100)', color:'var(--gray-500)', fontWeight:700, textTransform:'uppercase', letterSpacing:'.04em' }}>{c.pipeline_stage||'new'}</span></div>}
-                  <div style={{ marginTop:4 }}>
-                    <span style={{ fontSize:9, padding:'1px 6px', borderRadius:8, background:'var(--gray-100)', color:'var(--gray-500)', fontWeight:700, textTransform:'uppercase', letterSpacing:'.04em' }}>{c.pipeline_stage||'new'}</span>
-                  </div>
+                  {!selected && <div style={{ fontSize:12, color:'var(--gray-500)' }}>{fmtPhone(c.main_phone)}</div>}
+                  {!selected && <div style={{ fontSize:12, color:'var(--gray-500)' }}>{c.preferred_contact_name ? `${c.preferred_contact_name}${c.preferred_contact_role ? ' · '+c.preferred_contact_role : ''}` : '—'}</div>}
+                  {!selected && <div style={{ fontSize:12, color:'var(--gray-500)' }}>{c.last_contact_type ? `${c.last_contact_type} · ${fmtDate(c.last_contacted)}` : '—'}</div>}
+                  {!selected && <div><span style={{ fontSize:9, padding:'1px 6px', borderRadius:8, background:'var(--gray-100)', color:'var(--gray-500)', fontWeight:700, textTransform:'uppercase' }}>{c.pipeline_stage||'new'}</span></div>}
                 </div>
               ))}
             </div>
