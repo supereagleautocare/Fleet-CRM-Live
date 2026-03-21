@@ -400,7 +400,7 @@ export default function Companies() {
       <div className="page-body" style={{ display:'flex', gap:16, alignItems:'flex-start' }}>
 
         {/* Company list */}
-        <div style={{ flex: selected ? '0 0 220px' : '1', minWidth:0, background:'white', borderRadius:10, border:'1px solid var(--gray-200)', overflow:'hidden', display:'flex', flexDirection:'column' }}>
+        <div style={{ flex: selected ? '0 0 180px' : '1', minWidth:0, background:'white', borderRadius:10, border:'1px solid var(--gray-200)', overflow:'hidden', display:'flex', flexDirection:'column' }}>
           <div style={{ padding:'10px 14px', borderBottom:'1px solid var(--gray-200)', fontWeight:700, fontSize:13, color:'var(--gray-700)' }}>All Companies</div>
           {loading ? (
             <div className="loading-wrap"><div className="spinner"/></div>
