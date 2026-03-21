@@ -1,9 +1,23 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import AddressAutocomplete from '../components/AddressAutocomplete.jsx';
 import { api, fmtPhone, fmtDate } from '../api.js';
 import { useApp } from '../App.jsx';
 import ScoreCardModal from '../components/ScoreCardModal.jsx';
+
+// ── Expandable note cell for history table ────────────────────────────────────
+function NoteCell({ note }) {
+  const [expanded, setExpanded] = React.useState(false);
+  return (
+    <span>
+      {expanded ? note : note.slice(0, 80) + '…'}
+      <button onClick={() => setExpanded(p => !p)}
+        style={{ marginLeft:4, fontSize:10, color:'var(--navy-700)', background:'none', border:'none', cursor:'pointer', fontWeight:700, padding:0 }}>
+        {expanded ? 'less' : 'more'}
+      </button>
+    </span>
+  );
+}
 
 // ── Pipeline stage bar shown at top of every company profile ─────────────────
 const STAGES = [
@@ -687,7 +701,11 @@ export default function Companies() {
                               </button>
                             )}
                           </td>
-                          <td style={{ fontSize:11, color:'var(--gray-500)', maxWidth:180 }} className="truncate">{h.notes||'—'}</td>
+                          <td style={{ fontSize:11, color:'var(--gray-500)', maxWidth:180 }}>
+                            {h.notes && h.notes.length > 80
+                              ? <NoteCell note={h.notes} />
+                              : h.notes || '—'}
+                          </td>
                           <td style={{ fontSize:11, color:'var(--gray-500)', whiteSpace:'nowrap' }}>{h.logged_by_name||'—'}</td>
                         </tr>
                       ))}
