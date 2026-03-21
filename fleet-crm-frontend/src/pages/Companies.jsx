@@ -400,7 +400,7 @@ export default function Companies() {
       <div className="page-body" style={{ display:'flex', gap:16, alignItems:'flex-start' }}>
 
         {/* Company list */}
-        <div className="table-card" style={{ flex: selected ? '0 0 200px' : '1', minWidth:0 }}>
+        <div className="table-card" style={{ flex: selected ? '0 0 180px' : '1', minWidth:0, padding:0 }}>
           <div className="table-card-header">
             <span className="table-card-title">All Companies</span>
           </div>
@@ -416,8 +416,8 @@ export default function Companies() {
                   {companies.map(c => (
                     <tr key={c.id} onClick={()=>selectCompany(c)} style={selected?.id===c.id?{background:'#fef3c7'}:{}}>
                     <td>
-                        <div style={{ fontWeight:600, fontSize:13 }}>{c.name}</div>
-                        <div style={{ fontSize:11, color:'var(--gray-400)', marginTop:2 }}>{fmtPhone(c.main_phone)}</div>
+                        <div style={{ fontWeight:600, fontSize:13, textAlign:'center' }}>{c.name}</div>
+                        <div style={{ fontSize:11, color:'var(--gray-400)', marginTop:2, textAlign:'center' }}>{fmtPhone(c.main_phone)}</div>
                       </td>
                     </tr>
                   ))}
@@ -453,7 +453,6 @@ export default function Companies() {
                         {selected.is_starred ? <span title="Warm Lead" style={{ fontSize:18, cursor:'default' }}>⭐</span> : null}
                       </div>
                       <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:3, flexWrap:'wrap' }}>
-                        <div className="company-id" style={{ fontSize:12 }}>{selected.company_id}</div>
                         {selected.is_multi_location ? (
                           <span className="badge badge-blue" style={{ fontSize:10 }}>🏢 Multi-Location{selected.location_name ? ` · ${selected.location_name}` : ''}</span>
                         ) : null}
