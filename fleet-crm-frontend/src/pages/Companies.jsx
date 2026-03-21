@@ -422,7 +422,7 @@ export default function Companies() {
 
         {/* Detail panel */}
         {selected && (
-          <div style={{ flex:1, display:'flex', flexDirection:'column', gap:14 }}>
+          <div style={{ flex:1, display:'flex', flexDirection:'column', gap:14, minWidth:0, overflow:'hidden' }}>
 
             {/* Pipeline status bar */}
             <PipelineBar company={selected} onMove={async (stage, due_date, notes) => {
