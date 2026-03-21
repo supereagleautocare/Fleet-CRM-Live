@@ -180,7 +180,7 @@ export default function CallingQueue() {
                     <th>Type</th>
                     <th>Preferred Contact</th>
                     <th>Due</th>
-                    <th>Last Call</th><th></th></tr></thead>
+                    <th>Last Call</th><th></th>
                   </tr>
                 </thead>
                 <tbody>
