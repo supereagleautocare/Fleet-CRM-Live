@@ -661,7 +661,7 @@ export default function Companies() {
                           <td style={{ color:'var(--gray-400)', fontSize:11 }}>{h.attempt_number}</td>
                           <td style={{ fontSize:12 }}>{h.logged_at?.slice(0,10)}</td>
                           <td style={{ fontSize:11, color:'var(--gray-500)', whiteSpace:'nowrap' }}>{h.logged_by_name||'—'}</td>
-                          <td><span className={`badge ${h.action_type==='Visit'?'badge-gold':'badge-company'}`}>{h.action_type==='Visit'?'📍 Visit':'📞 Call'}</span></td>
+                          <td><span className={`badge ${h.action_type==='Visit'?'badge-gold':h.action_type==='Move'?'badge-gray':'badge-company'}`}>{h.action_type==='Visit'?'📍 Visit':h.action_type==='Move'?'➡️ Move':'📞 Call'}</span></td>
                           <td style={{ fontSize:12, fontWeight:500 }}>{h.contact_type}{h.mail_piece ? ` — ${h.mail_piece}` : ''}</td>
                           <td style={{ fontSize:12 }}>
                             {h.contact_name||'—'}
