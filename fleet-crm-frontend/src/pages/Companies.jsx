@@ -400,7 +400,7 @@ export default function Companies() {
       <div className="page-body" style={{ display:'flex', gap:16, alignItems:'flex-start' }}>
 
         {/* Company list */}
-        <div className="table-card" style={{ flex: selected ? '0 0 380px' : '1' }}>
+        <div className="table-card" style={{ flex: selected ? '0 0 200px' : '1', minWidth:0 }}>
           <div className="table-card-header">
             <span className="table-card-title">All Companies</span>
           </div>
@@ -419,8 +419,6 @@ export default function Companies() {
                         <div style={{ fontWeight:600, fontSize:13 }}>{c.name}</div>
                         <div style={{ fontSize:11, color:'var(--gray-400)', marginTop:2 }}>{fmtPhone(c.main_phone)}</div>
                       </td>
-                      <td>{c.industry?<span className="badge badge-gray">{c.industry}</span>:'—'}</td>
-                      <td>
                         <div className="row-actions">
                           <button className="pill-btn pill-btn-ghost" onClick={e=>{e.stopPropagation();handleAddToQueue(c.id);}}>+ Queue</button>
                         </div>
