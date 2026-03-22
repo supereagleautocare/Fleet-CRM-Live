@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import AddressAutocomplete from '../components/AddressAutocomplete.jsx';
@@ -548,8 +549,10 @@ export default function Companies() {
                         onClick={async () => {
                           setFollowupSaving(true);
                           try {
-                            await api.updateFollowupDate(selected.id, followupEdit);
-                            showToast(`${followupAction} follow-up set for ${followupEdit}`);
+                            await api.updateFollowupDate(selected.id, followupEdit, followupAction);
+                            showToast(`${followupAction} follow-up scheduled for ${followupEdit}`);
+                            await refreshCounts();
+                            await selectCompany({ id: selected.id });
                             load();
                           } catch(e) { showToast(e.message, 'error'); }
                           finally { setFollowupSaving(false); }
@@ -842,4 +845,3 @@ export default function Companies() {
     </>
   );
 }
-
