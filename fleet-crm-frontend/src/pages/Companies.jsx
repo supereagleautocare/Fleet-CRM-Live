@@ -489,11 +489,7 @@ export default function Companies() {
                       )}
                     </div>
                     <div style={{ display:'flex', gap:8 }}>
-                      {selected.in_queue ? (
-                        <span style={{ fontSize:12, color:'#15803d', fontWeight:700, padding:'5px 12px', background:'#dcfce7', borderRadius:8, border:'1px solid #bbf7d0' }}>
-                          ✓ In Queue{selected.follow_up?.due_date ? ` · due ${fmtDate(selected.follow_up.due_date)}` : ''}
-                        </span>
-                      ) : (
+                      {!selected.in_queue && (
                         <button className="btn btn-primary btn-sm" onClick={()=>handleAddToQueue(selected.id)}>+ Add to Queue</button>
                       )}
                       <button className="btn btn-ghost btn-sm" onClick={()=>{ setEditForm({name:selected.name,main_phone:selected.main_phone||'',industry:selected.industry||'',address:selected.address||'',city:selected.city||'',state:selected.state||'',website:selected.website||'',notes:selected.notes||'',is_multi_location:selected.is_multi_location||0,location_group:selected.location_group||'',location_name:selected.location_name||''}); setEditingCompany(true); }}>✏️ Edit</button>
