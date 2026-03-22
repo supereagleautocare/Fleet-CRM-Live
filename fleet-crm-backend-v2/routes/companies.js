@@ -550,22 +550,36 @@ router.get('/:id/followup', (req, res) => {
   res.json(row || null);
 });
 
-// PUT /api/companies/:id/followup-date — manually update next follow-up date
+// PUT /api/companies/:id/followup-date — manually update next follow-up date + move stage
 router.put('/:id/followup-date', (req, res) => {
-  const { due_date } = req.body;
+  const { due_date, action } = req.body;
   if (!due_date) return res.status(400).json({ error: 'due_date is required.' });
-  const existing = db.prepare(
-    "SELECT * FROM follow_ups WHERE entity_id = ? AND source_type = 'company'"
-  ).get(req.params.id);
+  const company = db.prepare('SELECT * FROM companies WHERE id = ?').get(req.params.id);
+  if (!company) return res.status(404).json({ error: 'Company not found.' });
+
+  // Map action to pipeline stage
+  const stageMap = { Call:'call', Visit:'visit', Mail:'mail', Email:'email' };
+  const newStage = stageMap[action] || 'call';
+
+  // Update pipeline stage
+  db.prepare("UPDATE companies SET pipeline_stage = ? WHERE id = ?").run(newStage, company.id);
+
+  // Update or insert follow_up
+  const existing = db.prepare("SELECT * FROM follow_ups WHERE entity_id = ? AND source_type = 'company'").get(req.params.id);
   if (existing) {
-    db.prepare("UPDATE follow_ups SET due_date = ? WHERE id = ?").run(due_date, existing.id);
+    db.prepare("UPDATE follow_ups SET due_date = ?, next_action = ? WHERE id = ?").run(due_date, action||'Call', existing.id);
   } else {
-    const company = db.prepare('SELECT * FROM companies WHERE id = ?').get(req.params.id);
-    if (!company) return res.status(404).json({ error: 'Company not found.' });
-    db.prepare("INSERT INTO follow_ups (source_type, entity_id, company_id_str, entity_name, phone, due_date) VALUES ('company',?,?,?,?,?)")
-      .run(company.id, company.company_id, company.name, company.main_phone, due_date);
+    db.prepare("INSERT INTO follow_ups (source_type, entity_id, company_id_str, entity_name, phone, due_date, next_action) VALUES ('company',?,?,?,?,?,?)")
+      .run(company.id, company.company_id, company.name, company.main_phone, due_date, action||'Call');
   }
-  res.json({ message: 'Follow-up date updated.', due_date });
+
+  // Log to history
+  const today = new Date().toISOString().split('T')[0];
+  db.prepare(`INSERT INTO call_log (log_type, entity_id, company_id_str, action_type, contact_type, notes, next_action, next_action_date, logged_at)
+    VALUES ('company', ?, ?, 'Move', 'Rescheduled', ?, ?, ?, ?)`)
+    .run(company.id, company.company_id, `Rescheduled ${action||'Call'} follow-up to ${due_date}`, action||'Call', due_date, today);
+
+  res.json({ message: 'Follow-up updated.', due_date, stage: newStage });
 });
 
 // PUT /api/companies/:id/geocode — store geocoded coordinates
