@@ -5,6 +5,7 @@ import { api, fmtPhone, fmtDate } from '../api.js';
 import { useApp } from '../App.jsx';
 import ScoreCardModal from '../components/ScoreCardModal.jsx';
 
+
 // ── Note cell for history table ───────────────────────────────────────────────
 function NoteCell({ note }) {
   const [open, setOpen] = React.useState(false);
