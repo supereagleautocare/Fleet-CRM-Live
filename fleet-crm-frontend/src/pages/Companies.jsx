@@ -9,18 +9,23 @@ import ScoreCardModal from '../components/ScoreCardModal.jsx';
 function NoteCell({ note }) {
   const [open, setOpen] = React.useState(false);
   return (
-    <span style={{ position:'relative' }}>
-      <span style={{ color:'var(--gray-500)', fontSize:11 }}>{note.slice(0, 40)}…</span>
-      <button onClick={() => setOpen(p => !p)}
-        style={{ marginLeft:4, fontSize:10, color:'var(--navy-700)', background:'none', border:'none', cursor:'pointer', fontWeight:700, padding:0, textDecoration:'underline' }}>
-        {open ? 'close' : 'view'}
+    <span style={{ position:'relative', display:'inline-block' }}>
+      <span style={{ color:'var(--gray-500)', fontSize:11, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:120, display:'inline-block', verticalAlign:'middle' }}>
+        {note.slice(0, 30)}…
+      </span>
+      <button onClick={e => { e.stopPropagation(); setOpen(p => !p); }}
+        style={{ marginLeft:4, fontSize:10, color:'var(--navy-700)', background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:4, cursor:'pointer', fontWeight:700, padding:'1px 5px', verticalAlign:'middle' }}>
+        {open ? '✕' : 'view'}
       </button>
       {open && (
-        <div style={{ position:'absolute', zIndex:9999, background:'white', border:'1px solid var(--gray-200)', borderRadius:10, padding:'12px 16px', boxShadow:'0 4px 20px rgba(0,0,0,.15)', maxWidth:300, minWidth:200, fontSize:12, color:'var(--gray-700)', lineHeight:1.6, bottom:'100%', left:0, marginBottom:6 }}>
-          <div style={{ fontWeight:700, marginBottom:6, color:'var(--gray-900)', fontSize:11, textTransform:'uppercase', letterSpacing:'.05em' }}>📝 Full Note</div>
-          <div style={{ wordBreak:'break-word' }}>{note}</div>
-          <button onClick={() => setOpen(false)} style={{ marginTop:8, fontSize:11, color:'var(--gray-400)', background:'none', border:'none', cursor:'pointer', padding:0 }}>✕ Close</button>
-        </div>
+        <>
+          <div onClick={() => setOpen(false)} style={{ position:'fixed', inset:0, zIndex:9998 }}/>
+          <div style={{ position:'fixed', zIndex:9999, background:'white', border:'1px solid var(--gray-200)', borderRadius:10, padding:'14px 16px', boxShadow:'0 8px 30px rgba(0,0,0,.15)', width:300, fontSize:12, color:'var(--gray-700)', lineHeight:1.7, top:'50%', left:'50%', transform:'translate(-50%,-50%)' }}>
+            <div style={{ fontWeight:700, marginBottom:8, color:'var(--gray-900)', fontSize:12 }}>📝 Note</div>
+            <div style={{ wordBreak:'break-word', whiteSpace:'pre-wrap' }}>{note}</div>
+            <button onClick={() => setOpen(false)} style={{ marginTop:10, fontSize:11, color:'white', background:'var(--navy-800)', border:'none', borderRadius:5, cursor:'pointer', padding:'4px 12px', fontWeight:600 }}>Close</button>
+          </div>
+        </>
       )}
     </span>
   );
