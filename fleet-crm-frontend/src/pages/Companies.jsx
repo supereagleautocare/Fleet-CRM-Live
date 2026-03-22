@@ -16,10 +16,11 @@ function NoteCell({ note }) {
         {open ? 'close' : 'view'}
       </button>
       {open && (
-        <div style={{ position:'fixed', zIndex:9999, background:'white', border:'1px solid var(--gray-200)', borderRadius:10, padding:'12px 16px', boxShadow:'0 4px 20px rgba(0,0,0,.15)', maxWidth:320, fontSize:12, color:'var(--gray-700)', lineHeight:1.6, transform:'translateX(-50%)', left:'50%', top:'50%', marginTop:-60 }}>
-          <div style={{ fontWeight:700, marginBottom:6, color:'var(--gray-900)' }}>📝 Note</div>
-          <div>{note}</div>
-          <button onClick={() => setOpen(false)} style={{ marginTop:10, fontSize:11, color:'var(--gray-400)', background:'none', border:'none', cursor:'pointer', padding:0 }}>✕ Close</button>
+        {open && (
+        <div style={{ position:'absolute', zIndex:9999, background:'white', border:'1px solid var(--gray-200)', borderRadius:10, padding:'12px 16px', boxShadow:'0 4px 20px rgba(0,0,0,.15)', maxWidth:300, minWidth:200, fontSize:12, color:'var(--gray-700)', lineHeight:1.6, bottom:'100%', left:0, marginBottom:6 }}>
+          <div style={{ fontWeight:700, marginBottom:6, color:'var(--gray-900)', fontSize:11, textTransform:'uppercase', letterSpacing:'.05em' }}>📝 Full Note</div>
+          <div style={{ wordBreak:'break-word' }}>{note}</div>
+          <button onClick={() => setOpen(false)} style={{ marginTop:8, fontSize:11, color:'var(--gray-400)', background:'none', border:'none', cursor:'pointer', padding:0 }}>✕ Close</button>
         </div>
       )}
     </span>
@@ -51,6 +52,7 @@ function PipelineBar({ company, onMove, onStar }) {
 
   return (
     <div style={{ background:'white', border:`2px solid ${stage.bg === '#f8fafc' ? '#e2e8f0' : stage.bg}`, borderRadius:10, padding:'12px 16px' }}>
+      <div style={{ fontSize:10, fontWeight:700, color:'var(--gray-400)', textTransform:'uppercase', letterSpacing:'.06em', marginBottom:8 }}>📊 Pipeline Stage</div>
       <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
         {/* Stage pills */}
         <div style={{ display:'flex', gap:4, flex:1, flexWrap:'wrap' }}>
