@@ -70,15 +70,16 @@ function PipelineBar({ company, onMove, onStar }) {
             </div>
           ))}
         </div>
-        {/* Star + Move */}
-        <div style={{ display:'flex', gap:6, flexShrink:0 }}>
+        {/* Star + Queue status */}
+        <div style={{ display:'flex', gap:6, flexShrink:0, alignItems:'center' }}>
+          {company.in_queue && (
+            <span style={{ fontSize:12, color:'#15803d', fontWeight:700, padding:'5px 12px', background:'#dcfce7', borderRadius:8, border:'1px solid #bbf7d0' }}>
+              ✓ In Queue{company.follow_up?.due_date ? ` · due ${fmtDate(company.follow_up.due_date)}` : ''}
+            </span>
+          )}
           <button onClick={onStar} title={company.is_starred ? 'Remove warm lead star' : 'Star as warm lead'}
             style={{ padding:'5px 12px', borderRadius:8, border:'1px solid #fde68a', background: company.is_starred?'#fef9c3':'white', cursor:'pointer', fontSize:13, fontWeight:700, color:'#92400e' }}>
             {company.is_starred ? '⭐ Starred' : '☆ Star'}
-          </button>
-          <button onClick={()=>setShowMove(!showMove)}
-            style={{ padding:'5px 12px', borderRadius:8, border:'1px solid var(--gray-200)', background:'white', cursor:'pointer', fontSize:13, fontWeight:600, color:'var(--gray-600)' }}>
-            ➡️ Move To
           </button>
         </div>
       </div>
