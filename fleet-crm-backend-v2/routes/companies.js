@@ -573,6 +573,15 @@ router.put('/:id/followup-date', (req, res) => {
       .run(company.id, company.company_id, company.name, company.main_phone, due_date, action||'Call');
   }
 
+  // If scheduling a Visit, insert into visit_queue
+  if (action === 'Visit') {
+    const preferred = db.prepare('SELECT * FROM company_contacts WHERE company_id=? AND is_preferred=1').get(company.company_id);
+    db.prepare(`INSERT INTO visit_queue (company_id, entity_id, entity_name, scheduled_date, address, city, contact_name, direct_line, email)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(company.company_id, company.id, company.name, due_date, company.address||'', company.city||'',
+           preferred?.name||null, preferred?.direct_line||null, preferred?.email||null);
+  }
+
   // Log to history
   const today = new Date().toISOString().split('T')[0];
   db.prepare(`INSERT INTO call_log (log_type, entity_id, company_id_str, entity_name, action_type, contact_type, notes, next_action, next_action_date, logged_at)
