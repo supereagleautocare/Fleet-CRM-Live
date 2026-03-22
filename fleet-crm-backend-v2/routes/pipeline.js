@@ -310,7 +310,7 @@ const company = moveCompany(req.params.id, stage, req.user.id, req.user.name, no
  clearAllCompanyQueues(company.id);
   try {
     if (['call','mail','email','visit'].includes(stage)) {
-const autoDate = due_date || (() => {
+      const autoDate = due_date || (() => {
         try { return calcFollowUpDate('company', stage === 'call' ? 'Call Back' : stage === 'mail' ? 'Mail' : stage === 'email' ? 'Email' : 'Visit'); } catch(_) { return null; }
       })() || new Date(Date.now() + 30*24*60*60*1000).toISOString().split('T')[0];
       db.prepare(`
@@ -318,8 +318,16 @@ const autoDate = due_date || (() => {
         VALUES ('company', ?, ?, ?, ?, ?, ?)
       `).run(company.id, company.name, company.main_phone, company.industry, autoDate,
         stage === 'call' ? 'Call' : stage === 'mail' ? 'Mail' : stage === 'email' ? 'Email' : 'Visit');
+
+      if (stage === 'visit') {
+        const preferred = db.prepare('SELECT * FROM company_contacts WHERE company_id=? AND is_preferred=1').get(company.company_id);
+        db.prepare(`INSERT OR IGNORE INTO visit_queue (company_id, entity_id, entity_name, scheduled_date, address, city, contact_name, direct_line, email)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+          .run(company.company_id, company.id, company.name, autoDate, company.address||'', company.city||'',
+               preferred?.name||null, preferred?.direct_line||null, preferred?.email||null);
+      }
     }
-   } catch(e) {
+  } catch(e) {
     return res.status(500).json({ error: 'Move failed: ' + e.message });
   }
 
