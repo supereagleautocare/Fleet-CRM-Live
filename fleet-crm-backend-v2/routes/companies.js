@@ -575,9 +575,9 @@ router.put('/:id/followup-date', (req, res) => {
 
   // Log to history
   const today = new Date().toISOString().split('T')[0];
-  db.prepare(`INSERT INTO call_log (log_type, entity_id, company_id_str, action_type, contact_type, notes, next_action, next_action_date, logged_at)
-    VALUES ('company', ?, ?, 'Move', 'Rescheduled', ?, ?, ?, ?)`)
-    .run(company.id, company.company_id, `Rescheduled ${action||'Call'} follow-up to ${due_date}`, action||'Call', due_date, today);
+  db.prepare(`INSERT INTO call_log (log_type, entity_id, company_id_str, entity_name, action_type, contact_type, notes, next_action, next_action_date, logged_at)
+    VALUES ('company', ?, ?, ?, 'Move', 'Rescheduled', ?, ?, ?, ?)`)
+    .run(company.id, company.company_id, company.name, `Rescheduled ${action||'Call'} follow-up to ${due_date}`, action||'Call', due_date, today);
 
   res.json({ message: 'Follow-up updated.', due_date, stage: newStage });
 });
