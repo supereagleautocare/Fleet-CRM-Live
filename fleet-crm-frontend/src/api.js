@@ -73,7 +73,7 @@ export const api = {
 
   // ── Company follow-up date ──────────────────────────────────────────
   companyFollowup:    (id)         => req('GET',    `/companies/${id}/followup`),
-  updateFollowupDate: (id, date)   => req('PUT',    `/companies/${id}/followup-date`, { due_date: date }),
+  updateFollowupDate: (id, date, action) => req('PUT', `/companies/${id}/followup-date`, { due_date: date, action }),
   geocodeCompany:     (id, latLng) => req('PUT',    `/companies/${id}/geocode`, latLng),
   pipelineStage:    (stage, opts)  => req('GET',    `/pipeline/stage/${stage}?${new URLSearchParams(opts||{})}`),
   callingQueue:     (opts)         => req('GET',    `/pipeline/calling?${new URLSearchParams(opts||{})}`),
