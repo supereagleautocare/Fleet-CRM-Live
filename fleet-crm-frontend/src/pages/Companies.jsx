@@ -842,3 +842,4 @@ export default function Companies() {
     </>
   );
 }
+
