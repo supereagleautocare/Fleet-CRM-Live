@@ -5,29 +5,26 @@ import { api, fmtPhone, fmtDate } from '../api.js';
 import { useApp } from '../App.jsx';
 import ScoreCardModal from '../components/ScoreCardModal.jsx';
 
-// ── Expandable note cell for history table ────────────────────────────────────
+// ── Note cell for history table ───────────────────────────────────────────────
 function NoteCell({ note }) {
   const [open, setOpen] = React.useState(false);
   return (
-    <span style={{ position:'relative', display:'inline-block' }}>
-      <span style={{ color:'var(--gray-500)', fontSize:11, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:120, display:'inline-block', verticalAlign:'middle' }}>
-        {note.slice(0, 30)}…
-      </span>
-      <button onClick={e => { e.stopPropagation(); setOpen(p => !p); }}
-        style={{ marginLeft:4, fontSize:10, color:'var(--navy-700)', background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:4, cursor:'pointer', fontWeight:700, padding:'1px 5px', verticalAlign:'middle' }}>
-        {open ? '✕' : 'view'}
+    <>
+      <button onClick={e => { e.stopPropagation(); setOpen(true); }}
+        style={{ fontSize:11, color:'var(--navy-700)', background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:5, cursor:'pointer', fontWeight:600, padding:'2px 8px', whiteSpace:'nowrap' }}>
+        📝 view
       </button>
       {open && (
         <>
-          <div onClick={() => setOpen(false)} style={{ position:'fixed', inset:0, zIndex:9998 }}/>
-          <div style={{ position:'fixed', zIndex:9999, background:'white', border:'1px solid var(--gray-200)', borderRadius:10, padding:'14px 16px', boxShadow:'0 8px 30px rgba(0,0,0,.15)', width:300, fontSize:12, color:'var(--gray-700)', lineHeight:1.7, top:'50%', left:'50%', transform:'translate(-50%,-50%)' }}>
-            <div style={{ fontWeight:700, marginBottom:8, color:'var(--gray-900)', fontSize:12 }}>📝 Note</div>
-            <div style={{ wordBreak:'break-word', whiteSpace:'pre-wrap' }}>{note}</div>
-            <button onClick={() => setOpen(false)} style={{ marginTop:10, fontSize:11, color:'white', background:'var(--navy-800)', border:'none', borderRadius:5, cursor:'pointer', padding:'4px 12px', fontWeight:600 }}>Close</button>
+          <div onClick={() => setOpen(false)} style={{ position:'fixed', inset:0, zIndex:9998, background:'rgba(0,0,0,.3)' }}/>
+          <div style={{ position:'fixed', zIndex:9999, background:'white', borderRadius:12, padding:'20px 24px', boxShadow:'0 12px 40px rgba(0,0,0,.2)', width:360, maxWidth:'90vw', top:'50%', left:'50%', transform:'translate(-50%,-50%)' }}>
+            <div style={{ fontWeight:700, marginBottom:12, color:'var(--gray-900)', fontSize:14 }}>📝 Call Note</div>
+            <div style={{ fontSize:13, color:'var(--gray-700)', lineHeight:1.7, wordBreak:'break-word', whiteSpace:'pre-wrap', maxHeight:300, overflowY:'auto' }}>{note}</div>
+            <button onClick={() => setOpen(false)} style={{ marginTop:16, fontSize:12, color:'white', background:'var(--navy-800)', border:'none', borderRadius:6, cursor:'pointer', padding:'6px 16px', fontWeight:600, display:'block' }}>Close</button>
           </div>
         </>
       )}
-    </span>
+    </>
   );
 }
 
@@ -701,10 +698,8 @@ export default function Companies() {
                             {h.role_title && <span style={{ color:'var(--gray-400)', fontSize:10, marginLeft:4 }}>({h.role_title})</span>}
                           </td>
                           <td style={{ fontSize:12 }}>{h.next_action||'—'}{h.next_action_date&&<span style={{color:'var(--gray-400)',fontSize:10,marginLeft:4}}>{fmtDate(h.next_action_date)}</span>}</td>
-                          <td style={{ fontSize:11, color:'var(--gray-500)', maxWidth:180 }}>
-                            {h.notes && h.notes.length > 80
-                              ? <NoteCell note={h.notes} />
-                              : h.notes || '—'}
+                          <td style={{ fontSize:11, color:'var(--gray-500)', whiteSpace:'nowrap' }}>
+                            {h.notes ? <NoteCell note={h.notes} /> : '—'}
                           </td>
                           <td style={{ fontSize:12, whiteSpace:'nowrap' }}>
                             {h.scorecard_id ? (() => {
