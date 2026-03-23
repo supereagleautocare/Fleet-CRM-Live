@@ -75,6 +75,8 @@ function PipelineBar({ company, onMove, onStatusChange }) {
               ✓ In Queue{company.follow_up?.due_date ? ` · due ${fmtDate(company.follow_up.due_date)}` : ''}
             </span>
           )}
+          <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
+            <div style={{ fontSize:9, fontWeight:700, color:'var(--gray-400)', textTransform:'uppercase', letterSpacing:'.06em' }}>Status</div>
           <select
             value={company.company_status || 'prospect'}
             onChange={e => onStatusChange(e.target.value)}
@@ -564,7 +566,8 @@ export default function Companies() {
                       ['🏭 Industry',   selected.industry||'—'],
                       ['📍 Address',    selected.address?`${selected.address}${selected.city?', '+selected.city:''}` : '—'],
                       ['🌐 Website',    selected.website||'—'],
-                      ['📊 Total Calls',selected.stats?.total_calls||0],
+                      ['📊 Total Calls', selected.stats?.total_calls||0],
+                      ['🤝 Total Contacts', selected.stats?.total_contacts||0],
                       ['📅 Last Contact',fmtDate(selected.stats?.last_contacted)],
                     ].map(([label,val]) => (
                       <div key={label} className="info-row">
