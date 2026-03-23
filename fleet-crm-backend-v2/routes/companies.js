@@ -115,7 +115,8 @@ router.get('/:id', (req, res) => {
   const stats = db.prepare(`
     SELECT COUNT(*) as total_calls,
            MAX(logged_at) as last_contacted,
-           MIN(logged_at) as first_contacted
+           MIN(logged_at) as first_contacted,
+           SUM(CASE WHEN action_type != 'Move' THEN 1 ELSE 0 END) as total_contacts
     FROM call_log
     WHERE entity_id = ? AND log_type = 'company'
   `).get(req.params.id);
