@@ -262,7 +262,8 @@ router.get('/mail', (req, res) => {
       cc.role_title as preferred_role,
       fu.due_date,
       cl.contact_type as last_contact_type,
-      cl.logged_at    as last_contacted
+      cl.logged_at    as last_contacted,
+      (SELECT COUNT(*) FROM call_log WHERE entity_id = c.id AND log_type='company' AND action_type != 'Move') as call_count
     FROM companies c
     LEFT JOIN company_contacts cc ON cc.company_id = c.company_id AND cc.is_preferred = 1
     LEFT JOIN follow_ups fu ON fu.entity_id = c.id AND fu.source_type = 'company' AND fu.is_locked = 0
@@ -279,13 +280,14 @@ router.get('/mail', (req, res) => {
 // ── Email queue ───────────────────────────────────────────────────────────────
 router.get('/email', (req, res) => {
   const rows = db.prepare(`
-    SELECT c.*,
+   SELECT c.*,
       cc.name as preferred_contact_name,
       cc.role_title as preferred_role,
       cc.email as preferred_email,
       fu.due_date,
       cl.contact_type as last_contact_type,
-      cl.logged_at    as last_contacted
+      cl.logged_at    as last_contacted,
+      (SELECT COUNT(*) FROM call_log WHERE entity_id = c.id AND log_type='company' AND action_type != 'Move') as call_count
     FROM companies c
     LEFT JOIN company_contacts cc ON cc.company_id = c.company_id AND cc.is_preferred = 1
     LEFT JOIN follow_ups fu ON fu.entity_id = c.id AND fu.source_type = 'company' AND fu.is_locked = 0
@@ -294,7 +296,7 @@ router.get('/email', (req, res) => {
       WHERE log_type='company' AND id IN (SELECT MAX(id) FROM call_log WHERE log_type='company' GROUP BY entity_id)
     ) cl ON cl.entity_id = c.id
     WHERE c.status = 'active' AND c.pipeline_stage = 'email'
-    ORDER BY c.is_starred DESC, fu.due_date ASC, c.name ASC
+    ORDER BY fu.due_date ASC, c.name ASC
   `).all();
   res.json(rows);
 });
