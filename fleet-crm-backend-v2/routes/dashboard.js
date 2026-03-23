@@ -90,41 +90,46 @@ router.get('/', (req, res) => {
   `).all(thirtyDaysAgo);
 
   // ── Totals ────────────────────────────────────────────────────────────────
-  const totals = db.prepare(`
-    SELECT
-      (SELECT COUNT(*) FROM companies WHERE status = 'active') as total_companies,
-      (SELECT COUNT(*) FROM call_log WHERE log_type = 'company')  as total_company_calls,
-      (SELECT COUNT(*) FROM call_log WHERE action_type = 'Visit') as total_visits
-  `).get();
+ const totals = db.prepare(`
+  SELECT
+    (SELECT COUNT(*) FROM companies WHERE status = 'active') as total_companies,
+    (SELECT COUNT(*) FROM call_log WHERE log_type = 'company')  as total_company_calls,
+    (SELECT COUNT(*) FROM call_log WHERE action_type = 'Visit') as total_visits
+`).get();
 
-  res.json({
-    follow_ups: followupCounts,
-    visits:     visitCounts,
-    queues:     queueCounts,
-    activity: {
-      calls_today:          callsToday,
-      calls_this_week:      callsThisWeek,
-      calls_this_month:     callsThisMonth,
-      contacts_today:       contactsToday,
-      contacts_this_week:   contactsThisWeek,
-      contacts_this_month:  contactsThisMonth,
-    },
-    const contactsToday = db.prepare(
-    "SELECT COUNT(*) as cnt FROM call_log WHERE date(logged_at) = date('now') AND action_type != 'Move'"
-  ).get().cnt;
+// ✅ MOVE THEM HERE
+const contactsToday = db.prepare(
+  "SELECT COUNT(*) as cnt FROM call_log WHERE date(logged_at) = date('now') AND action_type != 'Move'"
+).get().cnt;
 
-  const contactsThisWeek = db.prepare(
-    "SELECT COUNT(*) as cnt FROM call_log WHERE date(logged_at) >= ? AND action_type != 'Move'"
-  ).get(sevenDaysAgo).cnt;
-  
-    breakdowns: {
-      by_type:    callsByType,
-      by_outcome: callsByOutcome,
-      by_rep:     callsByRep,
-    },
-    totals,
-    generated_at: new Date().toISOString(),
-  });
+const contactsThisWeek = db.prepare(
+  "SELECT COUNT(*) as cnt FROM call_log WHERE date(logged_at) >= ? AND action_type != 'Move'"
+).get(sevenDaysAgo).cnt;
+
+// (Only if you use it below)
+const contactsThisMonth = db.prepare(
+  "SELECT COUNT(*) as cnt FROM call_log WHERE date(logged_at) >= ? AND action_type != 'Move'"
+).get(thirtyDaysAgo).cnt;
+
+res.json({
+  follow_ups: followupCounts,
+  visits: visitCounts,
+  queues: queueCounts,
+  activity: {
+    calls_today: callsToday,
+    calls_this_week: callsThisWeek,
+    calls_this_month: callsThisMonth,
+    contacts_today: contactsToday,
+    contacts_this_week: contactsThisWeek,
+    contacts_this_month: contactsThisMonth,
+  },
+  breakdowns: {
+    by_type: callsByType,
+    by_outcome: callsByOutcome,
+    by_rep: callsByRep,
+  },
+  totals,
+  generated_at: new Date().toISOString(),
 });
 
 module.exports = router;
