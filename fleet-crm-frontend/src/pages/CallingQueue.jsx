@@ -193,6 +193,14 @@ export default function CallingQueue() {
                         style={{ cursor:'pointer', background: isSel?'#fef9ec':undefined, borderLeft: isSel?'3px solid var(--gold-500)':'3px solid transparent' }}>
                         <td style={{ color:'var(--gray-400)', fontSize:12 }}>{i+1}</td>
                         <td>
+                          {row.company_status && row.company_status !== 'prospect' && (
+                            <div style={{ fontSize:10, fontWeight:700, marginBottom:3,
+                              color:row.company_status==='interested'?'#92400e':row.company_status==='customer'?'#166534':'#dc2626',
+                              background:row.company_status==='interested'?'#fef9c3':row.company_status==='customer'?'#f0fdf4':'#fef2f2',
+                              display:'inline-block', padding:'1px 7px', borderRadius:8 }}>
+                              {row.company_status==='interested'?'⭐ Interested':row.company_status==='customer'?'✅ Customer':'💀 Dead'}
+                            </div>
+                          )}
                           <div
                             style={{ fontWeight:700, fontSize:13, color:'var(--navy-700)', cursor:'pointer', textDecoration:'underline', textDecorationStyle:'dotted', textUnderlineOffset:3, display:'inline' }}
                             onClick={e=>{ e.stopPropagation(); navigate('/companies?company='+row.id); }}
