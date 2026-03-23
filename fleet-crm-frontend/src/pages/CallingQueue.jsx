@@ -211,7 +211,9 @@ export default function CallingQueue() {
                         <td><span className="phone-num">{fmtPhone(row.main_phone)}</span></td>
                         <td>{row.industry?<span className="badge badge-gray">{row.industry}</span>:'—'}</td>
                         <td>
-                          <div style={{ fontSize:12, color:'var(--gray-700)' }}>{row.call_count || 0}</div>
+                          {(!row.call_count || row.call_count === 0)
+                            ? <div style={{ fontSize:11, color:'var(--navy-600)', fontWeight:600 }}>First Time</div>
+                            : <div style={{ fontSize:12, color:'var(--gray-700)' }}>{row.call_count}</div>}
                         </td>
                         <td style={{ fontSize:12 }}>
                           {row.preferred_contact_name
