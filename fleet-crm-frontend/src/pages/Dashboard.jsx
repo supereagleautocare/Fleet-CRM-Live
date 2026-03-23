@@ -80,9 +80,9 @@ export default function Dashboard() {
         {/* ── Activity stats strip ─────────────────────────────── */}
         <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12, marginBottom:20 }}>
           {[
-            ['📞 Calls Today',      callsToday,  '#1e40af'],
-            ['📞 Calls This Week',  callsWeek,   '#1e40af'],
-            ['📞 Calls This Month', callsMonth,  '#1d4ed8'],
+            ['📞 Calls Today',         callsToday,                        '#1e40af'],
+            ['📞 Calls This Week',     callsWeek,                         '#1e40af'],
+            ['🤝 Contacts This Month', stats?.activity?.contacts_this_month ?? 0, '#065f46'],
           ].map(([label, value, color]) => (
             <div key={label} className="table-card" style={{ padding:'16px 20px', display:'flex', alignItems:'center', gap:14 }}>
               <div style={{ fontSize:28, fontWeight:900, color, lineHeight:1 }}>{value}</div>
@@ -219,22 +219,30 @@ export default function Dashboard() {
             : (
               <div className="table-wrapper">
                 <table>
-                  <thead><tr><th></th><th>Company</th><th>Phone</th><th>Industry</th><th>Last Contact</th><th>Stage Since</th><th></th></tr></thead>
+                  <thead><tr><th>Company</th><th>Phone</th><th>Industry</th><th>Status</th><th>Contacts</th><th>Last Contact</th><th>Stage Since</th><th></th></tr></thead>
                   <tbody>
                     {drillRows.map(row => (
-                      <tr key={row.id}>
-                        <td style={{ width:32 }}>
-                          <button onClick={()=>handleStar(row.id)} style={{ border:'none', background:'none', cursor:'pointer', fontSize:16, opacity:row.is_starred?1:.25 }}>⭐</button>
-                        </td>
+                      <tr key={row.id} style={{ cursor:'pointer' }} onClick={()=>navigate('/companies?company='+row.id)}>
                         <td>
-                          <div style={{ fontWeight:700, fontSize:13 }}>{row.name}</div>
+                          <div style={{ fontWeight:700, fontSize:13, color:'var(--navy-700)' }}>{row.name}</div>
                           <div className="company-id">{row.company_id}</div>
                         </td>
                         <td><span className="phone-num">{fmtPhone(row.main_phone)}</span></td>
                         <td>{row.industry?<span className="badge badge-gray">{row.industry}</span>:'—'}</td>
+                        <td>
+                          {row.company_status && row.company_status !== 'prospect' ? (
+                            <span style={{ fontSize:10, fontWeight:700,
+                              color:row.company_status==='interested'?'#92400e':row.company_status==='customer'?'#166534':'#dc2626',
+                              background:row.company_status==='interested'?'#fef9c3':row.company_status==='customer'?'#f0fdf4':'#fef2f2',
+                              padding:'1px 7px', borderRadius:8 }}>
+                              {row.company_status==='interested'?'⭐ Interested':row.company_status==='customer'?'✅ Customer':'💀 Dead'}
+                            </span>
+                          ) : <span style={{ fontSize:11, color:'var(--gray-400)' }}>Prospect</span>}
+                        </td>
+                        <td style={{ fontSize:12, color:'var(--gray-700)' }}>{row.total_contacts || 0}</td>
                         <td style={{ fontSize:12, color:'var(--gray-600)' }}>{row.last_contact_type?`${row.last_contact_type} · ${fmtDate(row.last_contacted)}`:'—'}</td>
                         <td style={{ fontSize:12, color:'var(--gray-400)' }}>{fmtDate(row.stage_updated_at)}</td>
-                        <td>
+                        <td onClick={e=>e.stopPropagation()}>
                           <button className="pill-btn pill-btn-primary" onClick={() => setMovingId(row.id)}>Move To</button>
                         </td>
                       </tr>
