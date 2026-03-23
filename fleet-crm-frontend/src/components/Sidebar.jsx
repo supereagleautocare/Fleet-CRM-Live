@@ -50,9 +50,6 @@ export default function Sidebar() {
 
       <div className="sidebar-section-label">Database</div>
       <nav className="sidebar-nav">
-        <NavLink to="/starred" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
-          <span className="icon">⭐</span> Starred
-        </NavLink>
         <NavLink to="/companies" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
           <span className="icon">🏢</span> Companies
         </NavLink>
