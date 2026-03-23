@@ -430,6 +430,29 @@ export default function Companies() {
             <span style={{ color:'var(--gray-400)' }}>🔍</span>
             <input placeholder="Search name, industry…" value={search} onChange={e=>setSearch(e.target.value)}/>
           </div>
+          <button className="btn btn-ghost" onClick={()=>{
+            const headers = ['Name','Preferred Contact','Role','Phone','Address','City','Industry','Pipeline Stage','Status','Last Contact Type','Last Contacted','Total Contacts'];
+            const rows = companies.map(c => [
+              c.name||'',
+              c.preferred_contact_name||'',
+              c.preferred_contact_role||'',
+              c.main_phone||'',
+              c.address||'',
+              c.city||'',
+              c.industry||'',
+              c.pipeline_stage||'',
+              c.company_status||'prospect',
+              c.last_contact_type||'',
+              c.last_contacted ? c.last_contacted.slice(0,10) : '',
+              '',
+            ]);
+            const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+            const blob = new Blob([csv], {type:'text/csv'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = `companies-${new Date().toISOString().slice(0,10)}.csv`;
+            a.click(); URL.revokeObjectURL(url);
+          }}>⬇️ Export CSV</button>
           <button className="btn btn-primary" onClick={()=>setShowAddForm(true)}>+ Add Company</button>
         </div>
       </div>
