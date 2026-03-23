@@ -792,8 +792,18 @@ export default function RoutePlanner({ embedded = false }) {
                           <div style={{fontSize:11,color:v.address?'var(--gray-400)':'#dc2626',marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
                             {v.address?`${v.address}${v.city?', '+v.city:''}`:' ⚠️ No address'}
                           </div>
-                          <div style={{fontSize:11,color:'var(--gray-500)',marginTop:2}}>
-                            {v.call_count||0} contacts{(!v.call_count||v.call_count===0)&&<span style={{color:'var(--navy-600)',fontWeight:600}}> · First Time</span>}
+                          <div style={{display:'flex',alignItems:'center',gap:6,marginTop:2}}>
+                            <span style={{fontSize:11,color:'var(--gray-500)'}}>
+                              {v.call_count||0} contacts{(!v.call_count||v.call_count===0)&&<span style={{color:'var(--navy-600)',fontWeight:600}}> · First Time</span>}
+                            </span>
+                            {v.company_status && v.company_status !== 'prospect' && (
+                              <span style={{ fontSize:10, fontWeight:700,
+                                color:v.company_status==='interested'?'#92400e':v.company_status==='customer'?'#166534':'#dc2626',
+                                background:v.company_status==='interested'?'#fef9c3':v.company_status==='customer'?'#f0fdf4':'#fef2f2',
+                                padding:'1px 7px', borderRadius:8 }}>
+                                {v.company_status==='interested'?'⭐ Interested':v.company_status==='customer'?'✅ Customer':'💀 Dead'}
+                              </span>
+                            )}
                           </div>
                           <div style={{display:'flex',alignItems:'center',gap:6,marginTop:5}} onClick={e=>e.stopPropagation()}>
                             {isOver&&<span className="badge badge-overdue">Overdue</span>}
