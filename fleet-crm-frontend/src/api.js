@@ -81,6 +81,7 @@ export const api = {
   emailQueue:       ()             => req('GET',    '/pipeline/email'),
   pipelineMove:     (id, data)     => req('POST',   `/pipeline/move/${id}`, data),
   pipelineStar:     (id)           => req('POST',   `/pipeline/star/${id}`),
+  updateCompanyStatus: (id, status) => req('PUT', `/pipeline/status/${id}`, { status }),
   logMail:          (id, data)     => req('POST',   `/pipeline/log-mail/${id}`, data),
   logEmail:         (id, data)     => req('POST',   `/pipeline/log-email/${id}`, data),
   mailPieces:       ()             => req('GET',    '/pipeline/mail-pieces'),
