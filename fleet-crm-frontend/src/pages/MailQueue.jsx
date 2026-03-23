@@ -97,7 +97,7 @@ export default function MailQueue() {
           ) : (
             <div className="table-wrapper">
               <table>
-                <thead><tr><th>Company</th><th>Phone</th><th>Industry</th><th>Preferred Contact</th><th>Due</th><th></th></tr></thead>
+                <thead><tr><th>Company</th><th>Phone</th><th>Industry</th><th>Contacts</th><th>Preferred Contact</th><th>Due</th><th></th></tr></thead>
                 <tbody>
                   {rows.map(row => {
                     const isSel = selected?.id === row.id;
@@ -111,6 +111,10 @@ export default function MailQueue() {
   >{row.name}</div><div className="company-id">{row.company_id}</div></td>
                         <td><span className="phone-num">{fmtPhone(row.main_phone)}</span></td>
                         <td>{row.industry?<span className="badge badge-gray">{row.industry}</span>:'—'}</td>
+                        <td>
+                          <div style={{ fontSize:12, color:'var(--gray-700)' }}>{row.call_count || 0}</div>
+                          {(!row.call_count || row.call_count === 0) && <div style={{ fontSize:10, color:'var(--gray-400)' }}>First Time</div>}
+                        </td>
                         <td style={{ fontSize:12 }}>{row.preferred_contact_name||'—'}</td>
                         <td style={{ fontSize:12 }}>{row.due_date?fmtDate(row.due_date):'—'}</td>
                         <td onClick={e=>e.stopPropagation()} style={{textAlign:'right'}}>
