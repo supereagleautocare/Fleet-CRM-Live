@@ -283,6 +283,7 @@ const migrations = [
   // Pipeline stage + warm lead star
   "ALTER TABLE companies ADD COLUMN pipeline_stage TEXT NOT NULL DEFAULT 'new'",
   "ALTER TABLE companies ADD COLUMN is_starred INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE companies ADD COLUMN company_status TEXT NOT NULL DEFAULT 'prospect'",
   "ALTER TABLE companies ADD COLUMN stage_updated_at TEXT",
   // Log category (call / mail / email / move)
   "ALTER TABLE call_log ADD COLUMN log_category TEXT NOT NULL DEFAULT 'call'",
