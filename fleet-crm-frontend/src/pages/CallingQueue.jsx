@@ -212,7 +212,6 @@ export default function CallingQueue() {
                         <td>{row.industry?<span className="badge badge-gray">{row.industry}</span>:'—'}</td>
                         <td>
                           <div style={{ fontSize:12, color:'var(--gray-700)' }}>{row.call_count || 0}</div>
-                          {isFirst && <div style={{ fontSize:10, color:'var(--gray-400)' }}>First Time</div>}
                         </td>
                         <td style={{ fontSize:12 }}>
                           {row.preferred_contact_name
