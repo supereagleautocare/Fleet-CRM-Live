@@ -281,7 +281,10 @@ export default function Companies() {
   const [companies, setCompanies]   = useState([]);
   const [loading, setLoading]       = useState(true);
   const [search, setSearch]         = useState('');
-  const [selected, setSelected]       = useState(null);
+  const [filterStatus, setFilterStatus] = useState('');
+  const [filterStage, setFilterStage]   = useState('');
+  const [filterContacted, setFilterContacted] = useState('');
+  const [selected, setSelected]     = useState(null);
   const [followupEdit, setFollowupEdit] = useState(null);
   const [followupAction, setFollowupAction] = useState('Call');
   const [followupSaving, setFollowupSaving] = useState(false);
@@ -313,11 +316,17 @@ export default function Companies() {
 
   async function load() {
     setLoading(true);
-    try { setCompanies(await api.companies({ search })); }
+    try {
+      const params = { search };
+      if (filterStatus) params.company_status = filterStatus;
+      if (filterStage) params.pipeline_stage = filterStage;
+      if (filterContacted) params.last_contacted = filterContacted;
+      setCompanies(await api.companies(params));
+    }
     finally { setLoading(false); }
   }
 
-  useEffect(() => { load(); }, [search]);
+  useEffect(() => { load(); }, [search, filterStatus, filterStage, filterContacted]);
 
   async function selectCompany(c) {
     setSelected(c);
@@ -424,6 +433,41 @@ export default function Companies() {
           </div>
           <button className="btn btn-primary" onClick={()=>setShowAddForm(true)}>+ Add Company</button>
         </div>
+      </div>
+
+      {/* Filter bar */}
+      <div style={{ padding:'0 0 12px 0', display:'flex', gap:8, flexWrap:'wrap', alignItems:'center' }}>
+        <select className="form-input" style={{ width:'auto', fontSize:12, padding:'5px 10px' }}
+          value={filterStatus} onChange={e=>{ setFilterStatus(e.target.value); setSelected(null); }}>
+          <option value="">All Statuses</option>
+          <option value="prospect">Prospect</option>
+          <option value="interested">⭐ Interested</option>
+          <option value="customer">✅ Customer</option>
+          <option value="dead">💀 Dead</option>
+        </select>
+        <select className="form-input" style={{ width:'auto', fontSize:12, padding:'5px 10px' }}
+          value={filterStage} onChange={e=>{ setFilterStage(e.target.value); setSelected(null); }}>
+          <option value="">All Queues</option>
+          <option value="new">🆕 New</option>
+          <option value="call">📞 Call</option>
+          <option value="mail">✉️ Mail</option>
+          <option value="email">📧 Email</option>
+          <option value="visit">📍 Visit</option>
+        </select>
+        <select className="form-input" style={{ width:'auto', fontSize:12, padding:'5px 10px' }}
+          value={filterContacted} onChange={e=>{ setFilterContacted(e.target.value); setSelected(null); }}>
+          <option value="">Any Last Contact</option>
+          <option value="never">Never Contacted</option>
+          <option value="this_week">Contacted This Week</option>
+          <option value="this_month">Contacted This Month</option>
+          <option value="stale">Stale (30+ days)</option>
+        </select>
+        {(filterStatus || filterStage || filterContacted) && (
+          <button className="btn btn-ghost btn-sm" onClick={()=>{ setFilterStatus(''); setFilterStage(''); setFilterContacted(''); }}>
+            ✕ Clear filters
+          </button>
+        )}
+        <span style={{ fontSize:12, color:'var(--gray-400)', marginLeft:'auto' }}>{companies.length} companies</span>
       </div>
 
       <div className="page-body" style={{ display:'flex', gap:16, alignItems:'flex-start' }}>
