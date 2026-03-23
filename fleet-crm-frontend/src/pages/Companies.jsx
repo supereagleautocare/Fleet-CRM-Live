@@ -36,11 +36,9 @@ const STAGES = [
   { key:'mail',     label:'Mail',     icon:'✉️',  color:'#065f46', bg:'#ecfdf5' },
   { key:'email',    label:'Email',    icon:'📧', color:'#6b21a8', bg:'#faf5ff' },
   { key:'visit',    label:'Visit',    icon:'📍', color:'#92400e', bg:'#fffbeb' },
-  { key:'customer', label:'Customer', icon:'✅', color:'#166534', bg:'#f0fdf4' },
-  { key:'dead',     label:'Dead',     icon:'💀', color:'#6b7280', bg:'#f9fafb' },
 ];
 
-function PipelineBar({ company, onMove, onStar }) {
+function PipelineBar({ company, onMove, onStatusChange }) {
   const [showMove, setShowMove] = useState(false);
   const [moveForm, setMoveForm] = useState({ stage:'', due_date:'', notes:'' });
   const stage = STAGES.find(s => s.key === (company.pipeline_stage || 'new')) || STAGES[0];
@@ -70,17 +68,36 @@ function PipelineBar({ company, onMove, onStar }) {
             </div>
           ))}
         </div>
-        {/* Star + Queue status */}
+        {/* Queue status + Company status */}
         <div style={{ display:'flex', gap:6, flexShrink:0, alignItems:'center' }}>
           {company.in_queue && (
             <span style={{ fontSize:12, color:'#15803d', fontWeight:700, padding:'5px 12px', background:'#dcfce7', borderRadius:8, border:'1px solid #bbf7d0' }}>
               ✓ In Queue{company.follow_up?.due_date ? ` · due ${fmtDate(company.follow_up.due_date)}` : ''}
             </span>
           )}
-          <button onClick={onStar} title={company.is_starred ? 'Remove warm lead star' : 'Star as warm lead'}
-            style={{ padding:'5px 12px', borderRadius:8, border:'1px solid #fde68a', background: company.is_starred?'#fef9c3':'white', cursor:'pointer', fontSize:13, fontWeight:700, color:'#92400e' }}>
-            {company.is_starred ? '⭐ Starred' : '☆ Star'}
-          </button>
+          <select
+            value={company.company_status || 'prospect'}
+            onChange={e => onStatusChange(e.target.value)}
+            style={{
+              padding:'5px 10px', borderRadius:8, fontSize:12, fontWeight:700, cursor:'pointer',
+              border:`1.5px solid ${
+                company.company_status==='interested'?'#fde68a':
+                company.company_status==='customer'?'#bbf7d0':
+                company.company_status==='dead'?'#fca5a5':'#e2e8f0'}`,
+              background:
+                company.company_status==='interested'?'#fef9c3':
+                company.company_status==='customer'?'#f0fdf4':
+                company.company_status==='dead'?'#fef2f2':'#f8fafc',
+              color:
+                company.company_status==='interested'?'#92400e':
+                company.company_status==='customer'?'#166534':
+                company.company_status==='dead'?'#dc2626':'#64748b',
+            }}>
+            <option value="prospect">Prospect</option>
+            <option value="interested">⭐ Interested</option>
+            <option value="customer">✅ Customer</option>
+            <option value="dead">💀 Dead</option>
+          </select>
         </div>
       </div>
 
@@ -463,10 +480,11 @@ export default function Companies() {
               await api.pipelineMove(selected.id, { stage, due_date, notes });
               const updated = await api.company(selected.id);
               setSelected(updated);
-            }} onStar={async () => {
-              await api.pipelineStar(selected.id);
+            }} onStatusChange={async (status) => {
+              await api.updateCompanyStatus(selected.id, status);
               const updated = await api.company(selected.id);
               setSelected(updated);
+              load();
             }} />
 
             {/* Header card */}
