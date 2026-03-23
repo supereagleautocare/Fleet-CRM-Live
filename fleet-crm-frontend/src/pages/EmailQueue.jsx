@@ -114,7 +114,6 @@ export default function EmailQueue() {
                       <tr key={row.id} onClick={() => setSelected(p => p?.id===row.id ? null : row)}
                         style={{ cursor:'pointer', background:isSel?'#faf5ff':undefined, borderLeft:isSel?'3px solid #a855f7':'3px solid transparent' }}>
                         <td><div
-    <td>
                           {row.company_status && row.company_status !== 'prospect' && (
                             <div style={{ fontSize:10, fontWeight:700, marginBottom:3,
                               color:row.company_status==='interested'?'#92400e':row.company_status==='customer'?'#166534':'#dc2626',
