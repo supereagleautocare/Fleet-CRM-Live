@@ -9,7 +9,6 @@ import MailQueue from './pages/MailQueue.jsx';
 import EmailQueue from './pages/EmailQueue.jsx';
 import VisitQueue from './pages/VisitQueue.jsx';
 import Companies from './pages/Companies.jsx';
-import Starred from './pages/Starred.jsx';
 import Settings from './pages/Settings.jsx';
 import QuickLog from './pages/QuickLog.jsx';
 import ScriptPopup from './pages/ScriptPopup.jsx';
@@ -111,7 +110,6 @@ export default function App() {
                 <Route path="/email-queue"  element={<EmailQueue />} />
                 <Route path="/visit-queue"  element={<VisitQueue />} />
                 <Route path="/companies"    element={<Companies />} />
-                <Route path="/starred"      element={<Starred />} />
                 <Route path="/quicklog"     element={<QuickLog />} />
                 <Route path="/settings"     element={<Settings />} />
                 <Route path="/script-popup" element={<ScriptPopup />} />
