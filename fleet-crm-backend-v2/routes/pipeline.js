@@ -334,6 +334,15 @@ const company = moveCompany(req.params.id, stage, req.user.id, req.user.name, no
   res.json(company);
 });
 
+// ── Update company status ─────────────────────────────────────────────────────
+router.put('/status/:id', (req, res) => {
+  const { status } = req.body;
+  const valid = ['prospect','interested','customer','dead'];
+  if (!valid.includes(status)) return res.status(400).json({ error: 'Invalid status.' });
+  db.prepare("UPDATE companies SET company_status = ?, updated_at = datetime('now') WHERE id = ?").run(status, req.params.id);
+  res.json({ company_status: status });
+});
+
 // ── Toggle star ───────────────────────────────────────────────────────────────
 router.post('/star/:id', (req, res) => {
   const company = db.prepare('SELECT * FROM companies WHERE id = ?').get(req.params.id);
