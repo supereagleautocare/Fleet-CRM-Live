@@ -47,15 +47,19 @@ router.get('/', (req, res) => {
 
   // ── Call activity ─────────────────────────────────────────────────────────
   const callsToday = db.prepare(
-    "SELECT COUNT(*) as cnt FROM call_log WHERE date(logged_at) = date('now')"
+    "SELECT COUNT(*) as cnt FROM call_log WHERE date(logged_at) = date('now') AND action_type = 'Call'"
   ).get().cnt;
 
   const callsThisWeek = db.prepare(
-    "SELECT COUNT(*) as cnt FROM call_log WHERE date(logged_at) >= ?"
+    "SELECT COUNT(*) as cnt FROM call_log WHERE date(logged_at) >= ? AND action_type = 'Call'"
   ).get(sevenDaysAgo).cnt;
 
   const callsThisMonth = db.prepare(
-    "SELECT COUNT(*) as cnt FROM call_log WHERE date(logged_at) >= ?"
+    "SELECT COUNT(*) as cnt FROM call_log WHERE date(logged_at) >= ? AND action_type = 'Call'"
+  ).get(thirtyDaysAgo).cnt;
+
+  const contactsThisMonth = db.prepare(
+    "SELECT COUNT(*) as cnt FROM call_log WHERE date(logged_at) >= ? AND action_type != 'Move'"
   ).get(thirtyDaysAgo).cnt;
 
   // ── Calls by type this month ──────────────────────────────────────────────
@@ -98,9 +102,10 @@ router.get('/', (req, res) => {
     visits:     visitCounts,
     queues:     queueCounts,
     activity: {
-      calls_today:      callsToday,
-      calls_this_week:  callsThisWeek,
-      calls_this_month: callsThisMonth,
+      calls_today:          callsToday,
+      calls_this_week:      callsThisWeek,
+      calls_this_month:     callsThisMonth,
+      contacts_this_month:  contactsThisMonth,
     },
     breakdowns: {
       by_type:    callsByType,
