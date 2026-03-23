@@ -73,16 +73,20 @@ router.get('/board', (req, res) => {
 
   const recentCalls = db.prepare(`
     SELECT COUNT(*) as cnt FROM call_log
-    WHERE log_type = 'company' AND log_category = 'call' AND counts_as_attempt = 1
+    WHERE log_type = 'company' AND action_type = 'Call'
     AND logged_at >= datetime('now', '-7 days')
   `).get();
-  const recentMails = db.prepare(`
+  const recentContacts = db.prepare(`
     SELECT COUNT(*) as cnt FROM call_log
-    WHERE log_type = 'company' AND log_category IN ('mail','email')
+    WHERE log_type = 'company' AND action_type != 'Move'
     AND logged_at >= datetime('now', '-7 days')
+  `).get();
+  const totalContacts = db.prepare(`
+    SELECT COUNT(*) as cnt FROM call_log
+    WHERE log_type = 'company' AND action_type != 'Move'
   `).get();
 
-  res.json({ counts, recentCalls: recentCalls.cnt, recentMails: recentMails.cnt });
+  res.json({ counts, recentCalls: recentCalls.cnt, recentContacts: recentContacts.cnt, totalContacts: totalContacts.cnt });
 });
 
 // ── Sidebar badge counts (single cheap query) ─────────────────────────────────
@@ -162,7 +166,8 @@ router.get('/stage/:stage', (req, res) => {
       cc.email as preferred_email,
       cl.contact_type as last_contact_type,
       cl.logged_at    as last_contacted,
-      cl.next_action  as last_next_action
+      cl.next_action  as last_next_action,
+      (SELECT COUNT(*) FROM call_log WHERE entity_id = c.id AND log_type='company' AND action_type != 'Move') as total_contacts
     FROM companies c
     LEFT JOIN company_contacts cc ON cc.company_id = c.company_id AND cc.is_preferred = 1
     LEFT JOIN (
