@@ -36,6 +36,7 @@ const STAGES = [
   { key:'mail',     label:'Mail',     icon:'✉️',  color:'#065f46', bg:'#ecfdf5' },
   { key:'email',    label:'Email',    icon:'📧', color:'#6b21a8', bg:'#faf5ff' },
   { key:'visit',    label:'Visit',    icon:'📍', color:'#92400e', bg:'#fffbeb' },
+  { key:'dead',     label:'Dead',     icon:'💀', color:'#6b7280', bg:'#f9fafb' },
 ];
 
 function PipelineBar({ company, onMove, onStatusChange }) {
@@ -70,11 +71,6 @@ function PipelineBar({ company, onMove, onStatusChange }) {
         </div>
         {/* Queue status + Company status */}
         <div style={{ display:'flex', gap:6, flexShrink:0, alignItems:'center' }}>
-          {company.in_queue && (
-            <span style={{ fontSize:12, color:'#15803d', fontWeight:700, padding:'5px 12px', background:'#dcfce7', borderRadius:8, border:'1px solid #bbf7d0' }}>
-              ✓ In Queue{company.follow_up?.due_date ? ` · due ${fmtDate(company.follow_up.due_date)}` : ''}
-            </span>
-          )}
           <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
             <div style={{ fontSize:9, fontWeight:700, color:'var(--gray-400)', textTransform:'uppercase', letterSpacing:'.06em' }}>Status</div>
           <select
