@@ -23,7 +23,7 @@ router.use(requireAuth);
 
 // GET /api/companies — list all companies
 router.get('/', (req, res) => {
-  const { search, industry, status = 'active' } = req.query;
+  const { search, industry, status = 'active', company_status, pipeline_stage, last_contacted } = req.query;
   let where = 'WHERE 1=1';
   const params = [];
 
@@ -33,6 +33,17 @@ router.get('/', (req, res) => {
     const s = `%${search}%`; params.push(s, s, s);
   }
   if (industry) { where += ' AND c.industry = ?'; params.push(industry); }
+  if (company_status) { where += ' AND c.company_status = ?'; params.push(company_status); }
+  if (pipeline_stage) { where += ' AND c.pipeline_stage = ?'; params.push(pipeline_stage); }
+  if (last_contacted === 'never') {
+    where += ' AND cl.logged_at IS NULL';
+  } else if (last_contacted === 'this_week') {
+    where += " AND cl.logged_at >= date('now', '-7 days')";
+  } else if (last_contacted === 'this_month') {
+    where += " AND cl.logged_at >= date('now', '-30 days')";
+  } else if (last_contacted === 'stale') {
+    where += " AND (cl.logged_at IS NULL OR cl.logged_at < date('now', '-30 days'))";
+  }
 
   const sql = `
     SELECT c.*,
