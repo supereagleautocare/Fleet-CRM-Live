@@ -792,6 +792,9 @@ export default function RoutePlanner({ embedded = false }) {
                           <div style={{fontSize:11,color:v.address?'var(--gray-400)':'#dc2626',marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
                             {v.address?`${v.address}${v.city?', '+v.city:''}`:' ⚠️ No address'}
                           </div>
+                          <div style={{fontSize:11,color:'var(--gray-500)',marginTop:2}}>
+                            {v.call_count||0} contacts{(!v.call_count||v.call_count===0)&&<span style={{color:'var(--navy-600)',fontWeight:600}}> · First Time</span>}
+                          </div>
                           <div style={{display:'flex',alignItems:'center',gap:6,marginTop:5}} onClick={e=>e.stopPropagation()}>
                             {isOver&&<span className="badge badge-overdue">Overdue</span>}
                             {isToday&&<span className="badge badge-today">Today</span>}
