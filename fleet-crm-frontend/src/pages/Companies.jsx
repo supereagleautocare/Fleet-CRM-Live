@@ -100,6 +100,7 @@ function PipelineBar({ company, onMove, onStatusChange }) {
             <option value="customer">✅ Customer</option>
             <option value="dead">💀 Dead</option>
           </select>
+          </div>
         </div>
       </div>
 
