@@ -209,7 +209,7 @@ router.get('/calling', (req, res) => {
       cl_last.logged_at    as last_contacted,
       cl_last.contact_name as last_contact_name,
       cl_last.notes        as last_notes,
-      (SELECT COUNT(*) FROM call_log WHERE entity_id = c.id AND log_type='company' AND log_category='call' AND counts_as_attempt=1) as call_count
+      (SELECT COUNT(*) FROM call_log WHERE entity_id = c.id AND log_type='company' AND action_type != 'Move') as call_count
     FROM companies c
     LEFT JOIN company_contacts cc ON cc.company_id = c.company_id AND cc.is_preferred = 1
     LEFT JOIN follow_ups fu
