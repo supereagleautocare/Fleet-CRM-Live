@@ -68,7 +68,6 @@ export default function Dashboard() {
       <div className="page-header">
         <div>
           <div className="page-title">📊 Pipeline</div>
-          <div className="page-subtitle">{total} companies · {counts.starred || 0} starred</div>
         </div>
         <div className="header-actions">
           <button className="btn btn-ghost btn-sm" onClick={load}>🔄 Refresh</button>
@@ -78,11 +77,25 @@ export default function Dashboard() {
       <div className="page-body">
 
         {/* ── Activity stats strip ─────────────────────────────── */}
+        <div style={{ marginBottom:6, fontSize:11, fontWeight:700, color:'var(--gray-400)', textTransform:'uppercase', letterSpacing:'.06em' }}>📞 Call Activity</div>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12, marginBottom:16 }}>
+          {[
+            ['Today',     callsToday,  '#1e40af'],
+            ['This Week', callsWeek,   '#1e40af'],
+            ['This Month',callsMonth,  '#1e40af'],
+          ].map(([label, value, color]) => (
+            <div key={label} className="table-card" style={{ padding:'16px 20px', display:'flex', alignItems:'center', gap:14 }}>
+              <div style={{ fontSize:28, fontWeight:900, color, lineHeight:1 }}>{value}</div>
+              <div style={{ fontSize:13, color:'var(--gray-500)' }}>{label}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ marginBottom:6, fontSize:11, fontWeight:700, color:'var(--gray-400)', textTransform:'uppercase', letterSpacing:'.06em' }}>🤝 Total Contacts (all types)</div>
         <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12, marginBottom:20 }}>
           {[
-            ['📞 Calls Today',         callsToday,                        '#1e40af'],
-            ['📞 Calls This Week',     callsWeek,                         '#1e40af'],
-            ['🤝 Contacts This Month', stats?.activity?.contacts_this_month ?? 0, '#065f46'],
+            ['Today',     stats?.activity?.contacts_today      ?? 0, '#065f46'],
+            ['This Week', stats?.activity?.contacts_this_week  ?? 0, '#065f46'],
+            ['This Month',stats?.activity?.contacts_this_month ?? 0, '#065f46'],
           ].map(([label, value, color]) => (
             <div key={label} className="table-card" style={{ padding:'16px 20px', display:'flex', alignItems:'center', gap:14 }}>
               <div style={{ fontSize:28, fontWeight:900, color, lineHeight:1 }}>{value}</div>
@@ -91,6 +104,7 @@ export default function Dashboard() {
           ))}
         </div>
 
+        <div style={{ marginBottom:6, fontSize:11, fontWeight:700, color:'var(--gray-400)', textTransform:'uppercase', letterSpacing:'.06em' }}>📅 Upcoming Schedule</div>
         {/* ── 7-day forecast chart ────────────────────────────── */}
         {forecast.length > 0 && (
           <div className="table-card" style={{ padding:'16px 20px', marginBottom:8 }}>
@@ -178,7 +192,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* ── Stage cards ──────────────────────────────────────── */}
+        <div style={{ marginBottom:6, fontSize:11, fontWeight:700, color:'var(--gray-400)', textTransform:'uppercase', letterSpacing:'.06em' }}>🗂️ Pipeline Stages — click any to see companies</div>
         <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:10, marginBottom:16 }}>
           {STAGES.map(st => {
             const count = counts[st.key] || 0;
