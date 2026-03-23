@@ -12,7 +12,7 @@ import ForecastStrip from '../components/ForecastStrip.jsx';
 
 const FILTERS = [
   { key: 'all',      label: '📋 All Due' },
-  { key: 'first',    label: '🆕 First Call' },
+  { key: 'first',    label: '🆕 First Time' },
   { key: 'followup', label: '🔄 Follow-Up' },
   { key: 'overdue',  label: '🔴 Overdue' },
 ];
@@ -177,10 +177,10 @@ export default function CallingQueue() {
                     <th>Company</th>
                     <th>Phone</th>
                     <th>Industry</th>
-                    <th>Type</th>
+                    <th>Contacts</th>
                     <th>Preferred Contact</th>
                     <th>Due</th>
-                    <th>Last Call</th><th></th>
+                    <th>Last Call</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -202,10 +202,9 @@ export default function CallingQueue() {
                         </td>
                         <td><span className="phone-num">{fmtPhone(row.main_phone)}</span></td>
                         <td>{row.industry?<span className="badge badge-gray">{row.industry}</span>:'—'}</td>
-                        <td>
-                          <span className={`badge ${isFirst?'badge-blue':'badge-gray'}`}>
-                            {isFirst ? '🆕 First' : '🔄 Follow-up'}
-                          </span>
+                        <td style={{ textAlign:'center' }}>
+                          <div style={{ fontWeight:700, fontSize:14, color:'var(--gray-700)' }}>{row.call_count || 0}</div>
+                          {isFirst && <div style={{ fontSize:10, color:'var(--navy-600)', fontWeight:600 }}>First Time</div>}
                         </td>
                         <td style={{ fontSize:12 }}>
                           {row.preferred_contact_name
