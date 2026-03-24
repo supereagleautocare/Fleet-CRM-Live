@@ -6,7 +6,7 @@ import { api, fmtPhone, fmtDate } from '../api.js';
 import { useApp } from '../App.jsx';
 import ScoreCardModal from '../components/ScoreCardModal.jsx';
 import ImportSettings from '../components/ImportSettings.jsx';
-
+import SimpleImport from '../components/SimpleImport.jsx';
 // ── Note cell for history table ───────────────────────────────────────────────
 function NoteCell({ note }) {
   const [open, setOpen] = React.useState(false);
@@ -285,6 +285,7 @@ export default function Companies() {
   const [filterStage, setFilterStage]   = useState('');
   const [filterContacted, setFilterContacted] = useState('');
   const [showImport, setShowImport] = useState(false);
+  const [importTab, setImportTab]   = useState('simple');
   const [importFile, setImportFile] = useState(null);
   const [importing, setImporting]   = useState(false);
   const [importResult, setImportResult] = useState(null);
@@ -529,7 +530,22 @@ async function handleImport(e) {
             <div style={{ fontWeight:700, fontSize:15 }}>📥 Import Companies</div>
             <button className="btn btn-ghost btn-sm" onClick={()=>setShowImport(false)}>✕ Close</button>
           </div>
-          <ImportSettings />
+          {/* Tab switcher */}
+          <div style={{ display:'flex', gap:4, marginBottom:20, borderBottom:'2px solid var(--gray-100)', paddingBottom:0 }}>
+            {[
+              { key:'simple',  label:'🏢 New Companies CSV' },
+              { key:'history', label:'📋 Import Call History' },
+            ].map(t => (
+              <button key={t.key} onClick={()=>setImportTab(t.key)}
+                style={{ padding:'8px 18px', border:'none', borderBottom: importTab===t.key ? '2px solid var(--navy-800)' : '2px solid transparent',
+                  marginBottom:'-2px', background:'none', fontWeight: importTab===t.key ? 700 : 500,
+                  color: importTab===t.key ? 'var(--navy-800)' : 'var(--gray-400)', cursor:'pointer', fontSize:13 }}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+          {importTab === 'simple'  && <SimpleImport  onDone={() => { setShowImport(false); load(); }} />}
+          {importTab === 'history' && <ImportSettings />}
         </div>
       )}
       <div className="page-body">
