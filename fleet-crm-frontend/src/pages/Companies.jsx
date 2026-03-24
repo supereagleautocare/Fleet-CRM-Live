@@ -692,9 +692,9 @@ async function handleImport(e) {
                         }}>
                         {followupSaving ? 'Saving…' : `Schedule ${followupAction}`}
                       </button>
-                      {selected.followup_due && (
+                      {(selected.followup_due || selected.follow_up?.due_date) && (
                         <span style={{ fontSize:11, color:'#a16207' }}>
-                          Current: {new Date(selected.followup_due + 'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}
+                          Current: {new Date((selected.followup_due || selected.follow_up?.due_date) + 'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}
                         </span>
                       )}
                     </div>
