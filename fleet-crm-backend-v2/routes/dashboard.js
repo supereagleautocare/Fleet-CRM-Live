@@ -97,6 +97,14 @@ router.get('/', (req, res) => {
       (SELECT COUNT(*) FROM call_log WHERE action_type = 'Visit') as total_visits
   `).get();
 
+ const contactsToday = db.prepare(
+    "SELECT COUNT(*) as cnt FROM call_log WHERE date(logged_at) = date('now') AND action_type != 'Move'"
+  ).get().cnt;
+
+  const contactsThisWeek = db.prepare(
+    "SELECT COUNT(*) as cnt FROM call_log WHERE date(logged_at) >= ? AND action_type != 'Move'"
+  ).get(sevenDaysAgo).cnt;
+
   res.json({
     follow_ups: followupCounts,
     visits:     visitCounts,
@@ -109,14 +117,6 @@ router.get('/', (req, res) => {
       contacts_this_week:   contactsThisWeek,
       contacts_this_month:  contactsThisMonth,
     },
-    const contactsToday = db.prepare(
-    "SELECT COUNT(*) as cnt FROM call_log WHERE date(logged_at) = date('now') AND action_type != 'Move'"
-  ).get().cnt;
-
-  const contactsThisWeek = db.prepare(
-    "SELECT COUNT(*) as cnt FROM call_log WHERE date(logged_at) >= ? AND action_type != 'Move'"
-  ).get(sevenDaysAgo).cnt;
-  
     breakdowns: {
       by_type:    callsByType,
       by_outcome: callsByOutcome,
@@ -126,5 +126,4 @@ router.get('/', (req, res) => {
     generated_at: new Date().toISOString(),
   });
 });
-
 module.exports = router;
