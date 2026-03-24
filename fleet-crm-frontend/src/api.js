@@ -34,6 +34,7 @@ export const api = {
 
   // ── Dashboard ───────────────────────────────────────
   dashboard:      ()                => req('GET',  '/dashboard'),
+  dashboardDrill: (type, period)    => req('GET',  `/dashboard/activity-drill?type=${type}&period=${period}`),
 
   // ── Follow-ups ──────────────────────────────────────
   followups:         ()             => req('GET',  '/followups'),
