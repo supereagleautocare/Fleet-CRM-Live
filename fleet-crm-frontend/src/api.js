@@ -35,6 +35,9 @@ export const api = {
   // ── Dashboard ───────────────────────────────────────
   dashboard:      ()                => req('GET',  '/dashboard'),
   dashboardDrill: (type, period)    => req('GET',  `/dashboard/activity-drill?type=${type}&period=${period}`),
+  tekmetricFleetData:    ()     => req('GET',  '/tekmetric/fleet-data'),
+  tekmetricSettings:     ()     => req('GET',  '/tekmetric/settings'),
+  saveTekmetricSettings: (data) => req('POST', '/tekmetric/settings', data),
 
   // ── Follow-ups ──────────────────────────────────────
   followups:         ()             => req('GET',  '/followups'),
