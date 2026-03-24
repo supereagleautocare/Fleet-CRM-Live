@@ -15,9 +15,9 @@ router.use(requireAuth);
 // ── Read config from your existing config table ───────────────────────────────
 function getTekConfig(db) {
   try {
-    const token  = db.prepare("SELECT value FROM config WHERE key = 'tekmetric_token'").get()?.value;
-    const shopId = db.prepare("SELECT value FROM config WHERE key = 'tekmetric_shop_id'").get()?.value;
-    const env    = db.prepare("SELECT value FROM config WHERE key = 'tekmetric_env'").get()?.value || 'production';
+    const token  = db.prepare("SELECT value FROM config_settings WHERE key = 'tekmetric_token'").get()?.value;
+    const shopId = db.prepare("SELECT value FROM config_settings WHERE key = 'tekmetric_shop_id'").get()?.value;
+    const env    = db.prepare("SELECT value FROM config_settings WHERE key = 'tekmetric_env'").get()?.value || 'production';
     return { token, shopId, env };
   } catch {
     return { token: null, shopId: null, env: 'production' };
@@ -44,17 +44,17 @@ router.post('/settings', (req, res) => {
   const { token, shopId, env, pollInterval, oilInterval, carfaxKey, carfaxEnabled } = req.body;
 
   const upsert = db.prepare(`
-    INSERT INTO config (key, value) VALUES (?, ?)
-    ON CONFLICT(key) DO UPDATE SET value = excluded.value
+    INSERT INTO config_settings (key, value, label) VALUES (?, ?, ?)
+ON CONFLICT(key) DO UPDATE SET value = excluded.value
   `);
 
-  if (token)        upsert.run('tekmetric_token',         token);
-  if (shopId)       upsert.run('tekmetric_shop_id',       shopId);
-  if (env)          upsert.run('tekmetric_env',            env);
-  if (pollInterval) upsert.run('tekmetric_poll_interval',  String(pollInterval));
-  if (oilInterval)  upsert.run('tekmetric_oil_interval',   String(oilInterval));
-  if (carfaxKey !== undefined)     upsert.run('carfax_api_key',     carfaxKey || '');
-  if (carfaxEnabled !== undefined) upsert.run('carfax_enabled',     carfaxEnabled ? '1' : '0');
+  if (token)        upsert.run('tekmetric_token',        token,               'Tekmetric API Token');
+  if (shopId)       upsert.run('tekmetric_shop_id',      shopId,              'Tekmetric Shop ID');
+  if (env)          upsert.run('tekmetric_env',          env,                 'Tekmetric Environment');
+  if (pollInterval) upsert.run('tekmetric_poll_interval',String(pollInterval),'Tekmetric Poll Interval');
+  if (oilInterval)  upsert.run('tekmetric_oil_interval', String(oilInterval), 'Tekmetric Oil Interval');
+  if (carfaxKey !== undefined)     upsert.run('carfax_api_key', carfaxKey || '',          'Carfax API Key');
+  if (carfaxEnabled !== undefined) upsert.run('carfax_enabled', carfaxEnabled ? '1' : '0','Carfax Enabled');
 
   res.json({ ok: true });
 });
@@ -63,10 +63,10 @@ router.post('/settings', (req, res) => {
 router.get('/settings', (req, res) => {
   const db = require('../db/schema');
   const cfg = getTekConfig(db);
-  const poll = db.prepare("SELECT value FROM config WHERE key = 'tekmetric_poll_interval'").get()?.value || '5';
-  const oil  = db.prepare("SELECT value FROM config WHERE key = 'tekmetric_oil_interval'").get()?.value  || '90';
-  const cfxKey     = db.prepare("SELECT value FROM config WHERE key = 'carfax_api_key'").get()?.value  || '';
-  const cfxEnabled = db.prepare("SELECT value FROM config WHERE key = 'carfax_enabled'").get()?.value   || '0';
+  const poll = db.prepare("SELECT value FROM config_settings WHERE key = 'tekmetric_poll_interval'").get()?.value || '5';
+  const oil  = db.prepare("SELECT value FROM config_settings WHERE key = 'tekmetric_oil_interval'").get()?.value  || '90';
+  const cfxKey     = db.prepare("SELECT value FROM config_settings WHERE key = 'carfax_api_key'").get()?.value  || '';
+  const cfxEnabled = db.prepare("SELECT value FROM config_settings WHERE key = 'carfax_enabled'").get()?.value   || '0';
   res.json({
     connected:    !!cfg.token,
     shopId:       cfg.shopId,
