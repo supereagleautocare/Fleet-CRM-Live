@@ -16,8 +16,11 @@ export default function Sidebar() {
       </div>
 
       <div className="sidebar-section-label">Shop</div>
-      <nav className="sidebar-nav">
-      </nav>
+<nav className="sidebar-nav">
+  <NavLink to="/active-fleet" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
+    <span className="icon">🔧</span> Active Fleet
+  </NavLink>
+</nav>
       <div className="sidebar-section-label">Overview</div>
       <nav className="sidebar-nav">
         <NavLink to="/dashboard" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
