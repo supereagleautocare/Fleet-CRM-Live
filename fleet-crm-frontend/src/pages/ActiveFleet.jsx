@@ -8,6 +8,7 @@
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useApp } from '../App.jsx';
+import { api } from '../api.js';
 
 // ── DEMO DATA (replaced by live API once token is set) ────────────────────────
 
@@ -971,23 +972,23 @@ export default function ActiveFleet() {
 
   // ── Live sync (wired up once Tekmetric token is in settings) ──
   const doSync = useCallback(async () => {
-  setSyncing(true);
-  try {
-    const data = await api.tekmetricFleetData();
-    if (data.error) throw new Error(data.error);
-    setStatuses(data.statuses   || []);
-    setCompanies(data.companies || []);
-    setVehicles(data.vehicles   || []);
-    setRos(data.ros             || []);
-    setEmployees(data.employees || []);
-    setIsDemo(false);
-  } catch(e) {
-    showToast('Sync failed — ' + e.message, 'error');
-  } finally {
-    setSyncing(false);
-    setLastSync(new Date());
-  }
-}, [showToast]);
+    setSyncing(true);
+    try {
+      const data = await api.tekmetricFleetData();
+      if (data.error) throw new Error(data.error);
+      setStatuses(data.statuses   || []);
+      setCompanies(data.companies || []);
+      setVehicles(data.vehicles   || []);
+      setRos(data.ros             || []);
+      setEmployees(data.employees || []);
+      setIsDemo(false);
+    } catch(e) {
+      showToast('Sync failed — ' + e.message, 'error');
+    } finally {
+      setSyncing(false);
+      setLastSync(new Date());
+    }
+  }, [showToast]);
 
   return (
     <>
