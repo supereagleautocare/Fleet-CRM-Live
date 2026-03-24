@@ -322,7 +322,12 @@ export default function Companies() {
     if (id) selectCompany({ id: Number(id) });
     else setSelected(null);
   }, [searchParams]);
-
+ useEffect(() => {
+  function handleReset() { setSelected(null); }
+  window.addEventListener('companies-reset', handleReset);
+  return () => window.removeEventListener('companies-reset', handleReset);
+ }, []);
+  
   async function load() {
     setLoading(true);
     try {
