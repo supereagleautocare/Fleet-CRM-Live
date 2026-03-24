@@ -105,8 +105,18 @@ router.get('/', (req, res) => {
       calls_today:          callsToday,
       calls_this_week:      callsThisWeek,
       calls_this_month:     callsThisMonth,
+      contacts_today:       contactsToday,
+      contacts_this_week:   contactsThisWeek,
       contacts_this_month:  contactsThisMonth,
     },
+    const contactsToday = db.prepare(
+    "SELECT COUNT(*) as cnt FROM call_log WHERE date(logged_at) = date('now') AND action_type != 'Move'"
+  ).get().cnt;
+
+  const contactsThisWeek = db.prepare(
+    "SELECT COUNT(*) as cnt FROM call_log WHERE date(logged_at) >= ? AND action_type != 'Move'"
+  ).get(sevenDaysAgo).cnt;
+  
     breakdowns: {
       by_type:    callsByType,
       by_outcome: callsByOutcome,
