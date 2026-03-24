@@ -151,4 +151,51 @@ router.get('/activity-drill', (req, res) => {
   `).all();
   res.json(rows);
 });
+// DELETE /api/companies/:id
+router.delete('/:id', (req, res) => {
+  const company = db.prepare('SELECT * FROM companies WHERE id = ?').get(req.params.id);
+  if (!company) return res.status(404).json({ error: 'Company not found.' });
+  db.exec('BEGIN TRANSACTION');
+  try {
+    db.prepare('DELETE FROM call_log WHERE entity_id = ? AND log_type = ?').run(company.id, 'company');
+    db.prepare('DELETE FROM follow_ups WHERE entity_id = ? AND source_type = ?').run(company.id, 'company');
+    db.prepare('DELETE FROM calling_queue WHERE entity_id = ?').run(company.id);
+    db.prepare('DELETE FROM visit_queue WHERE entity_id = ?').run(company.id);
+    db.prepare('DELETE FROM company_contacts WHERE company_id = ?').run(company.company_id);
+    db.prepare('DELETE FROM companies WHERE id = ?').run(company.id);
+    db.exec('COMMIT');
+    res.json({ ok: true });
+  } catch(e) {
+    db.exec('ROLLBACK');
+    res.status(500).json({ error: 'Delete failed: ' + e.message });
+  }
+});
+
+// POST /api/companies/:id/merge/:into_id — merge source into target
+router.post('/:id/merge/:into_id', (req, res) => {
+  const source = db.prepare('SELECT * FROM companies WHERE id = ?').get(req.params.id);
+  const target = db.prepare('SELECT * FROM companies WHERE id = ?').get(req.params.into_id);
+  if (!source || !target) return res.status(404).json({ error: 'Company not found.' });
+  db.exec('BEGIN TRANSACTION');
+  try {
+    db.prepare('UPDATE call_log SET entity_id=?, company_id_str=?, entity_name=? WHERE entity_id=? AND log_type=?')
+      .run(target.id, target.company_id, target.name, source.id, 'company');
+    db.prepare('UPDATE follow_ups SET entity_id=? WHERE entity_id=? AND source_type=?')
+      .run(target.id, source.id, 'company');
+    db.prepare('UPDATE company_contacts SET company_id=? WHERE company_id=?')
+      .run(target.company_id, source.company_id);
+    db.prepare('UPDATE calling_queue SET entity_id=? WHERE entity_id=?').run(target.id, source.id);
+    db.prepare('UPDATE visit_queue SET entity_id=?, company_id=?, entity_name=? WHERE entity_id=?')
+      .run(target.id, target.company_id, target.name, source.id);
+    for (const f of ['industry','address','city','website','notes','main_phone']) {
+      if (!target[f] && source[f]) db.prepare(`UPDATE companies SET ${f}=? WHERE id=?`).run(source[f], target.id);
+    }
+    db.prepare('DELETE FROM companies WHERE id=?').run(source.id);
+    db.exec('COMMIT');
+    res.json({ ok: true, kept: target.id });
+  } catch(e) {
+    db.exec('ROLLBACK');
+    res.status(500).json({ error: 'Merge failed: ' + e.message });
+  }
+});
 module.exports = router;
