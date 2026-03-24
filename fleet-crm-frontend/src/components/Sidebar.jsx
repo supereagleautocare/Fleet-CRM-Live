@@ -50,8 +50,9 @@ export default function Sidebar() {
 
       <div className="sidebar-section-label">Database</div>
       <nav className="sidebar-nav">
-        <NavLink to="/companies" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
-          <span className="icon">🏢</span> Companies
+        <NavLink to="/companies" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
+  onClick={() => window.dispatchEvent(new CustomEvent('companies-reset'))}>
+  <span className="icon">🏢</span> Companies
         </NavLink>
       </nav>
 
