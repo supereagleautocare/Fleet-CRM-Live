@@ -63,6 +63,8 @@ export const api = {
   deleteContact:   (contactId)     => req('DELETE',`/companies/contacts/${contactId}`),
   importCompanies: (companies)     => req('POST', '/companies/import', { companies }),
   nearbyData:      ()              => req('GET',  '/companies/nearby-data'),
+  deleteCompany:  (id)          => req('DELETE', `/companies/${id}`),
+  mergeCompany:   (id, into_id) => req('POST',   `/companies/${id}/merge/${into_id}`),
 
   // ── Pipeline ─────────────────────────────────────────────────────────────
   pipelineBoard:    ()             => req('GET',    '/pipeline/board'),
