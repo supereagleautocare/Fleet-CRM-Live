@@ -126,4 +126,29 @@ router.get('/', (req, res) => {
     generated_at: new Date().toISOString(),
   });
 });
+// GET /api/dashboard/activity-drill?type=calls|contacts&period=today|week|month
+router.get('/activity-drill', (req, res) => {
+  const { type = 'calls', period = 'today' } = req.query;
+  const sevenDaysAgo  = new Date(Date.now() -  7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+  const dateFilter = period === 'today' ? `date(cl.logged_at) = date('now')`
+    : period === 'week'  ? `date(cl.logged_at) >= '${sevenDaysAgo}'`
+    : `date(cl.logged_at) >= '${thirtyDaysAgo}'`;
+
+  const actionFilter = type === 'calls' ? `cl.action_type = 'Call'` : `cl.action_type != 'Move'`;
+
+  const rows = db.prepare(`
+    SELECT c.id, c.name, c.company_id, c.main_phone, c.industry, c.pipeline_stage, c.company_status,
+      COUNT(cl.id) as contact_count,
+      MAX(cl.logged_at) as last_contact,
+      MAX(cl.contact_type) as last_contact_type
+    FROM companies c
+    JOIN call_log cl ON cl.entity_id = c.id AND cl.log_type = 'company'
+    WHERE ${dateFilter} AND ${actionFilter}
+    GROUP BY c.id
+    ORDER BY MAX(cl.logged_at) DESC
+  `).all();
+  res.json(rows);
+});
 module.exports = router;
