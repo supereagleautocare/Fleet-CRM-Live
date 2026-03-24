@@ -283,6 +283,10 @@ export default function Companies() {
   const [filterStatus, setFilterStatus] = useState('');
   const [filterStage, setFilterStage]   = useState('');
   const [filterContacted, setFilterContacted] = useState('');
+  const [showImport, setShowImport] = useState(false);
+  const [importFile, setImportFile] = useState(null);
+  const [importing, setImporting]   = useState(false);
+  const [importResult, setImportResult] = useState(null);
   const [selected, setSelected]     = useState(null);
   const [followupEdit, setFollowupEdit] = useState(null);
   const [followupAction, setFollowupAction] = useState('Call');
@@ -417,7 +421,27 @@ export default function Companies() {
     } catch(err) { showToast(err.message, 'error'); }
     finally { setSaving(false); }
   }
-
+async function handleImport(e) {
+    e.preventDefault();
+    if (!importFile) return;
+    setImporting(true);
+    setImportResult(null);
+    try {
+      const formData = new FormData();
+      formData.append('file', importFile);
+      const res = await fetch('/api/companies/import', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${localStorage.getItem('fleet_crm_token')}` },
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Import failed');
+      setImportResult(data);
+      await load();
+      await refreshCounts();
+    } catch(err) { showToast(err.message, 'error'); }
+    finally { setImporting(false); }
+  }
   return (
     <>
       <div className="page-header">
@@ -430,6 +454,7 @@ export default function Companies() {
             <span style={{ color:'var(--gray-400)' }}>🔍</span>
             <input placeholder="Search name, industry…" value={search} onChange={e=>setSearch(e.target.value)}/>
           </div>
+          <button className="btn btn-ghost" onClick={()=>setShowImport(v=>!v)}>📥 Import CSV</button>
           <button className="btn btn-ghost" onClick={()=>{
             const headers = ['Name','Preferred Contact','Role','Phone','Address','City','Industry','Pipeline Stage','Status','Last Contact Type','Last Contacted','Total Contacts'];
             const rows = companies.map(c => [
@@ -492,11 +517,34 @@ export default function Companies() {
         <span style={{ fontSize:12, color:'var(--gray-400)', marginLeft:'auto' }}>{companies.length} companies</span>
       </div>
 
-      <div className="page-body" style={{ display:'flex', gap:16, alignItems:'flex-start' }}>
+      {/* Import panel */}
+      {showImport && (
+        <div style={{ marginBottom:16, padding:'16px 20px', background:'white', borderRadius:10, border:'1px solid var(--gray-200)' }}>
+          <div style={{ fontWeight:700, fontSize:14, marginBottom:10 }}>📥 Import Companies from CSV</div>
+          <div style={{ fontSize:12, color:'var(--gray-500)', marginBottom:12 }}>
+            CSV should have columns: <strong>name, main_phone, industry, address, city</strong> (and optionally: website, notes, contact_name, contact_role, contact_phone, contact_email)
+          </div>
+          <form onSubmit={handleImport} style={{ display:'flex', gap:10, alignItems:'center', flexWrap:'wrap' }}>
+            <input type="file" accept=".csv" onChange={e=>{ setImportFile(e.target.files[0]); setImportResult(null); }}
+              style={{ fontSize:13, flex:1, minWidth:200 }}/>
+            <button type="submit" className="btn btn-primary" disabled={importing||!importFile}>
+              {importing ? 'Importing…' : '📥 Import'}
+            </button>
+            <button type="button" className="btn btn-ghost" onClick={()=>{ setShowImport(false); setImportFile(null); setImportResult(null); }}>Cancel</button>
+          </form>
+          {importResult && (
+            <div style={{ marginTop:12, padding:'10px 14px', background:'#f0fdf4', borderRadius:8, border:'1px solid #bbf7d0', fontSize:13, color:'#166534' }}>
+              ✅ Imported <strong>{importResult.imported}</strong> companies
+              {importResult.skipped > 0 && <span style={{ color:'#92400e' }}> · {importResult.skipped} skipped (duplicates)</span>}
+              {importResult.errors > 0 && <span style={{ color:'#dc2626' }}> · {importResult.errors} errors</span>}
+            </div>
+          )}
+        </div>
+      )}
+      <div className="page-body">
 
-        {/* Company list */}
-        <div style={{ flex: selected ? '0 0 150px' : '1', minWidth:0, background:'white', borderRadius:10, border:'1px solid var(--gray-200)', overflow:'hidden', display:'flex', flexDirection:'column' }}>
-          <div style={{ padding:'10px 14px', borderBottom:'1px solid var(--gray-200)', fontWeight:700, fontSize:13, color:'var(--gray-700)', textAlign:'center' }}>All Companies</div>
+        {/* Company list — hidden when a company is selected */}
+        {!selected && <div style={{ background:'white', borderRadius:10, border:'1px solid var(--gray-200)', overflow:'hidden', display:'flex', flexDirection:'column' }}>
          {loading ? (
             <div className="loading-wrap"><div className="spinner"/></div>
           ) : companies.length === 0 ? (
@@ -535,11 +583,14 @@ export default function Companies() {
               ))}
             </div>
           )}
-        </div>
+        </div>}
 
         {/* Detail panel */}
         {selected && (
-          <div style={{ flex:1, display:'flex', flexDirection:'column', gap:14, minWidth:0, overflow:'hidden' }}>
+          <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+            <button className="btn btn-ghost btn-sm" style={{ alignSelf:'flex-start' }} onClick={()=>setSelected(null)}>
+              ← Back to Companies
+            </button>
 
             {/* Pipeline status bar */}
             <PipelineBar company={selected} onMove={async (stage, due_date, notes) => {
