@@ -121,6 +121,12 @@ router.get('/:id', (req, res) => {
     WHERE entity_id = ? AND log_type = 'company'
   `).get(req.params.id);
 
+  const followup = db.prepare(`
+    SELECT due_date, next_action FROM follow_ups
+    WHERE entity_id = ? AND source_type = 'company' AND is_locked = 0
+    ORDER BY due_date ASC LIMIT 1
+  `).get(req.params.id);
+
   let branches = [];
   if (company.location_group) {
     branches = db.prepare(`
