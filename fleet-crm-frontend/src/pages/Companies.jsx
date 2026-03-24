@@ -303,6 +303,9 @@ export default function Companies() {
   const [locationName, setLocationName] = useState('');
   const [isMultiLoc, setIsMultiLoc] = useState(false);
   const nameSearchTimer = useRef(null);
+  const [merging, setMerging]       = useState(false);
+  const [mergeSearch, setMergeSearch] = useState('');
+  const [mergeResults, setMergeResults] = useState([]);
   const [saving, setSaving]         = useState(false);
   const [addToQueue, setAddToQueue] = useState(true);
   const [editingCompany, setEditingCompany] = useState(false);
@@ -627,8 +630,23 @@ async function handleImport(e) {
                       {!selected.in_queue && (
                         <button className="btn btn-primary btn-sm" onClick={()=>handleAddToQueue(selected.id)}>+ Add to Queue</button>
                       )}
+                      <button className="btn btn-ghost btn-sm" style={{ color:'#dc2626', border:'1px solid #fca5a5' }}
+                        onClick={async()=>{
+                          if (!confirm(`Permanently delete ${selected.name} and all their history? This cannot be undone.`)) return;
+                          try {
+                            await api.deleteCompany(selected.id);
+                            showToast(selected.name + ' deleted');
+                            setSelected(null);
+                            await load();
+                            await refreshCounts();
+                          } catch(err) { showToast(err.message, 'error'); }
+                        }}>🗑️ Delete</button>
                       <button className="btn btn-ghost btn-sm" onClick={()=>{ setEditForm({name:selected.name,main_phone:selected.main_phone||'',industry:selected.industry||'',address:selected.address||'',city:selected.city||'',state:selected.state||'',website:selected.website||'',notes:selected.notes||'',is_multi_location:selected.is_multi_location||0,location_group:selected.location_group||'',location_name:selected.location_name||''}); setEditingCompany(true); }}>✏️ Edit</button>
                       <button className="pill-btn pill-btn-ghost" onClick={()=>setSelected(null)}>✕</button>
+                      <button className="btn btn-ghost btn-sm" style={{ color:'#1e40af', border:'1px solid #bfdbfe' }}
+                        onClick={()=>{ setMerging(true); setMergeSearch(''); setMergeResults([]); }}>
+                        🔀 Merge
+                      </button>
                     </div>
                   </div>
                   <div style={{ marginTop:14, display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
@@ -974,6 +992,50 @@ async function handleImport(e) {
             }
           }}
         />
+      )}
+      {merging && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.5)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000 }}>
+          <div style={{ background:'white', borderRadius:14, padding:28, width:420, boxShadow:'0 20px 60px rgba(0,0,0,.2)' }}>
+            <div style={{ fontWeight:800, fontSize:16, marginBottom:4 }}>🔀 Merge Company</div>
+            <div style={{ fontSize:12, color:'var(--gray-500)', marginBottom:16 }}>
+              All history, contacts and queue entries from <strong>{selected?.name}</strong> will be moved into the company you choose below, then <strong>{selected?.name}</strong> will be deleted.
+            </div>
+            <input className="form-input" placeholder="Search company to merge into…"
+              value={mergeSearch}
+              onChange={async e => {
+                setMergeSearch(e.target.value);
+                if (e.target.value.length >= 2) {
+                  const results = await api.searchCompanyName(e.target.value);
+                  setMergeResults(results.filter(r => r.id !== selected?.id));
+                } else { setMergeResults([]); }
+              }}
+            />
+            {mergeResults.length > 0 && (
+              <div style={{ marginTop:8, border:'1px solid var(--gray-200)', borderRadius:8, overflow:'hidden' }}>
+                {mergeResults.map(r => (
+                  <div key={r.id} style={{ padding:'10px 14px', borderBottom:'1px solid var(--gray-100)', cursor:'pointer' }}
+                    onClick={async () => {
+                      if (!confirm(`Merge ${selected.name} INTO ${r.name}? This cannot be undone.`)) return;
+                      try {
+                        await api.mergeCompany(selected.id, r.id);
+                        showToast(`Merged into ${r.name}`);
+                        setMerging(false);
+                        setSelected(null);
+                        await load();
+                        await refreshCounts();
+                      } catch(err) { showToast(err.message, 'error'); }
+                    }}>
+                    <div style={{ fontWeight:600, fontSize:13 }}>{r.name}</div>
+                    <div style={{ fontSize:11, color:'var(--gray-400)' }}>{r.city}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={{ display:'flex', justifyContent:'flex-end', marginTop:16 }}>
+              <button className="btn btn-ghost" onClick={()=>setMerging(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );
