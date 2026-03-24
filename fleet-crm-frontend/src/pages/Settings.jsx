@@ -5,7 +5,6 @@ import { useApp } from '../App.jsx';
 import ScriptEditor from '../components/ScriptEditor.jsx';
 import ScoreCardSettings from '../components/ScoreCardSettings.jsx';
 import ScoreCardModal from '../components/ScoreCardModal.jsx';
-import ImportSettings from '../components/ImportSettings.jsx';
 
 export default function Settings() {
   const [rules, setRules]     = useState([]);
@@ -92,7 +91,6 @@ export default function Settings() {
   const tabs = [
     { id:'scripts',   label:'📋 Scripts' },
     { id:'scorecard', label:'🏆 Scorecard' },
-    { id:'import',    label:'📥 Import' },
     { id:'followups', label:'📅 Follow-Ups' },
     { id:'settings',  label:'🔧 System' },
     { id:'team',      label:'👥 Team' },
@@ -123,7 +121,7 @@ export default function Settings() {
           <>
             {tab === 'scripts' && <ScriptEditor />}
             {tab === 'scorecard' && <ScoreCardSettings defaultTab={new URLSearchParams(location.search).get('subtab') || 'builder'} />}
-            {tab === 'import' && <ImportSettings />}
+          
 
             {/* ── FOLLOW-UPS unified tab ── */}
             {tab === 'followups' && (
