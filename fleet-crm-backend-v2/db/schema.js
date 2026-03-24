@@ -306,6 +306,11 @@ const migrations = [
   "ALTER TABLE config_rules ADD COLUMN counts_as_attempt INTEGER NOT NULL DEFAULT 1",
   "ALTER TABLE config_rules ADD COLUMN dead_action TEXT NOT NULL DEFAULT 'none'",
   "ALTER TABLE config_rules ADD COLUMN snooze_days INTEGER NOT NULL DEFAULT 90",
+  "INSERT OR IGNORE INTO config_settings (key, value, label) VALUES ('tekmetric_token', '', 'Tekmetric API Token')",
+  "INSERT OR IGNORE INTO config_settings (key, value, label) VALUES ('tekmetric_shop_id', '', 'Tekmetric Shop ID')",
+  "INSERT OR IGNORE INTO config_settings (key, value, label) VALUES ('tekmetric_env', 'production', 'Tekmetric Environment')",
+  "INSERT OR IGNORE INTO config_settings (key, value, label) VALUES ('tekmetric_poll_interval', '5', 'Tekmetric Poll Interval')",
+  "INSERT OR IGNORE INTO config_settings (key, value, label) VALUES ('tekmetric_oil_interval', '90', 'Tekmetric Oil Interval')",
 ];
 for (const sql of migrations) {
   try { db.exec(sql); } catch(e) { /* column already exists — skip */ }
