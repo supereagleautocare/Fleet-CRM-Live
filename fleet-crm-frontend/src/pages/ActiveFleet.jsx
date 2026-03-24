@@ -754,7 +754,16 @@ function FleetSettings({ oilInterval, setOilInterval, statuses }) {
   const del = id => setContacts(c=>c.filter(x=>x.id!==id));
   const togR = (i,k) => setRules(r=>r.map((x,j)=>j===i?{...x,[k]:!x[k]}:x));
   const setH = (i,v) => setRules(r=>r.map((x,j)=>j===i?{...x,hours:parseInt(v)||1}:x));
-  const save = () => showToast('Fleet settings saved');
+  const save = async () => {
+  try {
+    const { api } = await import('../api.js');
+    await api.saveTekmetricSettings({ token, shopId, env, pollInterval: poll, oilInterval, carfaxKey, carfaxEnabled });
+    showToast('Fleet settings saved');
+    if (token && shopId) setIsDemo(false);
+  } catch(e) {
+    showToast('Failed to save: ' + e.message, 'error');
+  }
+};
 
   return (
     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,alignItems:'start'}}>
@@ -962,19 +971,23 @@ export default function ActiveFleet() {
 
   // ── Live sync (wired up once Tekmetric token is in settings) ──
   const doSync = useCallback(async () => {
-    setSyncing(true);
-    try {
-      // TODO: replace with real API calls once token is saved
-      // const data = await fetch('/api/tekmetric/fleet-data').then(r=>r.json());
-      // setStatuses(data.statuses); setCompanies(data.companies); etc.
-      await new Promise(r=>setTimeout(r,1200)); // demo delay
-    } catch(e) {
-      showToast('Sync failed — check your Tekmetric token in Settings', 'error');
-    } finally {
-      setSyncing(false);
-      setLastSync(new Date());
-    }
-  }, [showToast]);
+  setSyncing(true);
+  try {
+    const data = await api.tekmetricFleetData();
+    if (data.error) throw new Error(data.error);
+    setStatuses(data.statuses   || []);
+    setCompanies(data.companies || []);
+    setVehicles(data.vehicles   || []);
+    setRos(data.ros             || []);
+    setEmployees(data.employees || []);
+    setIsDemo(false);
+  } catch(e) {
+    showToast('Sync failed — ' + e.message, 'error');
+  } finally {
+    setSyncing(false);
+    setLastSync(new Date());
+  }
+}, [showToast]);
 
   return (
     <>
