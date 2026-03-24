@@ -319,7 +319,8 @@ export default function Companies() {
   useEffect(() => {
     const id = searchParams.get('company');
     if (id) selectCompany({ id: Number(id) });
-  }, []); // eslint-disable-line
+    else setSelected(null);
+  }, [searchParams]);
 
   async function load() {
     setLoading(true);
