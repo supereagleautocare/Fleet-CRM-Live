@@ -5,6 +5,7 @@ import AddressAutocomplete from '../components/AddressAutocomplete.jsx';
 import { api, fmtPhone, fmtDate } from '../api.js';
 import { useApp } from '../App.jsx';
 import ScoreCardModal from '../components/ScoreCardModal.jsx';
+import ImportSettings from '../components/ImportSettings.jsx';
 
 // ── Note cell for history table ───────────────────────────────────────────────
 function NoteCell({ note }) {
@@ -522,26 +523,12 @@ async function handleImport(e) {
 
       {/* Import panel */}
       {showImport && (
-        <div style={{ marginBottom:16, padding:'16px 20px', background:'white', borderRadius:10, border:'1px solid var(--gray-200)' }}>
-          <div style={{ fontWeight:700, fontSize:14, marginBottom:10 }}>📥 Import Companies from CSV</div>
-          <div style={{ fontSize:12, color:'var(--gray-500)', marginBottom:12 }}>
-            CSV should have columns: <strong>name, main_phone, industry, address, city</strong> (and optionally: website, notes, contact_name, contact_role, contact_phone, contact_email)
+        <div style={{ marginBottom:16, padding:'20px 24px', background:'white', borderRadius:10, border:'1px solid var(--gray-200)' }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
+            <div style={{ fontWeight:700, fontSize:15 }}>📥 Import Companies</div>
+            <button className="btn btn-ghost btn-sm" onClick={()=>setShowImport(false)}>✕ Close</button>
           </div>
-          <form onSubmit={handleImport} style={{ display:'flex', gap:10, alignItems:'center', flexWrap:'wrap' }}>
-            <input type="file" accept=".csv" onChange={e=>{ setImportFile(e.target.files[0]); setImportResult(null); }}
-              style={{ fontSize:13, flex:1, minWidth:200 }}/>
-            <button type="submit" className="btn btn-primary" disabled={importing||!importFile}>
-              {importing ? 'Importing…' : '📥 Import'}
-            </button>
-            <button type="button" className="btn btn-ghost" onClick={()=>{ setShowImport(false); setImportFile(null); setImportResult(null); }}>Cancel</button>
-          </form>
-          {importResult && (
-            <div style={{ marginTop:12, padding:'10px 14px', background:'#f0fdf4', borderRadius:8, border:'1px solid #bbf7d0', fontSize:13, color:'#166534' }}>
-              ✅ Imported <strong>{importResult.imported}</strong> companies
-              {importResult.skipped > 0 && <span style={{ color:'#92400e' }}> · {importResult.skipped} skipped (duplicates)</span>}
-              {importResult.errors > 0 && <span style={{ color:'#dc2626' }}> · {importResult.errors} errors</span>}
-            </div>
-          )}
+          <ImportSettings />
         </div>
       )}
       <div className="page-body">
