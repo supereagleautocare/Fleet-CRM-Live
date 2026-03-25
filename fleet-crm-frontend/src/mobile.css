@@ -1,0 +1,31 @@
+/* MOBILE ONLY STYLES */
+@media (max-width: 900px) {
+  .sidebar {
+    position: fixed;
+    left: -260px;
+    top: 0;
+    width: 260px;
+    height: 100%;
+    background: #111;
+    transition: 0.3s;
+    z-index: 1000;
+  }
+
+  .sidebar.open {
+    left: 0;
+  }
+
+  .mobile-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #111;
+    color: white;
+    padding: 10px;
+  }
+
+  .mobile-menu-btn {
+    font-size: 20px;
+    cursor: pointer;
+  }
+}
