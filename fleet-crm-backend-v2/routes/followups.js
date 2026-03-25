@@ -102,12 +102,8 @@ router.post('/:id/complete', (req, res) => {
     "SELECT COUNT(*) as cnt FROM call_log WHERE entity_id = ? AND log_type = 'company'"
   ).get(company.id).cnt;
 
-  const { next_action_date, nextStage } = scheduleNextAction(db, {
-    company, contact_type, next_action, next_action_date_override,
-    contact_name, direct_line, email, log_id: null,
-  });
-
   let logEntry;
+  let nad, ns;
   db.exec('BEGIN TRANSACTION');
   try {
     logEntry = appendCallLog({
@@ -117,7 +113,7 @@ router.post('/:id/complete', (req, res) => {
       contact_name: contact_name || followUp.contact_name || null,
       role_title: role_title || null, email: email || null, industry: company.industry,
       action_type: 'Call', contact_type, notes: notes || null,
-      next_action, next_action_date, attempt_number: priorAttempts + 1,
+      next_action, next_action_date: null, attempt_number: priorAttempts + 1,
       logged_by: req.user.id, logged_by_name: req.user.name,
       referral_name: referral_name||null, referral_role: referral_role||null,
       referral_phone: referral_phone||null, referral_email: referral_email||null,
@@ -137,13 +133,13 @@ router.post('/:id/complete', (req, res) => {
       else if (cName) db.prepare(`INSERT INTO company_contacts (company_id,name,role_title,direct_line,email,is_preferred) VALUES (?,?,?,?,?,1)`).run(company.company_id,cName,role_title||null,direct_line||null,email||null);
     }
 
-    const { next_action_date: nad, nextStage: ns } = scheduleNextAction(db, {
+    ({ next_action_date: nad, nextStage: ns } = scheduleNextAction(db, {
       company, contact_type, next_action, next_action_date_override,
       contact_name: contact_name||followUp.contact_name||null,
       direct_line:  direct_line||followUp.direct_line||null,
       email:        email||null,
       log_id:       logEntry.id,
-    });
+    }));
     db.exec('COMMIT');
   } catch (e) {
     db.exec('ROLLBACK');
