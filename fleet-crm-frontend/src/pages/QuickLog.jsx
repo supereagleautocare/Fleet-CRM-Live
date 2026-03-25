@@ -96,7 +96,6 @@ export default function QuickLog() {
   function set(field, val) { setForm(f => ({...f, [field]: val})); }
 
   async function handleSave() {
-    if (actionMode === 'mail' && !form.mail_piece.trim()) { showToast('Enter the mail piece name', 'error'); return; }
         if (!form.contact_type) { showToast('Select what happened first', 'error'); return; }
     setSaving(true);
     try {
@@ -104,6 +103,7 @@ export default function QuickLog() {
         if (actionMode === 'mail') {
           await api.logMail(selected.id, {
             mail_piece: form.mail_piece,
+            contact_type: form.contact_type,
             notes: form.notes,
             next_action: form.next_action,
             next_action_date_override: form.show_date_override && form.next_action_date_override ? form.next_action_date_override : undefined,
