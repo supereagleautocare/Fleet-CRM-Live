@@ -31,14 +31,12 @@
   }
 
   .sidebar {
-    position: fixed;
-    top: 0;
-    left: -220px;
-    width: 220px;
-    height: 100vh;
-    z-index: 1200;
-    transition: left 0.3s ease;
-  }
+  position: fixed;
+  top: 0;
+  left: -75%;
+  width: 75%;
+  max-width: 260px;
+}
 
   .sidebar.open {
     left: 0;
