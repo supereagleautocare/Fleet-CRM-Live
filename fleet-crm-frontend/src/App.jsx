@@ -107,7 +107,8 @@ export default function App() {
             <div>Fleet CRM</div>
            </div>
            <Sidebar mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} />
-           <div className="main-content" onClick={() => mobileOpen && setMobileOpen(false)}>
+           {mobileOpen && <div className="mobile-backdrop" onClick={() => setMobileOpen(false)} />}
+           <div className="main-content">
               <Routes>
                 <Route path="/"             element={<Navigate to="/dashboard" />} />
                 <Route path="/active-fleet" element={<ActiveFleet />} />
