@@ -104,3 +104,35 @@
     min-height: 100%;
   }
 }
+
+@media (max-width: 900px) {
+  .call-modal-overlay {
+    position: fixed !important;
+    top: 56px !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    display: block !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    z-index: 10001 !important;
+  }
+
+  .call-modal {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: calc(100vh - 56px) !important;
+    height: auto !important;
+    max-height: none !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    overflow: visible !important;
+    display: block !important;
+  }
+
+  .call-modal * {
+    max-width: 100% !important;
+  }
+}
