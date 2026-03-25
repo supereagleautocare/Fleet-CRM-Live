@@ -466,3 +466,36 @@
     gap: 8px !important;
   }
 }
+@media (max-width: 900px) {
+  .table-card {
+    margin-top: 12px !important;
+    overflow: hidden !important;
+  }
+
+  .table-card-header {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 6px !important;
+  }
+
+  .table-card-title,
+  .table-card-count {
+    display: block !important;
+  }
+
+  .table-wrapper {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  .table-wrapper table {
+    min-width: 640px !important;
+  }
+
+  .table-wrapper th,
+  .table-wrapper td {
+    font-size: 12px !important;
+    vertical-align: top !important;
+  }
+}
