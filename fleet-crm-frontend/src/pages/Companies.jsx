@@ -57,7 +57,7 @@ function PipelineBar({ company, onMove, onStatusChange }) {
       <div style={{ fontSize:10, fontWeight:700, color:'var(--gray-400)', textTransform:'uppercase', letterSpacing:'.06em', marginBottom:8 }}>📊 Pipeline Stage</div>
       <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
         {/* Stage pills */}
-        <div style={{ display:'flex', gap:4, flex:1, flexWrap:'wrap' }}>
+        <div style={{ display:'flex', gap:4, flex:1, flexWrap:'wrap', alignItems:'center' }}>
           {STAGES.map(s => (
             <div key={s.key} style={{
               padding:'4px 10px', borderRadius:16, fontSize:12, fontWeight:700,
@@ -69,9 +69,6 @@ function PipelineBar({ company, onMove, onStatusChange }) {
               {s.icon} {s.label}
             </div>
           ))}
-        </div>
-        {/* Follow-up date + Company status */}
-        <div style={{ display:'flex', gap:6, flexShrink:0, alignItems:'center' }}>
           {(company.followup_due || company.follow_up?.due_date) && (() => {
             const due = company.followup_due || company.follow_up?.due_date;
             const isOverdue = new Date(due+'T00:00:00') < new Date();
@@ -86,6 +83,10 @@ function PipelineBar({ company, onMove, onStatusChange }) {
               </div>
             );
           })()}
+        </div>
+        {/* Follow-up date + Company status */}
+        <div style={{ display:'flex', gap:6, flexShrink:0, alignItems:'center' }}>
+  
           <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
             <div style={{ fontSize:9, fontWeight:700, color:'var(--gray-400)', textTransform:'uppercase', letterSpacing:'.06em' }}>Status</div>
             <select
