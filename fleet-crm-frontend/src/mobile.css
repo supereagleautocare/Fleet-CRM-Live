@@ -83,3 +83,64 @@
     left: 0 !important;
   }
 }
+@media (max-width: 900px) {
+  .call-modal-overlay {
+    padding: 0 !important;
+    align-items: stretch !important;
+    justify-content: stretch !important;
+  }
+
+  .call-modal {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: 100vh !important;
+    max-height: 100vh !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
+  }
+
+  .call-modal > div:first-child {
+    display: block !important;
+    width: 100% !important;
+  }
+
+  .call-modal input,
+  .call-modal textarea,
+  .call-modal select,
+  .call-modal button {
+    font-size: 16px !important;
+  }
+
+  .call-modal textarea {
+    min-height: 110px !important;
+  }
+
+  .call-modal [style*="grid-template-columns"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  .call-modal [style*="display: grid"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  .call-modal [style*="display:flex"] {
+    flex-wrap: wrap !important;
+  }
+
+  .call-modal [style*="display: flex"] {
+    flex-wrap: wrap !important;
+  }
+}
+@media (max-width: 900px) {
+  .call-modal {
+    grid-template-columns: 1fr !important;
+  }
+
+  .call-modal > div {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+}
