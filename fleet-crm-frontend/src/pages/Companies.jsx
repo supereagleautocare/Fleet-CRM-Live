@@ -70,49 +70,47 @@ function PipelineBar({ company, onMove, onStatusChange }) {
             </div>
           ))}
         </div>
-        {/* Follow-up date */}
-        {(company.followup_due || company.follow_up?.due_date) && (() => {
-          const due = company.followup_due || company.follow_up?.due_date;
-          const isOverdue = new Date(due+'T00:00:00') < new Date();
-          const isToday = due === new Date().toISOString().split('T')[0];
-          return (
-            <div style={{ fontSize:11, fontWeight:700, padding:'4px 10px', borderRadius:8,
-              background: isOverdue?'#fef2f2':isToday?'#fffbeb':'#f0fdf4',
-              color: isOverdue?'#dc2626':isToday?'#92400e':'#15803d',
-              border: `1px solid ${isOverdue?'#fca5a5':isToday?'#fde68a':'#bbf7d0'}`,
-              flexShrink:0,
-            }}>
-              📅 Due {isToday?'Today':isOverdue?'Overdue':new Date(due+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}
-            </div>
-          );
-        })()}
-        {/* Queue status + Company status */}
+        {/* Follow-up date + Company status */}
         <div style={{ display:'flex', gap:6, flexShrink:0, alignItems:'center' }}>
+          {(company.followup_due || company.follow_up?.due_date) && (() => {
+            const due = company.followup_due || company.follow_up?.due_date;
+            const isOverdue = new Date(due+'T00:00:00') < new Date();
+            const isToday = due === new Date().toISOString().split('T')[0];
+            return (
+              <div style={{ fontSize:11, fontWeight:700, padding:'4px 10px', borderRadius:8,
+                background: isOverdue?'#fef2f2':isToday?'#fffbeb':'#f0fdf4',
+                color: isOverdue?'#dc2626':isToday?'#92400e':'#15803d',
+                border: `1px solid ${isOverdue?'#fca5a5':isToday?'#fde68a':'#bbf7d0'}`,
+              }}>
+                📅 {isToday?'Due Today':isOverdue?'Overdue':new Date(due+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}
+              </div>
+            );
+          })()}
           <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
             <div style={{ fontSize:9, fontWeight:700, color:'var(--gray-400)', textTransform:'uppercase', letterSpacing:'.06em' }}>Status</div>
-          <select
-            value={company.company_status || 'prospect'}
-            onChange={e => onStatusChange(e.target.value)}
-            style={{
-              padding:'5px 10px', borderRadius:8, fontSize:12, fontWeight:700, cursor:'pointer',
-              border:`1.5px solid ${
-                company.company_status==='interested'?'#fde68a':
-                company.company_status==='customer'?'#bbf7d0':
-                company.company_status==='dead'?'#fca5a5':'#e2e8f0'}`,
-              background:
-                company.company_status==='interested'?'#fef9c3':
-                company.company_status==='customer'?'#f0fdf4':
-                company.company_status==='dead'?'#fef2f2':'#f8fafc',
-              color:
-                company.company_status==='interested'?'#92400e':
-                company.company_status==='customer'?'#166534':
-                company.company_status==='dead'?'#dc2626':'#64748b',
-            }}>
-            <option value="prospect">Prospect</option>
-            <option value="interested">⭐ Interested</option>
-            <option value="customer">✅ Customer</option>
-            <option value="dead">💀 Dead</option>
-          </select>
+            <select
+              value={company.company_status || 'prospect'}
+              onChange={e => onStatusChange(e.target.value)}
+              style={{
+                padding:'5px 10px', borderRadius:8, fontSize:12, fontWeight:700, cursor:'pointer',
+                border:`1.5px solid ${
+                  company.company_status==='interested'?'#fde68a':
+                  company.company_status==='customer'?'#bbf7d0':
+                  company.company_status==='dead'?'#fca5a5':'#e2e8f0'}`,
+                background:
+                  company.company_status==='interested'?'#fef9c3':
+                  company.company_status==='customer'?'#f0fdf4':
+                  company.company_status==='dead'?'#fef2f2':'#f8fafc',
+                color:
+                  company.company_status==='interested'?'#92400e':
+                  company.company_status==='customer'?'#166534':
+                  company.company_status==='dead'?'#dc2626':'#64748b',
+              }}>
+              <option value="prospect">Prospect</option>
+              <option value="interested">⭐ Interested</option>
+              <option value="customer">✅ Customer</option>
+              <option value="dead">💀 Dead</option>
+            </select>
           </div>
         </div>
       </div>
