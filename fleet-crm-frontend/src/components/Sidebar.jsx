@@ -1,17 +1,9 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '../App.jsx';
-import { useEffect } from 'react';
 
 export default function Sidebar({ open = false, onClose = () => {} }) {
   const { user, logout, counts } = useApp();
   const navigate = useNavigate();
-
-  useEffect(() => {
-    if (!open) return;
-    const handle = () => onClose();
-    window.addEventListener('click', handle);
-    return () => window.removeEventListener('click', handle);
-  }, [open]);
 
   const initials = user?.name?.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase() || '?';
 
