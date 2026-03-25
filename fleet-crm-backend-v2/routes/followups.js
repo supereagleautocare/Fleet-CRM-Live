@@ -151,11 +151,6 @@ router.post('/:id/complete', (req, res) => {
     if (next_action === 'Call' && next_action_date) {
       db.prepare(`INSERT INTO follow_ups (source_type,entity_id,company_id_str,entity_name,phone,direct_line,industry,contact_name,due_date,source_log_id) VALUES ('company',?,?,?,?,?,?,?,?,?)`)
         .run(company.id,company.company_id,company.name,followUp.phone||company.main_phone,direct_line||followUp.direct_line||null,company.industry,contact_name||followUp.contact_name||null,next_action_date,logEntry.id);
-      const existingCQ = db.prepare("SELECT id FROM calling_queue WHERE queue_type='company' AND entity_id=?").get(company.id);
-      if (!existingCQ) {
-        db.prepare(`INSERT INTO calling_queue (queue_type,entity_id,contact_name,direct_line,notes,added_by) VALUES ('company',?,?,?,?,?)`)
-          .run(company.id,contact_name||followUp.contact_name||null,direct_line||followUp.direct_line||null,notes||null,req.user?.id||null);
-      }
     } else if (next_action === 'Visit' && next_action_date) {
       const pref = db.prepare('SELECT * FROM company_contacts WHERE company_id=? AND is_preferred=1').get(company.company_id);
       db.prepare(`INSERT INTO visit_queue (company_id,entity_id,entity_name,scheduled_date,address,city,contact_name,direct_line,email,source_log_id) VALUES (?,?,?,?,?,?,?,?,?,?)`)
