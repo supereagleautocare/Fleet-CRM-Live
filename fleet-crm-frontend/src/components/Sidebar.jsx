@@ -1,14 +1,14 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '../App.jsx';
 
-export default function Sidebar({ open = false, onClose = () => {} }) {
+export default function Sidebar({ mobileOpen = false, setMobileOpen = () => {} }) {
   const { user, logout, counts } = useApp();
   const navigate = useNavigate();
 
   const initials = user?.name?.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase() || '?';
 
   return (
-    <aside className={`sidebar ${open ? 'open' : ''}`}>
+    <aside className={`sidebar ${mobileOpen ? 'open' : ''}`}>
       <div className="sidebar-logo">
         <div className="eagle">🦅</div>
         <div className="brand">Super Eagle</div>
@@ -23,14 +23,14 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
 </nav>
       <div className="sidebar-section-label">Overview</div>
       <nav className="sidebar-nav">
-        <NavLink to="/dashboard" onClick={onClose} className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
+        <NavLink to="/dashboard" onClick={() => setMobileOpen(false)} className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
           <span className="icon">📊</span> Pipeline
         </NavLink>
       </nav>
 
       <div className="sidebar-section-label">Queues</div>
       <nav className="sidebar-nav">
-        <NavLink to="/calling" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
+        <NavLink to="/calling" onClick={() => setMobileOpen(false)} className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
           <span className="icon">📞</span> Calling
           {counts.calling > 0 && <span className="nav-badge">{counts.calling}</span>}
         </NavLink>
