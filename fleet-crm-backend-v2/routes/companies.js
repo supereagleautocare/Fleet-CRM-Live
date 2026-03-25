@@ -453,7 +453,6 @@ router.post('/queue/:queueId/complete', (req, res) => {
     message: 'Call logged successfully.',
     log_id: logEntry.id,
     next_action,
-    next_action_date: null,
     attempt_number: priorAttempts + 1,
   });
 });
