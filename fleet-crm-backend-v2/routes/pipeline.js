@@ -19,7 +19,7 @@
 const express = require('express');
 const db      = require('../db/schema');
 const { requireAuth } = require('../middleware/auth');
-const { appendCallLog, cancelOldFollowUps, calcFollowUpDate, clearAllCompanyQueues } = require('./shared');
+const { appendCallLog, cancelOldFollowUps, calcFollowUpDate, clearAllCompanyQueues, scheduleNextAction } = require('./shared');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -371,7 +371,7 @@ router.post('/log-mail/:id', (req, res) => {
     "SELECT COUNT(*) as cnt FROM call_log WHERE entity_id = ? AND log_type = 'company' AND log_category = 'mail'"
   ).get(company.id).cnt;
 
-  const next_action_date = next_action_date_override || calcFollowUpDate('company', contact_type, 'mail');
+  // date calculated inside scheduleNextAction
 
   db.exec('BEGIN TRANSACTION');
   try {
@@ -386,7 +386,7 @@ router.post('/log-mail/:id', (req, res) => {
       contact_type: contact_type || 'Mail Sent',
       notes: notes || null,
       next_action: next_action || 'Call',
-      next_action_date,
+      next_action_date: null,
       attempt_number: priorAttempts + 1,
       logged_by: req.user.id,
       logged_by_name: req.user.name,
@@ -395,44 +395,11 @@ router.post('/log-mail/:id', (req, res) => {
       counts_as_attempt: 0,
     });
 
-    moveCompany(company.id, 'mail', req.user.id, req.user.name, `Mailed: ${mail_piece || 'piece'}`);
-    clearAllCompanyQueues(company.id);
-
-    if (next_action && next_action !== 'Stop') {
-      const nextStage = next_action === 'Mail' ? 'mail' : next_action === 'Visit' ? 'visit' : next_action === 'Email' ? 'email' : 'call';
-      db.prepare(`
-        INSERT INTO follow_ups (source_type, entity_id, entity_name, phone, industry, due_date, next_action)
-        VALUES ('company', ?, ?, ?, ?, ?, ?)
-      `).run(company.id, company.name, company.main_phone, company.industry, next_action_date, next_action);
-
-      if (next_action !== 'Mail') {
-        db.prepare(`UPDATE companies SET pipeline_stage=?, stage_updated_at=datetime('now'), updated_at=datetime('now') WHERE id=?`).run(nextStage, company.id);
-      }
-      // When next action is Visit, insert into visit_queue for Route Planner
-      if (next_action === 'Visit' && next_action_date) {
-        const preferred = db.prepare('SELECT * FROM company_contacts WHERE company_id=? AND is_preferred=1').get(company.company_id);
-        db.prepare('INSERT INTO visit_queue (company_id,entity_id,entity_name,scheduled_date,address,city,contact_name,direct_line,email) VALUES (?,?,?,?,?,?,?,?,?)')
-          .run(company.company_id, company.id, company.name, next_action_date, company.address, company.city,
-               preferred?.name||null, preferred?.direct_line||null, preferred?.email||null);
-      }
-      // When next action is Call, also insert into calling_queue for immediate visibility
-      if (next_action === 'Call') {
-        clearAllCompanyQueues(company.id);
-        const preferred = db.prepare(
-          "SELECT * FROM company_contacts WHERE company_id = ? AND is_preferred = 1"
-        ).get(company.company_id);
-        const existingCQ = db.prepare("SELECT id FROM calling_queue WHERE queue_type='company' AND entity_id=?").get(company.id);
-        if (!existingCQ) {
-          db.prepare(`INSERT INTO calling_queue (queue_type, entity_id, contact_name, direct_line, notes, added_by)
-            VALUES ('company', ?, ?, ?, ?, ?)`).run(
-            company.id,
-            preferred?.name || null,
-            preferred?.direct_line || null,
-            null, req.user?.id || null
-          );
-        }
-      }
-    }
+    scheduleNextAction(db, {
+      company, contact_type: contact_type||'Mail Sent', next_action: next_action||'Call',
+      next_action_date_override,
+      contact_name: null, direct_line: null, email: null, log_id: logEntry.id,
+    });
 
     db.exec('COMMIT');
   } catch (e) {
@@ -454,7 +421,7 @@ router.post('/log-email/:id', (req, res) => {
     "SELECT COUNT(*) as cnt FROM call_log WHERE entity_id = ? AND log_type = 'company' AND log_category = 'email'"
   ).get(company.id).cnt;
 
-  const next_action_date = next_action_date_override || calcFollowUpDate('company', contact_type, 'email');
+  // date calculated inside scheduleNextAction
 
   db.exec('BEGIN TRANSACTION');
   try {
@@ -469,7 +436,7 @@ router.post('/log-email/:id', (req, res) => {
       contact_type: contact_type || 'Email Sent',
       notes: notes || null,
       next_action: next_action || 'Call',
-      next_action_date,
+      next_action_date: null,
       attempt_number: priorAttempts + 1,
       logged_by: req.user.id,
       logged_by_name: req.user.name,
@@ -479,37 +446,11 @@ router.post('/log-email/:id', (req, res) => {
       counts_as_attempt: 0,
     });
 
-    moveCompany(company.id, 'email', req.user.id, req.user.name, `Emailed: ${email_template || ''}`);
-    clearAllCompanyQueues(company.id);
-
-    if (next_action && next_action !== 'Stop') {
-      const nextStage = next_action === 'Mail' ? 'mail' : next_action === 'Visit' ? 'visit' : next_action === 'Email' ? 'email' : 'call';
-      db.prepare(`
-        INSERT INTO follow_ups (source_type, entity_id, entity_name, phone, industry, due_date, next_action)
-        VALUES ('company', ?, ?, ?, ?, ?, ?)
-      `).run(company.id, company.name, company.main_phone, company.industry, next_action_date, next_action);
-
-      if (next_action !== 'Email') {
-        db.prepare(`UPDATE companies SET pipeline_stage=?, stage_updated_at=datetime('now'), updated_at=datetime('now') WHERE id=?`).run(nextStage, company.id);
-      }
-      // When next action is Call, also insert into calling_queue for immediate visibility
-      if (next_action === 'Call') {
-        clearAllCompanyQueues(company.id);
-        const preferred = db.prepare(
-          "SELECT * FROM company_contacts WHERE company_id = ? AND is_preferred = 1"
-        ).get(company.company_id);
-        const existingCQ = db.prepare("SELECT id FROM calling_queue WHERE queue_type='company' AND entity_id=?").get(company.id);
-        if (!existingCQ) {
-          db.prepare(`INSERT INTO calling_queue (queue_type, entity_id, contact_name, direct_line, notes, added_by)
-            VALUES ('company', ?, ?, ?, ?, ?)`).run(
-            company.id,
-            preferred?.name || null,
-            preferred?.direct_line || null,
-            null, req.user?.id || null
-          );
-        }
-      }
-    }
+    scheduleNextAction(db, {
+      company, contact_type: contact_type||'Email Sent', next_action: next_action||'Call',
+      next_action_date_override,
+      contact_name: null, direct_line: null, email: null, log_id: logEntry.id,
+    });
 
     db.exec('COMMIT');
   } catch (e) {
