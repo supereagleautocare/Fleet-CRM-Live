@@ -238,16 +238,11 @@ router.post('/:id/complete', (req, res) => {
       );
     } else if (next_action === 'Mail') {
       clearAllCompanyQueues(company.id);
-      // Add to calling_queue as a mail entry
-      const existingMail = db.prepare("SELECT id FROM calling_queue WHERE queue_type='mail' AND entity_id=?").get(company.id);
-      if (!existingMail) {
-        db.prepare(`INSERT INTO calling_queue (queue_type, entity_id, contact_name, direct_line, notes, added_by)
-          VALUES ('mail', ?, ?, ?, ?, ?)`).run(company.id,
-          contact_name || visit.contact_name || null,
-          direct_line  || visit.direct_line  || null,
-          notes || null, req.user?.id || null);
-      }
-      // Move pipeline stage
+      const mailDate = next_action_date_override || calcFollowUpDate('company', contact_type, 'mail');
+      db.prepare(`INSERT INTO follow_ups (source_type,entity_id,company_id_str,entity_name,phone,direct_line,industry,contact_name,due_date,source_log_id,next_action) VALUES ('company',?,?,?,?,?,?,?,?,?,'Mail')`)
+        .run(company.id,company.company_id,company.name,company.main_phone,
+             direct_line||visit.direct_line||null,company.industry,
+             contact_name||visit.contact_name||null,mailDate,logEntry.id);
       db.prepare("UPDATE companies SET pipeline_stage='mail', stage_updated_at=datetime('now'), updated_at=datetime('now') WHERE id=?").run(company.id);
     } else if (next_action === 'Email') {
       clearAllCompanyQueues(company.id);
