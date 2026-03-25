@@ -25,7 +25,8 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [toast, setToast]     = useState(null);
   const [counts, setCounts]   = useState({ calling: 0, mail: 0, email: 0, visits: 0 });
-
+  const [mobileOpen, setMobileOpen] = useState(false);
+  
   function showToast(msg, type = 'success') {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3500);
@@ -99,8 +100,14 @@ export default function App() {
           </Routes>
         ) : (
           <div className="app-layout">
-            <Sidebar />
-            <div className="main-content">
+           <div className="mobile-topbar">
+             <div className="mobile-menu-btn" onClick={() => setMobileOpen(!mobileOpen)}>
+              ☰
+            </div>
+            <div>Fleet CRM</div>
+           </div>
+           <Sidebar mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} />
+           <div className="main-content">
               <Routes>
                 <Route path="/"             element={<Navigate to="/dashboard" />} />
                 <Route path="/active-fleet" element={<ActiveFleet />} />
