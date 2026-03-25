@@ -390,9 +390,9 @@ export default function QuickLog() {
                 <div style={{ fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'.07em', color:'var(--gray-400)', marginBottom:10 }}>Next Action</div>
                 <div className="next-action-group" style={{ marginBottom:14 }}>
                   <button type="button" className={`action-btn${form.next_action==='Call'?' selected-call':''}`} onClick={()=>set('next_action','Call')}>📞 Call</button>
-                  {isCompany && <button type="button" className={`action-btn${form.next_action==='Visit'?' selected-visit':''}`} onClick={()=>set('next_action','Visit')}>📍 Visit</button>}
                   <button type="button" className={`action-btn${form.next_action==='Mail'?' selected-call':''}`} onClick={()=>set('next_action','Mail')}>✉️ Mail</button>
                   <button type="button" className={`action-btn${form.next_action==='Email'?' selected-call':''}`} onClick={()=>set('next_action','Email')}>📧 Email</button>
+                  {isCompany && <button type="button" className={`action-btn${form.next_action==='Visit'?' selected-visit':''}`} onClick={()=>set('next_action','Visit')}>📍 Visit</button>}
                   <button type="button" className={`action-btn${form.next_action==='Stop'?' selected-stop':''}`} onClick={()=>set('next_action','Stop')}>🚫 Stop</button>
                 </div>
 
