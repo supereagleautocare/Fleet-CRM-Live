@@ -181,7 +181,7 @@ export default function CallingQueue() {
                     <th>#</th>
                     <th>Company</th>
                     <th>Phone</th>
-                    <th>Industry</th>
+                    <th>Follow-up</th>
                     <th>Contacts</th>
                     <th>Preferred Contact</th>
                     <th>Due</th>
@@ -213,7 +213,7 @@ export default function CallingQueue() {
                           >{row.name}</div>
                         </td>
                         <td><span className="phone-num">{fmtPhone(row.main_phone)}</span></td>
-                        <td>{row.industry?<span className="badge badge-gray">{row.industry}</span>:'—'}</td>
+                        <td>{row.due_date ? (dueDateStatus(row.due_date)==='overdue' ? <span className="badge badge-overdue">Overdue</span> : dueDateStatus(row.due_date)==='today' ? <span className="badge badge-today">Today</span> : <span style={{ fontSize:12, color:'var(--gray-500)' }}>{fmtDate(row.due_date)}</span>) : <span style={{ fontSize:11, color:'var(--gray-300)' }}>—</span>}</td>
                         <td>
                           {(!row.call_count || row.call_count === 0)
                             ? <div style={{ fontSize:11, color:'var(--navy-600)', fontWeight:600 }}>First Time</div>
