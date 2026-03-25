@@ -15,8 +15,6 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
 
   const initials = user?.name?.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase() || '?';
 
-  const initials = user?.name?.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase() || '?';
-
   return (
     <aside className={`sidebar ${open ? 'open' : ''}`}>
       <div className="sidebar-logo">
