@@ -130,7 +130,7 @@ export default function EmailQueue() {
                           >
                            {row.name}
                           </div>
-                        </td> 
+                          </td> 
                         
                         <td><span className="phone-num">{fmtPhone(row.main_phone)}</span></td>
                         <td>{row.industry?<span className="badge badge-gray">{row.industry}</span>:'—'}</td>
