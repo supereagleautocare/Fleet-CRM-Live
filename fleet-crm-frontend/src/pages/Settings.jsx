@@ -101,8 +101,8 @@ export default function Settings() {
   const qColors = { call:'#1e40af', mail:'#065f46', email:'#6b21a8', visit:'#92400e' };
   const qBgs    = { call:'#eff6ff', mail:'#f0fdf4', email:'#faf5ff', visit:'#fff7ed' };
   const defDays = { call:3, mail:30, email:14, visit:3 };
-  const dKeys   = { call:null, mail:'mail_followup_days', email:'email_followup_days', visit:'visit_delay_days' };
-  const dDefs   = { mail:'30', email:'14', visit:'3' };
+  const dKeys   = { call:'call_followup_days', mail:'mail_followup_days', email:'email_followup_days', visit:'visit_delay_days' };
+  const dDefs   = { call:'3', mail:'30', email:'14', visit:'3' };
 
   return (
     <>
