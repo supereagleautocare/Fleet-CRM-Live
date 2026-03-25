@@ -11,7 +11,7 @@
 const express = require('express');
 const db      = require('../db/schema');
 const { requireAuth } = require('../middleware/auth');
-const { calcFollowUpDate, calcVisitDate, appendCallLog, cancelOldFollowUps } = require('./shared');
+const { calcFollowUpDate, appendCallLog, cancelOldFollowUps } = require('./shared');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -105,10 +105,10 @@ router.post('/company/:id', (req, res) => {
   ).get(company.id).cnt;
 
   let next_action_date = null;
-  if (next_action === 'Call')  next_action_date = next_action_date_override || calcFollowUpDate('company', contact_type);
-  if (next_action === 'Visit') next_action_date = next_action_date_override || calcVisitDate();
-  if (next_action === 'Mail')  next_action_date = next_action_date_override || calcFollowUpDate('company', 'Mail');
-  if (next_action === 'Email') next_action_date = next_action_date_override || calcFollowUpDate('company', 'Email');
+  if (next_action === 'Call')  next_action_date = next_action_date_override || calcFollowUpDate('company', contact_type, 'call');
+  if (next_action === 'Visit') next_action_date = next_action_date_override || calcFollowUpDate('company', contact_type, 'visit');
+  if (next_action === 'Mail')  next_action_date = next_action_date_override || calcFollowUpDate('company', contact_type, 'mail');
+  if (next_action === 'Email') next_action_date = next_action_date_override || calcFollowUpDate('company', contact_type, 'email');
 
   const nextStage = next_action === 'Stop'  ? 'dead'
     : next_action === 'Visit' ? 'visit'
