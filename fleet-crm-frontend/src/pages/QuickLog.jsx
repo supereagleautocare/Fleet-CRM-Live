@@ -165,9 +165,9 @@ export default function QuickLog() {
   };
 
   const callTypes  = getTypes('call',  DEFAULT_COMPANY_TYPES);
-  const mailTypes  = getTypes('mail',  ['Mail Sent']);
-  const emailTypes = getTypes('email', ['Email Sent']);
-  const visitTypes = getTypes('visit', ['Drop In', 'Spoke To Decision Maker', 'Left Materials', 'No One Available']);
+  const mailTypes  = getTypes('mail',  []);
+  const emailTypes = getTypes('email', []);
+  const visitTypes = getTypes('visit', []);
 
   const types = actionMode === 'mail'  ? mailTypes
               : actionMode === 'email' ? emailTypes
