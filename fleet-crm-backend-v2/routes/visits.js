@@ -124,9 +124,10 @@ router.post('/:id/complete', (req, res) => {
     "SELECT COUNT(*) as cnt FROM call_log WHERE entity_id = ? AND log_type = 'company'"
   ).get(company.id).cnt;
 
-  // next_action_date and nextStage calculated inside scheduleNextAction
+// next_action_date and nextStage handled inside scheduleNextAction after appendCallLog
 
   let logEntry;
+  let nad;
 
   db.exec('BEGIN TRANSACTION');
   try {
@@ -145,7 +146,7 @@ router.post('/:id/complete', (req, res) => {
       contact_type,
       notes: notes || null,
       next_action,
-      next_action_date,
+      next_action_date: null,
       attempt_number: priorAttempts + 1,
       logged_by: req.user.id,
       logged_by_name: req.user.name,
@@ -180,13 +181,13 @@ router.post('/:id/complete', (req, res) => {
     db.prepare('DELETE FROM visit_queue WHERE id = ?').run(visit.id);
 
     // Schedule next action — single source of truth
-    const { next_action_date: nad, nextStage: ns } = scheduleNextAction(db, {
+    ({ next_action_date: nad } = scheduleNextAction(db, {
       company, contact_type, next_action, next_action_date_override,
       contact_name: contact_name||visit.contact_name||null,
       direct_line:  direct_line||visit.direct_line||null,
       email:        email||visit.email||null,
       log_id:       logEntry.id,
-    });
+    }));
 
     db.exec('COMMIT');
   } catch (e) {
@@ -202,7 +203,7 @@ router.post('/:id/complete', (req, res) => {
   });
 });
 
-module.exports = router;
+
 
 // POST /api/visits/schedule — add a company directly to visit queue (used by route planner)
 // Does NOT check calling_queue — always works, deduplicates by entity_id
@@ -241,4 +242,6 @@ router.get('/queue-status/:company_id', (req, res) => {
     inVisit: !!inVisit,
     followupDate: fu?.due_date || null,
   });
+  
 });
+module.exports = router;
