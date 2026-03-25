@@ -43,7 +43,7 @@ function calcFollowUpDate(source, contact_type, action_type) {
   if (action_type === 'mail')  return addDays(parseInt(getSetting('mail_followup_days',  '30'), 10));
   if (action_type === 'email') return addDays(parseInt(getSetting('email_followup_days', '14'), 10));
   if (action_type === 'visit') return addDays(parseInt(getSetting('visit_delay_days',    '3'),  10));
-  return addDays(3); // call default
+  return addDays(parseInt(getSetting('call_followup_days', '3'), 10));
 }
 
 // ─── Calculate visit date ─────────────────────────────────────────────────────
