@@ -49,7 +49,7 @@ export default function QuickLog() {
   }
 
   useEffect(() => {
-    api.contactTypes().then(ct => setContactTypes(ct.all || [])).catch(()=>{});
+    api.contactTypes().then(ct => setContactTypes(ct.configured || [])).catch(()=>{});
     api.scorecardEnabled().then(r => setScorecardEnabled(r.enabled)).catch(()=>{});
     api.settings().then(s => {
       const obj = Array.isArray(s) ? Object.fromEntries(s.map(x=>[x.key,x.value])) : s;
@@ -159,24 +159,20 @@ export default function QuickLog() {
     setTimeout(() => searchRef.current?.focus(), 100);
   }
 
-  const allTypes = contactTypes.length > 0
-    ? ['Drop In', ...contactTypes.filter(t => t !== 'Drop In')]
-    : DEFAULT_COMPANY_TYPES;
+  const getTypes = (actionKey, fallback) => {
+    const fromSettings = contactTypes.filter(ct => ct.action_type === actionKey && ct.enabled !== 0).map(ct => ct.contact_type);
+    return fromSettings.length > 0 ? fromSettings : fallback;
+  };
 
-  // Show relevant contact types per action mode
-  // For mail/email/visit, show a curated subset; fall back to full list if empty
-  const MAIL_DEFAULTS  = ['Mail Sent'];
-  const EMAIL_DEFAULTS = ['Email Sent'];
-  const VISIT_DEFAULTS = ['Drop In', 'Spoke To', 'Spoke To Decision Maker', 'Left Materials', 'No One Available'];
-  const mailTypes  = allTypes.filter(t => t.toLowerCase().includes('mail')) .length ? allTypes.filter(t => t.toLowerCase().includes('mail'))  : MAIL_DEFAULTS;
-  const emailTypes = allTypes.filter(t => t.toLowerCase().includes('email')).length ? allTypes.filter(t => t.toLowerCase().includes('email')) : EMAIL_DEFAULTS;
-  const visitTypes = allTypes.filter(t => ['drop in','visited','spoke to','left ','no one'].some(k => t.toLowerCase().includes(k))).length
-                   ? allTypes.filter(t => ['drop in','visited','spoke to','left ','no one'].some(k => t.toLowerCase().includes(k)))
-                   : VISIT_DEFAULTS;
+  const callTypes  = getTypes('call',  DEFAULT_COMPANY_TYPES);
+  const mailTypes  = getTypes('mail',  ['Mail Sent']);
+  const emailTypes = getTypes('email', ['Email Sent']);
+  const visitTypes = getTypes('visit', ['Drop In', 'Spoke To Decision Maker', 'Left Materials', 'No One Available']);
+
   const types = actionMode === 'mail'  ? mailTypes
               : actionMode === 'email' ? emailTypes
               : actionMode === 'visit' ? visitTypes
-              : allTypes;
+              : callTypes;
 
   const isCompany = true;
 
