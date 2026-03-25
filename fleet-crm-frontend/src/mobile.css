@@ -161,3 +161,41 @@
     white-space: normal !important;
   }
 }
+@media (max-width: 900px) {
+  .page-body {
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  .page-body > div {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  [style*="grid-template-columns"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  [style*="display: grid"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  input,
+  select,
+  button {
+    max-width: 100% !important;
+  }
+
+  .table-card {
+    overflow: hidden !important;
+  }
+
+  .leaflet-container,
+  .mapboxgl-map,
+  .map-container {
+    width: 100% !important;
+    height: 260px !important;
+    min-height: 260px !important;
+  }
+}
