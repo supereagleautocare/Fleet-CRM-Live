@@ -823,7 +823,7 @@ export default function RoutePlanner({ embedded = false }) {
                           </div>
                           {/* Direct Log + Cancel without building a route */}
                           <div style={{display:'flex',gap:4,marginTop:6,alignItems:'center'}} onClick={e=>e.stopPropagation()}>
-                            <RowActions isStarred={!!v.is_starred} onStar={async()=>{ await api.pipelineStar(v.entity_id); const d=await api.visitsAll(); setVisits(d); }} onMove={()=>setMovingId(v.entity_id)} />
+                            <RowActions companyStatus={v.company_status || 'prospect'} onStatusChange={async status => { await api.updateCompanyStatus(v.entity_id, status); const d = await api.visitsAll(); setVisits(d); }} onMove={() => setMovingId(v.entity_id)} />
                             <button className="btn btn-sm btn-primary" style={{flex:1,fontSize:10,padding:'3px 0'}}
                               onClick={()=>{ setLogForm({ contact_type:'', notes:'', contact_name:'', direct_line:'', next_action:'Call', next_action_date_override:'' }); setLoggingStop(v.id); }}>
                               ✅ Log Visit
