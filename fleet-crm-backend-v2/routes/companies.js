@@ -462,13 +462,7 @@ router.post('/queue/:queueId/complete', (req, res) => {
       `).run(company.id, company.company_id, company.name, company.main_phone,
              direct_line || null, company.industry, contact_name || null,
              next_action_date, logEntry.id);
-      // Also add to calling_queue so company surfaces immediately regardless of due date
-      const existingCQ2 = db.prepare("SELECT id FROM calling_queue WHERE queue_type='company' AND entity_id=?").get(company.id);
-      if (!existingCQ2) {
-        db.prepare(`INSERT INTO calling_queue (queue_type, entity_id, contact_name, direct_line, notes, added_by)
-          VALUES ('company', ?, ?, ?, ?, ?)`).run(company.id, contact_name||null, direct_line||null, notes||null, req.user?.id||null);
-      }
-
+    
     } else if (next_action === 'Visit' && next_action_date) {
       const preferred = db.prepare(
         'SELECT * FROM company_contacts WHERE company_id = ? AND is_preferred = 1'
