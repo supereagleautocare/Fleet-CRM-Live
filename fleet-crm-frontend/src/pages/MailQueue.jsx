@@ -181,20 +181,7 @@ export default function MailQueue() {
                   }
                   {pieces.length === 0 && <div style={{ fontSize:11, color:'var(--gray-400)', marginTop:3 }}>Add mail pieces in Settings to use a dropdown</div>}
                 </div>
-                {contactTypes.length > 0 && (
-                  <div>
-                    <div style={{ fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'.07em', color:'var(--gray-400)', marginBottom:8 }}>What Happened?</div>
-                    <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
-                      {contactTypes.map(t => (
-                        <button key={t} type="button"
-                          onClick={() => set('contact_type', t)}
-                          style={{ padding:'5px 11px', borderRadius:7, border:`1.5px solid ${form.contact_type===t?'var(--navy-700)':'var(--gray-200)'}`, background:form.contact_type===t?'var(--navy-800)':'white', color:form.contact_type===t?'white':'var(--gray-700)', fontSize:12, fontWeight:600, cursor:'pointer' }}>
-                          {t}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                
                 {contactTypes.length > 0 && (
                   <div>
                     <div style={{ fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'.07em', color:'var(--gray-400)', marginBottom:8 }}>What Happened?</div>
