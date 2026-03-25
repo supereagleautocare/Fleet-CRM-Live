@@ -65,7 +65,6 @@
     overflow-y: auto;
     margin-left: 0 !important;
     transform: none !important;
-    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
   }
 
   .sidebar:not(.open) {
@@ -77,6 +76,7 @@
   }
 }
 @media (max-width: 900px) {
+
   .call-modal-overlay {
     position: fixed !important;
     top: 56px !important;
@@ -87,6 +87,18 @@
     display: block !important;
     z-index: 10001 !important;
   }
+
+  .mobile-backdrop {
+    position: fixed;
+    top: 56px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 9998;
+  }
+
+}
 
   .call-modal {
     width: 100% !important;
