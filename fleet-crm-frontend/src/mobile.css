@@ -137,3 +137,32 @@
     overflow: visible !important;
   }
 }
+@media (max-width: 900px) {
+  .page-header {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+  }
+
+  .page-header > * {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .page-header select,
+  .page-header input,
+  .page-header button {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+}
+@media (max-width: 900px) {
+  .page-header {
+    font-size: 12px !important;
+  }
+
+  .page-header * {
+    white-space: normal !important;
+  }
+}
