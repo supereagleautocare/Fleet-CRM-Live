@@ -378,7 +378,7 @@ router.post('/queue/:queueId/complete', (req, res) => {
 
   let next_action_date = null;
   if (next_action === 'Call')  next_action_date = next_action_date_override || calcFollowUpDate('company', contact_type, 'call');
-  if (next_action === 'Visit') next_action_date = next_action_date_override || calcVisitDate();
+  if (next_action === 'Visit') next_action_date = next_action_date_override || calcFollowUpDate('company', contact_type, 'visit');
 
   const nextStage = next_action === 'Stop'  ? 'dead'
     : next_action === 'Visit' ? 'visit'
