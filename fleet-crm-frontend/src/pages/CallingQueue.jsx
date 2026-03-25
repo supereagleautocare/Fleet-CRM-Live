@@ -345,6 +345,6 @@ export default function CallingQueue() {
           onSaved={()=>{ setPendingScorecard(null); setManualScorecard(false); showToast('✅ Scorecard saved'); }}
         />
       )}
-    </>
+    </div>
   );
 }
