@@ -12,7 +12,7 @@
 const express = require('express');
 const db      = require('../db/schema');
 const { requireAuth } = require('../middleware/auth');
-const { getNextCompanyId, calcFollowUpDate, calcVisitDate, appendCallLog, cancelOldFollowUps, clearAllCompanyQueues } = require('./shared');
+const { getNextCompanyId, appendCallLog, cancelOldFollowUps, clearAllCompanyQueues, scheduleNextAction } = require('./shared');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -376,16 +376,6 @@ router.post('/queue/:queueId/complete', (req, res) => {
     "SELECT COUNT(*) as cnt FROM call_log WHERE entity_id = ? AND log_type = 'company'"
   ).get(company.id).cnt;
 
-  let next_action_date = null;
-  if (next_action === 'Call')  next_action_date = next_action_date_override || calcFollowUpDate('company', contact_type, 'call');
-  if (next_action === 'Visit') next_action_date = next_action_date_override || calcFollowUpDate('company', contact_type, 'visit');
-
-  const nextStage = next_action === 'Stop'  ? 'dead'
-    : next_action === 'Visit' ? 'visit'
-    : next_action === 'Mail'  ? 'mail'
-    : next_action === 'Email' ? 'email'
-    : 'call';
-
   let logEntry;
 
   db.exec('BEGIN TRANSACTION');
@@ -405,7 +395,7 @@ router.post('/queue/:queueId/complete', (req, res) => {
       contact_type,
       notes: notes || null,
       next_action,
-      next_action_date,
+      next_action_date: null,
       attempt_number: priorAttempts + 1,
       logged_by: req.user.id,
       logged_by_name: req.user.name,
@@ -431,85 +421,27 @@ router.post('/queue/:queueId/complete', (req, res) => {
     // Save as preferred contact if requested
     if (set_as_preferred && contact_name) {
       db.prepare('UPDATE company_contacts SET is_preferred = 0 WHERE company_id = ?').run(company.company_id);
-      const existingContact = db.prepare(
-        'SELECT id FROM company_contacts WHERE company_id = ? AND name = ?'
-      ).get(company.company_id, contact_name);
-
+      const existingContact = db.prepare('SELECT id FROM company_contacts WHERE company_id = ? AND name = ?').get(company.company_id, contact_name);
       if (existingContact) {
-        db.prepare(`
-          UPDATE company_contacts SET is_preferred = 1,
-            direct_line = COALESCE(?, direct_line),
-            email = COALESCE(?, email),
-            role_title = COALESCE(?, role_title),
-            updated_at = datetime('now')
-          WHERE id = ?
-        `).run(direct_line || null, email || null, role_title || null, existingContact.id);
+        db.prepare(`UPDATE company_contacts SET is_preferred = 1, direct_line = COALESCE(?, direct_line), email = COALESCE(?, email), role_title = COALESCE(?, role_title), updated_at = datetime('now') WHERE id = ?`)
+          .run(direct_line || null, email || null, role_title || null, existingContact.id);
       } else {
-        db.prepare(`
-          INSERT INTO company_contacts (company_id, name, role_title, direct_line, email, is_preferred)
-          VALUES (?, ?, ?, ?, ?, 1)
-        `).run(company.company_id, contact_name, role_title || null, direct_line || null, email || null);
+        db.prepare(`INSERT INTO company_contacts (company_id, name, role_title, direct_line, email, is_preferred) VALUES (?, ?, ?, ?, ?, 1)`)
+          .run(company.company_id, contact_name, role_title || null, direct_line || null, email || null);
       }
     }
 
-    // Create next action
-    if (next_action === 'Call' && next_action_date) {
-      cancelOldFollowUps('company', company.id);
-      db.prepare(`
-        INSERT INTO follow_ups
-          (source_type, entity_id, company_id_str, entity_name, phone, direct_line, industry, contact_name, due_date, source_log_id)
-        VALUES ('company', ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(company.id, company.company_id, company.name, company.main_phone,
-             direct_line || null, company.industry, contact_name || null,
-             next_action_date, logEntry.id);
-    
-    } else if (next_action === 'Visit' && next_action_date) {
-      const preferred = db.prepare(
-        'SELECT * FROM company_contacts WHERE company_id = ? AND is_preferred = 1'
-      ).get(company.company_id);
-
-      db.prepare(`
-        INSERT INTO visit_queue
-          (company_id, entity_id, entity_name, scheduled_date, address, city, contact_name, direct_line, email, source_log_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        company.company_id, company.id, company.name, next_action_date,
-        company.address, company.city,
-        contact_name || preferred?.name || null,
-        direct_line  || preferred?.direct_line || null,
-        email        || preferred?.email || null,
-        logEntry.id
-      );
-   } else if (next_action === 'Mail') {
-      cancelOldFollowUps('company', company.id);
-      const mailDate = next_action_date_override || calcFollowUpDate('company', contact_type, 'mail');
-      db.prepare(`
-        INSERT INTO follow_ups
-          (source_type, entity_id, company_id_str, entity_name, phone, direct_line, industry, contact_name, due_date, source_log_id, next_action)
-        VALUES ('company', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Mail')
-      `).run(company.id, company.company_id, company.name, company.main_phone,
-             direct_line || null, company.industry, contact_name || null, mailDate, logEntry.id);
-
-    } else if (next_action === 'Email') {
-      cancelOldFollowUps('company', company.id);
-      const emailDate = next_action_date_override || calcFollowUpDate('company', contact_type, 'email');
-      db.prepare(`
-        INSERT INTO follow_ups
-          (source_type, entity_id, company_id_str, entity_name, phone, direct_line, industry, contact_name, due_date, source_log_id, next_action)
-        VALUES ('company', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Email')
-      `).run(company.id, company.company_id, company.name, company.main_phone,
-             direct_line || null, company.industry, contact_name || null, emailDate, logEntry.id);
-
-    } else if (next_action === 'Stop') {
-      cancelOldFollowUps('company', company.id);
-    }
+    // Schedule next action — single source of truth
+    const { next_action_date, nextStage } = scheduleNextAction(db, {
+      company, contact_type, next_action, next_action_date_override,
+      contact_name: contact_name || null,
+      direct_line:  direct_line  || null,
+      email:        email        || null,
+      log_id:       logEntry.id,
+    });
 
     // Remove from calling queue
     db.prepare('DELETE FROM calling_queue WHERE id = ?').run(req.params.queueId);
-
-    // Update pipeline stage
-    db.prepare(`UPDATE companies SET pipeline_stage=?, stage_updated_at=datetime('now'), updated_at=datetime('now') WHERE id=?`)
-      .run(nextStage, company.id);
 
     db.exec('COMMIT');
   } catch (e) {
@@ -521,7 +453,7 @@ router.post('/queue/:queueId/complete', (req, res) => {
     message: 'Call logged successfully.',
     log_id: logEntry.id,
     next_action,
-    next_action_date,
+    next_action_date: null,
     attempt_number: priorAttempts + 1,
   });
 });
