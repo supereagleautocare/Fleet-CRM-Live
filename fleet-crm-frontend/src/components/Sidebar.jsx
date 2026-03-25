@@ -6,10 +6,19 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
   const { user, logout, counts } = useApp();
   const navigate = useNavigate();
 
+  useEffect(() => {
+    if (!open) return;
+    const handle = () => onClose();
+    window.addEventListener('click', handle);
+    return () => window.removeEventListener('click', handle);
+  }, [open]);
+
+  const initials = user?.name?.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase() || '?';
+
   const initials = user?.name?.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase() || '?';
 
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar ${open ? 'open' : ''}`}>
       <div className="sidebar-logo">
         <div className="eagle">🦅</div>
         <div className="brand">Super Eagle</div>
@@ -24,7 +33,7 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
 </nav>
       <div className="sidebar-section-label">Overview</div>
       <nav className="sidebar-nav">
-        <NavLink to="/dashboard" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
+        <NavLink to="/dashboard" onClick={onClose} className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
           <span className="icon">📊</span> Pipeline
         </NavLink>
       </nav>
