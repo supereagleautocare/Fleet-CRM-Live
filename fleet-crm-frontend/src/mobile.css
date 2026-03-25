@@ -136,3 +136,11 @@
     max-width: 100% !important;
   }
 }
+@media (max-width: 900px) {
+  .call-modal > div {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+}
