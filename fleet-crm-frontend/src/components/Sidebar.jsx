@@ -8,7 +8,7 @@ export default function Sidebar({ mobileOpen = false, setMobileOpen = () => {} }
   const initials = user?.name?.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase() || '?';
 
   return (
-    <aside className={`sidebar ${mobileOpen ? 'open' : ''}`}>
+    <aside className={`sidebar ${mobileOpen ? 'open' : ''}`} onClick={(e) => e.stopPropagation()}>
       <div className="sidebar-logo">
         <div className="eagle">🦅</div>
         <div className="brand">Super Eagle</div>
