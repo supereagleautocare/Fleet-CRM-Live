@@ -358,3 +358,59 @@
     max-width: 100% !important;
   }
 }
+@media (max-width: 900px) {
+  /* middle status pills */
+  .page-body div[style*="justify-content: center"],
+  .page-body div[style*="justify-content:center"] {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    justify-content: center !important;
+    gap: 8px !important;
+  }
+
+  .page-body button,
+  .page-body a {
+    white-space: nowrap !important;
+  }
+
+  /* repair orders card */
+  .table-card {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  .table-card table {
+    min-width: 640px !important;
+  }
+
+  /* make the repair orders header cleaner */
+  .table-card .table-header,
+  .table-card > div:first-child {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 6px !important;
+  }
+
+  /* tighten table text a little */
+  .table-card th,
+  .table-card td {
+    font-size: 12px !important;
+    vertical-align: top !important;
+  }
+}
+@media (max-width: 900px) {
+  .page-body div[style*="justify-content: center"],
+  .page-body div[style*="justify-content:center"] {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+  }
+
+  .page-body div[style*="justify-content: center"] > *,
+  .page-body div[style*="justify-content:center"] > * {
+    width: 100% !important;
+    text-align: center !important;
+  }
+}
