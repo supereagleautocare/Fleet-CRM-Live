@@ -20,7 +20,8 @@ export default function MailQueue() {
   const [customTo, setCustomTo]     = useState('');
   const [forecast, setForecast]   = useState([]);
   const [allRows, setAllRows]     = useState([]);
-  const [form, setForm]           = useState({ mail_piece:'', notes:'', next_action:'Call', next_action_date_override:'', show_date:false });
+  const [form, setForm]           = useState({ mail_piece:'', notes:'', contact_type:'', next_action:'Call', next_action_date_override:'', show_date:false });
+  const [contactTypes, setContactTypes] = useState([]);
   const navigate = useNavigate();
   const { showToast, refreshCounts } = useApp();
 
@@ -42,6 +43,8 @@ export default function MailQueue() {
         return true;
       }));
       setPieces(p);
+      const ct = await api.contactTypes();
+      setContactTypes((ct?.configured || []).filter(r => r.action_type === 'mail' && r.enabled !== 0).map(r => r.contact_type));
     } finally { setLoading(false); }
   }
 
@@ -54,14 +57,15 @@ export default function MailQueue() {
     setSaving(true);
     try {
       await api.logMail(selected.id, {
-        mail_piece: form.mail_piece,
-        notes: form.notes,
-        next_action: form.next_action,
+        mail_piece:    form.mail_piece,
+        contact_type:  form.contact_type || 'Sent',
+        notes:         form.notes,
+        next_action:   form.next_action,
         next_action_date_override: form.show_date && form.next_action_date_override ? form.next_action_date_override : undefined,
       });
       showToast('Mail logged');
       setSelected(null);
-      setForm({ mail_piece:'', notes:'', next_action:'Call', next_action_date_override:'', show_date:false });
+      setForm({ mail_piece:'', notes:'', contact_type:'', next_action:'Call', next_action_date_override:'', show_date:false });
       await load(); await refreshCounts();
     } catch(e) { showToast(e.message,'error'); }
     finally { setSaving(false); }
@@ -177,6 +181,34 @@ export default function MailQueue() {
                   }
                   {pieces.length === 0 && <div style={{ fontSize:11, color:'var(--gray-400)', marginTop:3 }}>Add mail pieces in Settings to use a dropdown</div>}
                 </div>
+                {contactTypes.length > 0 && (
+                  <div>
+                    <div style={{ fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'.07em', color:'var(--gray-400)', marginBottom:8 }}>What Happened?</div>
+                    <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
+                      {contactTypes.map(t => (
+                        <button key={t} type="button"
+                          onClick={() => set('contact_type', t)}
+                          style={{ padding:'5px 11px', borderRadius:7, border:`1.5px solid ${form.contact_type===t?'var(--navy-700)':'var(--gray-200)'}`, background:form.contact_type===t?'var(--navy-800)':'white', color:form.contact_type===t?'white':'var(--gray-700)', fontSize:12, fontWeight:600, cursor:'pointer' }}>
+                          {t}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {contactTypes.length > 0 && (
+                  <div>
+                    <div style={{ fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'.07em', color:'var(--gray-400)', marginBottom:8 }}>What Happened?</div>
+                    <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
+                      {contactTypes.map(t => (
+                        <button key={t} type="button"
+                          onClick={() => set('contact_type', t)}
+                          style={{ padding:'5px 11px', borderRadius:7, border:`1.5px solid ${form.contact_type===t?'var(--navy-700)':'var(--gray-200)'}`, background:form.contact_type===t?'var(--navy-800)':'white', color:form.contact_type===t?'white':'var(--gray-700)', fontSize:12, fontWeight:600, cursor:'pointer' }}>
+                          {t}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div className="form-group" style={{ margin:0 }}>
                   <label className="form-label">Notes</label>
                   <textarea className="form-textarea" rows={3} placeholder="Anything to note about this mailing…" value={form.notes} onChange={e=>set('notes',e.target.value)}/>
