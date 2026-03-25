@@ -67,6 +67,7 @@ export default function EmailQueue() {
         notes: form.notes,
         next_action: form.next_action,
         next_action_date_override: form.show_date && form.next_action_date_override ? form.next_action_date_override : undefined,
+        counts_as_attempt: (contactTypes?.byAction?.email || []).find(ct => ct.contact_type === form.email_template)?.counts_as_attempt ?? 1,
       });
       showToast('Email logged');
       setSelected(null);
