@@ -90,8 +90,8 @@ export default function CompanyPanel({ row, sourceType, contactTypes, onComplete
   useEffect(() => {
     setForm(f => ({
       ...f,
-      contact_name: row.preferred_contact_name ?? row.contact_name ?? '',
-      role_title:   row.preferred_role ?? row.role_title ?? '',
+      contact_name: '',
+      role_title: '',
     }));
     setBusy(true);
     Promise.all([api.company(entityId), api.companyHistory(entityId)])
