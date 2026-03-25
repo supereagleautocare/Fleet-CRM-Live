@@ -215,7 +215,7 @@ export default function MailQueue() {
                   </label>
                   {form.show_date && <input type="date" className="form-input" style={{ marginTop:8 }} value={form.next_action_date_override} onChange={e=>set('next_action_date_override',e.target.value)} min={new Date().toISOString().split('T')[0]}/>}
                 </div>
-                <button type="submit" className="btn btn-primary btn-lg" style={{ width:'100%' }} disabled={saving||(contactTypes.length>0&&!form.contact_type)}>
+                <button type="submit" className="btn btn-primary btn-lg" style={{ width:'100%' }} disabled={saving || !form.contact_type}
                   {saving?'Saving…':'✅ Log Mail & Complete'}
                 </button>
               </form>
