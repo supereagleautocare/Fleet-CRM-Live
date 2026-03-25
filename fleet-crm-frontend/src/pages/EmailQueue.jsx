@@ -200,7 +200,7 @@ export default function EmailQueue() {
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
                   <div className="form-group" style={{ margin:0 }}>
                     <label className="form-label">Template / Campaign</label>
-                    <input className="form-input" required placeholder="e.g. Intro Email, Follow-up #1…" value={form.email_template} onChange={e=>set('email_template',e.target.value)}/>
+                    <input className="form-input" placeholder="e.g. Intro Email, Follow-up #1…" value={form.email_template} onChange={e=>set('email_template',e.target.value)}/>
                   </div>
                   <div className="form-group" style={{ margin:0 }}>
                     <label className="form-label">Sent To (email)</label>
@@ -240,7 +240,7 @@ export default function EmailQueue() {
                   </label>
                   {form.show_date && <input type="date" className="form-input" style={{ marginTop:8 }} value={form.next_action_date_override} onChange={e=>set('next_action_date_override',e.target.value)} min={new Date().toISOString().split('T')[0]}/>}
                 </div>
-                <button type="submit" className="btn btn-primary btn-lg" style={{ width:'100%' }} disabled={saving||!form.email_template||(contactTypes.length>0&&!form.contact_type)}>
+                <button type="submit" className="btn btn-primary btn-lg" style={{ width:'100%' }} disabled={saving||(contactTypes.length>0&&!form.contact_type)}>
                   {saving?'Saving…':'✅ Log Email & Complete'}
                 </button>
               </form>
