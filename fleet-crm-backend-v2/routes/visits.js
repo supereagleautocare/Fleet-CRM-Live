@@ -33,7 +33,6 @@ router.get('/', (req, res) => {
 router.get('/all', (req, res) => {
   const rows = db.prepare(`
     SELECT v.*,
-           SELECT v.*,
            CASE WHEN v.scheduled_date < date('now') THEN 1 ELSE 0 END AS is_overdue,
            CASE WHEN v.scheduled_date = date('now') THEN 1 ELSE 0 END AS is_due_today,
            cl.contact_type  AS last_contact_type,
@@ -41,20 +40,6 @@ router.get('/all', (req, res) => {
            cl.notes         AS last_contact_notes,
            cl.contact_name  AS last_contact_person,
            (SELECT COUNT(*) FROM call_log WHERE entity_id = v.entity_id AND log_type='company' AND action_type != 'Move') as call_count
-    FROM visit_queue v
-    LEFT JOIN (
-      SELECT entity_id, contact_type, logged_at, notes, contact_name
-      FROM call_log
-      WHERE log_type = 'company'
-        AND logged_at = (SELECT MAX(cl2.logged_at) FROM call_log cl2
-                         WHERE cl2.entity_id = call_log.entity_id AND cl2.log_type = 'company')
-    ) cl ON cl.entity_id = v.entity_id
-    ORDER BY v.scheduled_date ASCS is_overdue,
-           CASE WHEN v.scheduled_date = date('now') THEN 1 ELSE 0 END AS is_due_today,
-           cl.contact_type  AS last_contact_type,
-           cl.logged_at     AS last_contacted,
-           cl.notes         AS last_contact_notes,
-           cl.contact_name  AS last_contact_person
     FROM visit_queue v
     LEFT JOIN (
       SELECT entity_id, contact_type, logged_at, notes, contact_name
