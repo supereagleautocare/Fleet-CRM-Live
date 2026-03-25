@@ -100,8 +100,8 @@ export default function App() {
           </Routes>
         ) : (
           <div className="app-layout">
-            <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-            <div className="main-shell"><div className="mobile-topbar"><button type="button" className="mobile-menu-btn" onClick={() => setSidebarOpen(true)} aria-label="Open navigation">☰</button><div className="mobile-topbar-brand"><span>🦅</span><div><strong>Super Eagle</strong><small>Fleet CRM</small></div></div></div><div className="main-content">
+            <><Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />{sidebarOpen && <div className="mobile-sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}</>
+            <div className="main-shell"><div className="mobile-topbar"><button type="button" className="mobile-menu-btn" onClick={(e) => { e.stopPropagation(); setSidebarOpen(true); }} aria-label="Open navigation">☰</button><div className="mobile-topbar-brand"><span>🦅</span><div><strong>Super Eagle</strong><small>Fleet CRM</small></div></div></div><div className="main-content">
               <Routes>
                 <Route path="/"             element={<Navigate to="/dashboard" />} />
                 <Route path="/active-fleet" element={<ActiveFleet />} />
