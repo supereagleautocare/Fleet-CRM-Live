@@ -574,3 +574,55 @@ tbody tr:hover .row-actions { opacity: 1; }
     z-index: 1000;
   }
 }
+@media (max-width: 900px) {
+  .page-body {
+    padding: 12px;
+    overflow-x: hidden;
+  }
+
+  .page-body > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .table-card,
+  .stat-card,
+  .drawer,
+  .call-modal,
+  .script-doc {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .info-row {
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .info-label {
+    width: 100%;
+    padding-top: 0;
+  }
+
+  .table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  table {
+    min-width: 600px;
+  }
+
+  .drawer {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .call-modal {
+    width: 100%;
+    max-width: 100%;
+    height: 100vh;
+    border-radius: 0;
+  }
+}
