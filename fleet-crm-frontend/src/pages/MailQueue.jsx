@@ -171,7 +171,7 @@ export default function MailQueue() {
                   <button type="button" onClick={()=>setSelected(null)} style={{ border:'none', background:'none', cursor:'pointer', fontSize:20, color:'var(--gray-400)', lineHeight:1 }}>✕</button>
                 </div>
                 <div className="form-group" style={{ margin:0 }}>
-                  <label className="form-label">Mail Piece Sent *</label>
+                  <label className="form-label">Mail Piece Sent </label>
                   {pieces.length > 0
                    ? <select className="form-input" value={form.mail_piece} onChange={e=>set('mail_piece',e.target.value)}>
                        <option value="">Select piece…</option>
