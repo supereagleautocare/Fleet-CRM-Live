@@ -414,3 +414,55 @@
     text-align: center !important;
   }
 }
+@media (max-width: 900px) {
+  /* Active Fleet settings layout */
+  .page-body div[style*="grid-template-columns"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  .page-body div[style*="display: grid"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  .page-body div[style*="display:grid"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* cards full width */
+  .page-body > div > div,
+  .page-body [style*="border"] {
+    min-width: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* form controls inside settings */
+  .page-body input,
+  .page-body select,
+  .page-body textarea,
+  .page-body button {
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  /* rows with checkbox + text */
+  .page-body div[style*="display: flex"] {
+    flex-wrap: wrap !important;
+  }
+
+  .page-body label,
+  .page-body span,
+  .page-body p {
+    white-space: normal !important;
+    word-break: break-word !important;
+  }
+}
+@media (max-width: 900px) {
+  .page-body div[style*="justify-content: space-between"],
+  .page-body div[style*="justify-content:space-between"] {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+  }
+}
