@@ -241,7 +241,14 @@ export default function CallingQueue() {
                           {row.last_contact_type ? `${row.last_contact_type} · ${fmtDate(row.last_contacted)}` : '—'}
                         </td>
                         <td onClick={e=>e.stopPropagation()} style={{textAlign:'right'}}>
-                          <RowActions isStarred={!!row.is_starred} onStar={async()=>{ await api.pipelineStar(row.id); load(); }} onMove={()=>setMovingId(row.id)} />
+                          <RowActions
+                            companyStatus={row.company_status || 'prospect'}
+                            onStatusChange={async(status) => {
+                              await api.updateCompanyStatus(row.id, status);
+                              load();
+                            }}
+                            onMove={() => setMovingId(row.id)}
+                          />
                         </td>
                       </tr>
                     );
