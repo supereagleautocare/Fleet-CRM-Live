@@ -1176,7 +1176,7 @@ export default function RoutePlanner({ embedded = false }) {
           companyId: queueVisit.entity_id,
         } : null);
         if (!stop) return null;
-        const ctypes = contactTypes.filter(ct => (ct.action_type==='visit'||ct.action_type==='call') && ct.enabled!==0);
+        const ctypes = contactTypes.filter(ct => ct.action_type==='visit' && ct.enabled!==0);
         const fallback = ['Spoke To Decision Maker','Spoke To Receptionist','Left Materials','No One Available','Drop Off Flyer'];
         const typeOptions = ctypes.length > 0 ? ctypes.map(ct=>ct.contact_type) : fallback;
         return (
