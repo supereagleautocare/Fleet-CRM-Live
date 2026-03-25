@@ -1,16 +1,19 @@
+/* HIDE MOBILE STUFF ON DESKTOP */
 .mobile-topbar {
   display: none;
 }
 
+/* MOBILE ONLY */
 @media (max-width: 900px) {
-  html,
-  body,
-  #root {
+
+  /* RESET PAGE */
+  html, body, #root {
     width: 100%;
     max-width: 100%;
     overflow-x: hidden;
   }
 
+  /* TOP BAR */
   .mobile-topbar {
     display: flex;
     align-items: center;
@@ -29,118 +32,93 @@
   .mobile-menu-btn {
     font-size: 22px;
     cursor: pointer;
-    line-height: 1;
   }
 
+  /* LAYOUT */
   .app-layout {
     display: block !important;
-    position: relative !important;
     width: 100% !important;
-    max-width: 100% !important;
-    overflow-x: hidden !important;
   }
 
   .main-content {
     width: 100% !important;
-    max-width: 100% !important;
     margin-left: 0 !important;
-    padding-left: 0 !important;
-    padding-top: 56px !important;
-    position: relative !important;
-    z-index: 1 !important;
+    padding: 56px 0 0 0 !important;
   }
 
+  /* SIDEBAR (SLIDE OVER) */
   .sidebar {
-  position: fixed;
-  top: 0;
-  left: -130px;
-  width: 130px;
-  max-width: 130px;
-  min-width: 130px;
-  height: 100vh;
-  background: #020617;
-  z-index: 9999;
-  transition: left 0.25s ease;
-  overflow-y: auto;
-  margin-left: 0 !important;
-  transform: none !important;
-  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
-}
+    position: fixed;
+    top: 0;
+    left: -180px;
+    width: 180px;
+    height: 100vh;
+    background: #020617;
+    z-index: 9999;
+    transition: left 0.25s ease;
+    overflow-y: auto;
 
-.sidebar:not(.open) {
-  box-shadow: none;
-}
+    margin: 0 !important;
+    transform: none !important;
 
-.sidebar.open {
-  left: 0 !important;
-}
-
-  .sidebar:not(.open) {
-    box-shadow: none !important;
+    /* dark overlay */
+    box-shadow: 0 0 0 9999px rgba(0,0,0,0.45);
   }
 
   .sidebar.open {
     left: 0 !important;
   }
-}
-@media (max-width: 900px) {
+
+  .sidebar:not(.open) {
+    box-shadow: none;
+  }
+
+  /* =========================
+     CALL MODAL (FIXED)
+     ========================= */
+
   .call-modal-overlay {
+    position: fixed !important;
+    inset: 0 !important;
     padding: 0 !important;
+    display: flex !important;
     align-items: stretch !important;
     justify-content: stretch !important;
+    z-index: 10002 !important;
   }
 
   .call-modal {
     width: 100% !important;
     max-width: 100% !important;
     height: 100vh !important;
-    max-height: 100vh !important;
     margin: 0 !important;
     border-radius: 0 !important;
-    display: flex !important;
-    flex-direction: column !important;
-    overflow: hidden !important;
+
+    /* THIS FIXES YOUR ISSUE */
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
   }
 
-  .call-modal > div:first-child {
+  /* STACK FORM FIELDS CLEANLY */
+  .call-modal .row,
+  .call-modal .form-row,
+  .call-modal .grid {
     display: block !important;
     width: 100% !important;
   }
 
   .call-modal input,
   .call-modal textarea,
-  .call-modal select,
-  .call-modal button {
-    font-size: 16px !important;
+  .call-modal select {
+    width: 100% !important;
   }
 
   .call-modal textarea {
-    min-height: 110px !important;
+    min-height: 120px;
   }
 
-  .call-modal [style*="grid-template-columns"] {
-    grid-template-columns: 1fr !important;
-  }
-
-  .call-modal [style*="display: grid"] {
-    grid-template-columns: 1fr !important;
-  }
-
-  .call-modal [style*="display:flex"] {
-    flex-wrap: wrap !important;
-  }
-
-  .call-modal [style*="display: flex"] {
-    flex-wrap: wrap !important;
-  }
-}
-@media (max-width: 900px) {
-  .call-modal {
-    grid-template-columns: 1fr !important;
-  }
-
-  .call-modal > div {
-    width: 100% !important;
-    min-width: 0 !important;
+  /* BUTTONS WRAP NICELY (NOT SIDEWAYS BUGGY) */
+  .call-modal button {
+    margin-bottom: 8px;
   }
 }
