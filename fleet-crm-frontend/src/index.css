@@ -634,3 +634,27 @@ tbody tr:hover .row-actions { opacity: 1; }
     max-width: 100% !important;
   }
 }
+@media (max-width: 900px) {
+  .calling-queue-card th:nth-child(5),
+  .calling-queue-card td:nth-child(5),
+  .calling-queue-card th:nth-child(6),
+  .calling-queue-card td:nth-child(6),
+  .calling-queue-card th:nth-child(7),
+  .calling-queue-card td:nth-child(7),
+  .calling-queue-card th:nth-child(8),
+  .calling-queue-card td:nth-child(8),
+  .calling-queue-card th:nth-child(9),
+  .calling-queue-card td:nth-child(9) {
+    display: none !important;
+  }
+
+  .calling-queue-card table {
+    width: 100%;
+    min-width: 0 !important;
+  }
+
+  .calling-queue-card th,
+  .calling-queue-card td {
+    white-space: normal;
+  }
+}
