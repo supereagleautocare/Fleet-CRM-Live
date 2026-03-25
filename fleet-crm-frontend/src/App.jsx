@@ -25,8 +25,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [toast, setToast]     = useState(null);
   const [counts, setCounts]   = useState({ calling: 0, mail: 0, email: 0, visits: 0 });
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  
+
   function showToast(msg, type = 'success') {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3500);
@@ -100,8 +99,8 @@ export default function App() {
           </Routes>
         ) : (
           <div className="app-layout">
-            <><Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />{sidebarOpen && <div className="mobile-sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}</>
-            <div className="main-shell"><div className="mobile-topbar"><button type="button" className="mobile-menu-btn" onClick={(e) => { e.stopPropagation(); setSidebarOpen(true); }} aria-label="Open navigation">☰</button><div className="mobile-topbar-brand"><span>🦅</span><div><strong>Super Eagle</strong><small>Fleet CRM</small></div></div></div><div className="main-content">
+            <Sidebar />
+            <div className="main-content">
               <Routes>
                 <Route path="/"             element={<Navigate to="/dashboard" />} />
                 <Route path="/active-fleet" element={<ActiveFleet />} />
@@ -122,7 +121,6 @@ export default function App() {
               </Routes>
             </div>
           </div>
-        </div>
         )}
       </BrowserRouter>
 
