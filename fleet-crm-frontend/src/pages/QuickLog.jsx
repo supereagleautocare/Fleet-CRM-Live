@@ -97,7 +97,7 @@ export default function QuickLog() {
 
   async function handleSave() {
     if (actionMode === 'mail' && !form.mail_piece.trim()) { showToast('Enter the mail piece name', 'error'); return; }
-    if (actionMode !== 'mail' && actionMode !== 'email' && !form.contact_type) { showToast('Select a contact type', 'error'); return; }
+        if (!form.contact_type) { showToast('Select what happened first', 'error'); return; }
     setSaving(true);
     try {
       if (selected.entity_type === 'company') {
@@ -360,8 +360,8 @@ export default function QuickLog() {
                   </>
                 )}
 
-                {/* What Happened — call and visit only */}
-                {(actionMode === 'call' || actionMode === 'visit') && (
+                {/* What Happened — all modes */}
+                {(
                 <div>
                 <div style={{ fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'.07em', color:'var(--gray-400)', marginBottom:10 }}>What Happened</div>
                 <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:14 }}>
