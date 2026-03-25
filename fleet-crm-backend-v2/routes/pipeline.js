@@ -433,7 +433,7 @@ router.post('/log-email/:id', (req, res) => {
       phone: company.main_phone,
       industry: company.industry,
       action_type: 'Email',
-      contact_type: contact_type || 'Email Sent',,
+      contact_type: contact_type || 'Email Sent',
       notes: notes || null,
       next_action: next_action || 'Call',
       next_action_date: null,
