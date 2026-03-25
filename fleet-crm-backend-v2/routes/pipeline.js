@@ -40,15 +40,15 @@ function moveCompany(companyId, newStage, userId, userName, notes) {
   `).run(newStage, companyId);
 
   const moveNote = notes || `Moved from ${oldStage} → ${newStage}`;
-  const logEntry = appendCallLog({
+  appendCallLog({
     log_type: 'company',
     entity_id: company.id,
     company_id_str: company.company_id,
     entity_name: company.name,
     phone: company.main_phone,
     industry: company.industry,
-    action_type: 'Mail',
-    contact_type: contact_type || 'Mail Sent',
+    action_type: 'Move',
+    contact_type: 'Moved',
     notes: moveNote,
     next_action: null,
     attempt_number: 0,
@@ -375,7 +375,7 @@ router.post('/log-mail/:id', (req, res) => {
 
   db.exec('BEGIN TRANSACTION');
   try {
-    appendCallLog({
+    const logEntry = appendCallLog({
       log_type: 'company',
       entity_id: company.id,
       company_id_str: company.company_id,
