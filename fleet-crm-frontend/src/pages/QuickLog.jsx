@@ -83,7 +83,7 @@ export default function QuickLog() {
       contact_type: '',
       notes: '',
       next_action: 'Call',
-      contact_name: entity.last_contact_name || '',
+      contact_name: '',
       direct_line: '',
       email: '',
       role_title: '',
