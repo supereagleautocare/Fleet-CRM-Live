@@ -12,7 +12,7 @@
     padding: 12px 14px;
     position: sticky;
     top: 0;
-    z-index: 1100;
+    z-index: 9000;
   }
 
   .mobile-menu-btn {
@@ -23,19 +23,26 @@
 
   .app-layout {
     display: block;
+    position: relative;
   }
 
   .main-content {
     width: 100%;
     margin-left: 0 !important;
+    position: relative;
+    z-index: 1;
   }
 
   .sidebar {
     position: fixed;
     top: 0;
-    left: -75%;
-    width: 75%;
+    left: -85%;
+    width: 85%;
     max-width: 260px;
+    height: 100vh;
+    z-index: 9999;
+    transition: left 0.25s ease;
+    overflow-y: auto;
   }
 
   .sidebar.open {
