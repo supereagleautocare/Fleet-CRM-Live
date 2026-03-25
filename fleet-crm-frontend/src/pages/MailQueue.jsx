@@ -132,9 +132,12 @@ export default function MailQueue() {
                         <td style={{ fontSize:12 }}>{row.due_date?fmtDate(row.due_date):'—'}</td>
                         <td onClick={e=>e.stopPropagation()} style={{textAlign:'right'}}>
                           <RowActions
-                            isStarred={!!row.is_starred}
-                            onStar={async()=>{ await api.pipelineStar(row.id); load(); }}
-                            onMove={()=>setMovingId(row.id)}
+                            companyStatus={row.company_status || 'prospect'}
+                            onStatusChange={async(status) => {
+                              await api.updateCompanyStatus(row.id, status);
+                              load();
+                            }}
+                            onMove={() => setMovingId(row.id)}
                           />
                         </td>
                       </tr>
