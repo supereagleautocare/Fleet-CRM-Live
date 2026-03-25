@@ -626,3 +626,9 @@ tbody tr:hover .row-actions { opacity: 1; }
     border-radius: 0;
   }
 }
+@media (max-width: 900px) {
+  .page-body > div {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+}
