@@ -559,3 +559,18 @@ tbody tr:hover .row-actions { opacity: 1; }
     padding: 12px;
   }
 }
+.mobile-sidebar-backdrop { display: none; }
+
+@media (max-width: 900px) {
+  .mobile-sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(6,13,31,.45);
+    z-index: 999;
+  }
+
+  .sidebar {
+    z-index: 1000;
+  }
+}
