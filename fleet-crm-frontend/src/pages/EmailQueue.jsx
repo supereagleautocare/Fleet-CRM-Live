@@ -18,10 +18,10 @@ export default function EmailQueue() {
   const [qFilter, setQFilter]     = useState('today');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo]     = useState('');
-  const [form, setForm]         = useState({ email_template:'', email_to:'', notes:'', next_action:'Call', next_action_date_override:'', show_date:false });
+  const [form, setForm]         = useState({ email_template:'', email_to:'', contact_type:'', notes:'', next_action:'Call', next_action_date_override:'', show_date:false });
   const [forecast, setForecast]     = useState([]);
   const [allRows, setAllRows]         = useState([]);
-  const [contactTypes, setContactTypes] = useState({});
+  const [contactTypes, setContactTypes] = useState([]);
   const navigate = useNavigate();
   const { showToast, refreshCounts } = useApp();
 
@@ -31,7 +31,7 @@ export default function EmailQueue() {
       const [r, t, fc, ct] = await Promise.all([api.emailQueue(), api.emailTemplates(), api.pipelineForecast(), api.contactTypes()]);
       setForecast(fc || []);
       setAllRows(r || []);
-      setContactTypes(ct || {});
+      setContactTypes((ct?.configured || []).filter(r => r.action_type === 'email' && r.enabled !== 0).map(r => r.contact_type));
       const today = new Date().toISOString().split('T')[0];
       const weekEnd = new Date(); weekEnd.setDate(weekEnd.getDate() + (6 - weekEnd.getDay())); const weekEndStr = weekEnd.toISOString().split('T')[0];
       const monthEnd = new Date(new Date().getFullYear(), new Date().getMonth()+1, 0).toISOString().split('T')[0];
@@ -63,15 +63,15 @@ export default function EmailQueue() {
     try {
       await api.logEmail(selected.id, {
         email_template: form.email_template,
-        email_to: form.email_to,
-        notes: form.notes,
-        next_action: form.next_action,
+        email_to:       form.email_to,
+        contact_type:   form.contact_type || 'Sent',
+        notes:          form.notes,
+        next_action:    form.next_action,
         next_action_date_override: form.show_date && form.next_action_date_override ? form.next_action_date_override : undefined,
-        counts_as_attempt: (contactTypes?.byAction?.email || []).find(ct => ct.contact_type === form.email_template)?.counts_as_attempt ?? 1,
       });
       showToast('Email logged');
       setSelected(null);
-      setForm({ email_template:'', email_to:'', notes:'', next_action:'Call', next_action_date_override:'', show_date:false });
+      setForm({ email_template:'', email_to:'', contact_type:'', notes:'', next_action:'Call', next_action_date_override:'', show_date:false });
       await load(); await refreshCounts();
     } catch(e) { showToast(e.message,'error'); }
     finally { setSaving(false); }
@@ -200,6 +200,20 @@ export default function EmailQueue() {
                     <input className="form-input" type="email" placeholder="john@company.com" value={form.email_to} onChange={e=>set('email_to',e.target.value)}/>
                   </div>
                 </div>
+                {contactTypes.length > 0 && (
+                  <div>
+                    <div style={{ fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'.07em', color:'var(--gray-400)', marginBottom:8 }}>What Happened?</div>
+                    <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
+                      {contactTypes.map(t => (
+                        <button key={t} type="button"
+                          onClick={() => set('contact_type', t)}
+                          style={{ padding:'5px 11px', borderRadius:7, border:`1.5px solid ${form.contact_type===t?'#7c3aed':'var(--gray-200)'}`, background:form.contact_type===t?'#7c3aed':'white', color:form.contact_type===t?'white':'var(--gray-700)', fontSize:12, fontWeight:600, cursor:'pointer' }}>
+                          {t}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div className="form-group" style={{ margin:0 }}>
                   <label className="form-label">Notes</label>
                   <textarea className="form-textarea" rows={3} placeholder="Anything to note about this email…" value={form.notes} onChange={e=>set('notes',e.target.value)}/>
