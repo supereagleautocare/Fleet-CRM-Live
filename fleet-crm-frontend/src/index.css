@@ -658,3 +658,44 @@ tbody tr:hover .row-actions { opacity: 1; }
     white-space: normal;
   }
 }
+@media (max-width: 900px) {
+  .page-header {
+    height: auto;
+    padding: 10px 12px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .header-actions {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .search-bar {
+    width: 100%;
+  }
+
+  .search-bar input {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .page-body {
+    padding: 10px;
+  }
+
+  .btn.btn-sm {
+    padding: 6px 8px;
+    font-size: 11px;
+  }
+
+  .form-input,
+  .form-select {
+    min-height: 36px;
+  }
+
+  .calling-queue-card th,
+  .calling-queue-card td {
+    font-size: 12px;
+  }
+}
