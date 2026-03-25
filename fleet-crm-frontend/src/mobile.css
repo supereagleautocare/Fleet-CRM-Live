@@ -53,10 +53,10 @@
   .sidebar {
   position: fixed;
   top: 0;
-  left: -220px;
-  width: 215px;
-  max-width: 150px;
-  min-width: 150px;
+  left: -130px;
+  width: 130px;
+  max-width: 130px;
+  min-width: 130px;
   height: 100vh;
   background: #020617;
   z-index: 9999;
