@@ -189,7 +189,17 @@ export default function CompanyPanel({ row, sourceType, contactTypes, onComplete
                 <div style={{ fontSize:14, color:'var(--gold-400)', fontFamily:'var(--font-mono)', marginTop:4 }}>{fmtPhone(mainPhone)}</div>
                 {row.industry && <div style={{ fontSize:11, color:'rgba(255,255,255,.35)', marginTop:3 }}>{row.industry}</div>}
               </div>
-              {stage && <div style={{ padding:'3px 9px', borderRadius:3, background:'rgba(255,255,255,.08)', color:'rgba(255,255,255,.5)', fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'.07em', flexShrink:0 }}>{stage}</div>}
+              <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:4, flexShrink:0 }}>
+                {stage && <div style={{ padding:'3px 9px', borderRadius:3, background:'rgba(255,255,255,.08)', color:'rgba(255,255,255,.5)', fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'.07em' }}>{stage}</div>}
+                {data?.full?.follow_up?.due_date && (
+                  <div style={{ fontSize:10, fontWeight:600, padding:'2px 8px', borderRadius:3,
+                    background: new Date(data.full.follow_up.due_date+'T00:00:00') < new Date() ? 'rgba(220,38,38,.2)' : 'rgba(255,255,255,.06)',
+                    color: new Date(data.full.follow_up.due_date+'T00:00:00') < new Date() ? '#fca5a5' : 'rgba(255,255,255,.4)',
+                  }}>
+                    Due {fmtDate(data.full.follow_up.due_date)}
+                  </div>
+                )}
+              </div>
             </div>
             {data?.full?.address && (
               <div style={{ fontSize:11, color:'rgba(255,255,255,.35)', marginTop:6 }}>📍 {data.full.address}{data.full.city ? ', '+data.full.city : ''}</div>
