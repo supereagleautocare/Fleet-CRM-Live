@@ -260,6 +260,7 @@ export default function CallingQueue() {
 
         {/* Inline log panel */}
         {selected && (
+         <div style={{ width:'100%', maxWidth:'100%', overflow:'hidden' }}>
           <CompanyPanel
             key={selected.id}
             row={{ ...selected, entity_id: selected.id, company_name: selected.name, main_phone: selected.main_phone }}
@@ -269,6 +270,7 @@ export default function CallingQueue() {
             onClose={() => setSelected(null)}
             saving={saving}
           />
+          </div>
         )}
       </div>}
       {/* ── Score History ── */}
