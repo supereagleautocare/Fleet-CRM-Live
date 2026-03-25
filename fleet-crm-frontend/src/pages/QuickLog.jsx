@@ -283,9 +283,9 @@ export default function QuickLog() {
                   <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
                     {[
                       { id:'call',  label:'📞 Called',   nextAction:'Call'  },
-                      { id:'visit', label:'📍 Visited',  nextAction:'Visit' },
                       { id:'mail',  label:'✉️ Mailed',   nextAction:'Call'  },
                       { id:'email', label:'📧 Emailed',  nextAction:'Call'  },
+                      { id:'visit', label:'📍 Visited',  nextAction:'Visit' },
                     ].map(m => (
                       <button key={m.id} type="button"
                         onClick={() => {
@@ -310,7 +310,7 @@ export default function QuickLog() {
                 {/* Mail piece field — mail mode only */}
                 {actionMode === 'mail' && (
                   <div className="form-group">
-                    <label className="form-label">Mail Piece Sent *</label>
+                    <label className="form-label">Mail Piece Sent</label>
                     <input className="form-input" placeholder="e.g. Postcard A, Intro Letter…" value={form.mail_piece} onChange={e=>set('mail_piece',e.target.value)}/>
                   </div>
                 )}
@@ -413,12 +413,7 @@ export default function QuickLog() {
 
                 <div style={{ display:'flex', gap:10, marginTop:6 }}>
                   <button className="btn btn-primary btn-lg" style={{ flex:1 }} onClick={handleSave}
-                    disabled={saving
-                      || (actionMode === 'call' && !form.contact_type)
-                      || (actionMode === 'visit' && !form.contact_type)
-                      || (actionMode === 'mail' && !form.mail_piece.trim())
-                      || (actionMode === 'email' && !form.email_template.trim())
-                    }>
+                    disabled={saving || !form.contact_type}>
                     {saving ? 'Saving…' : '✅ Save Log'}
                   </button>
                   <button className="btn btn-ghost btn-lg" onClick={()=>setSelected(null)}>Cancel</button>
