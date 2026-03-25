@@ -1,22 +1,29 @@
-/* HIDE MOBILE STUFF ON DESKTOP */
 .mobile-topbar {
   display: none;
 }
 
-/* MOBILE ONLY */
 @media (max-width: 900px) {
+  html,
+  body,
+  #root {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
 
-  /* TOP BAR */
   .mobile-topbar {
     display: flex;
     align-items: center;
     justify-content: space-between;
     background: #111;
-    color: white;
+    color: #fff;
     padding: 12px 14px;
-    position: sticky;
+    position: fixed;
     top: 0;
-    z-index: 9000;
+    left: 0;
+    right: 0;
+    height: 56px;
+    z-index: 10000;
   }
 
   .mobile-menu-btn {
@@ -25,44 +32,45 @@
     line-height: 1;
   }
 
-  /* LAYOUT RESET */
   .app-layout {
-    display: block;
-    position: relative;
+    display: block !important;
+    position: relative !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: hidden !important;
   }
 
   .main-content {
-    width: 100%;
+    width: 100% !important;
+    max-width: 100% !important;
     margin-left: 0 !important;
     padding-left: 0 !important;
-    position: relative;
-    z-index: 1;
+    padding-top: 56px !important;
+    position: relative !important;
+    z-index: 1 !important;
   }
 
-  /* SIDEBAR (FIXED OVERLAY) */
   .sidebar {
-    position: fixed;
-    top: 0;
-    left: -85%;
-    width: 85%;
-    max-width: 260px;
-    height: 100vh;
-    background: #020617; /* match your dark theme */
-    z-index: 9999;
-    transition: left 0.25s ease;
-    overflow-y: auto;
-
-    /* override desktop styles */
-    margin-left: 0 !important;
+    position: fixed !important;
+    top: 0 !important;
+    left: -220px !important;
+    width: 220px !important;
+    max-width: 220px !important;
+    min-width: 220px !important;
+    height: 100vh !important;
+    z-index: 10001 !important;
+    overflow-y: auto !important;
+    transition: left 0.25s ease !important;
+    margin: 0 !important;
     transform: none !important;
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.35) !important;
+  }
+
+  .sidebar:not(.open) {
+    box-shadow: none !important;
   }
 
   .sidebar.open {
-    left: 0;
-  }
-
-  /* OPTIONAL: make content dim when open (nice UX) */
-  .sidebar.open ~ .main-content {
-    filter: brightness(0.7);
+    left: 0 !important;
   }
 }
