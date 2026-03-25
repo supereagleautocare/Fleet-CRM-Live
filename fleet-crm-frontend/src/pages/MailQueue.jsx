@@ -173,12 +173,12 @@ export default function MailQueue() {
                 <div className="form-group" style={{ margin:0 }}>
                   <label className="form-label">Mail Piece Sent *</label>
                   {pieces.length > 0
-                    ? <select className="form-input" required value={form.mail_piece} onChange={e=>set('mail_piece',e.target.value)}>
-                        <option value="">Select piece…</option>
-                        {pieces.map(p=><option key={p.id} value={p.name}>{p.name}</option>)}
-                      </select>
-                    : <input className="form-input" required placeholder="e.g. Postcard A, Intro Letter…" value={form.mail_piece} onChange={e=>set('mail_piece',e.target.value)}/>
-                  }
+                   ? <select className="form-input" value={form.mail_piece} onChange={e=>set('mail_piece',e.target.value)}>
+                       <option value="">Select piece…</option>
+                       {pieces.map(p=><option key={p.id} value={p.name}>{p.name}</option>)}
+                     </select>
+                   : <input className="form-input" placeholder="e.g. Postcard A, Intro Letter…" value={form.mail_piece} onChange={e=>set('mail_piece',e.target.value)}/>
+                 }
                   {pieces.length === 0 && <div style={{ fontSize:11, color:'var(--gray-400)', marginTop:3 }}>Add mail pieces in Settings to use a dropdown</div>}
                 </div>
                 
@@ -215,7 +215,7 @@ export default function MailQueue() {
                   </label>
                   {form.show_date && <input type="date" className="form-input" style={{ marginTop:8 }} value={form.next_action_date_override} onChange={e=>set('next_action_date_override',e.target.value)} min={new Date().toISOString().split('T')[0]}/>}
                 </div>
-                <button type="submit" className="btn btn-primary btn-lg" style={{ width:'100%' }} disabled={saving||!form.mail_piece||(contactTypes.length>0&&!form.contact_type)}>
+                <button type="submit" className="btn btn-primary btn-lg" style={{ width:'100%' }} disabled={saving||(contactTypes.length>0&&!form.contact_type)}>
                   {saving?'Saving…':'✅ Log Mail & Complete'}
                 </button>
               </form>
