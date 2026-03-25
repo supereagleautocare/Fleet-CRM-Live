@@ -506,3 +506,55 @@ tbody tr:hover .row-actions { opacity: 1; }
   cursor: pointer; display: flex; align-items: center; justify-content: center;
 }
 .drawer-close:hover { background: rgba(255,255,255,.2); color: white; }
+/* MOBILE LAYOUT */
+.main-shell { display: flex; flex-direction: column; height: 100vh; }
+
+.mobile-topbar {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: #0f172a;
+  color: white;
+}
+
+.mobile-menu-btn {
+  font-size: 22px;
+  background: none;
+  border: none;
+  color: white;
+}
+
+.mobile-topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mobile-topbar-brand small {
+  display: block;
+  font-size: 10px;
+  opacity: 0.7;
+}
+
+/* SIDEBAR MOBILE */
+@media (max-width: 900px) {
+  .mobile-topbar { display: flex; }
+
+  .sidebar {
+    position: fixed;
+    left: -260px;
+    top: 0;
+    height: 100%;
+    z-index: 1000;
+    transition: left 0.3s ease;
+  }
+
+  .sidebar.open {
+    left: 0;
+  }
+
+  .main-content {
+    padding: 12px;
+  }
+}
