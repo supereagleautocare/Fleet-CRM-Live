@@ -247,7 +247,10 @@ html, body, #root {
 .table-card-title  { font-size: 13px; font-weight: 700; color: var(--gray-800); }
 .table-card-count  { font-size: 11px; color: var(--gray-400); }
 
-.table-wrapper { overflow-x: auto; overflow-y: auto; }
+.table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
 
 table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 
@@ -577,7 +580,6 @@ tbody tr:hover .row-actions { opacity: 1; }
 @media (max-width: 900px) {
   .page-body {
     padding: 12px;
-    overflow-x: hidden;
   }
 
   .page-body > * {
@@ -611,7 +613,7 @@ tbody tr:hover .row-actions { opacity: 1; }
   }
 
   table {
-    min-width: 600px;
+    min-width: 780px;
   }
 
   .drawer {
