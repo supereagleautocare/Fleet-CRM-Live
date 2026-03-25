@@ -33,6 +33,8 @@ router.get('/', (req, res) => {
 router.get('/all', (req, res) => {
   const rows = db.prepare(`
     SELECT v.*,
+           c.company_status,
+           c.is_starred,
            CASE WHEN v.scheduled_date < date('now') THEN 1 ELSE 0 END AS is_overdue,
            CASE WHEN v.scheduled_date = date('now') THEN 1 ELSE 0 END AS is_due_today,
            cl.contact_type  AS last_contact_type,
@@ -41,6 +43,7 @@ router.get('/all', (req, res) => {
            cl.contact_name  AS last_contact_person,
            (SELECT COUNT(*) FROM call_log WHERE entity_id = v.entity_id AND log_type='company' AND action_type != 'Move') as call_count
     FROM visit_queue v
+    LEFT JOIN companies c ON c.id = v.entity_id
     LEFT JOIN (
       SELECT entity_id, contact_type, logged_at, notes, contact_name
       FROM call_log
@@ -50,19 +53,8 @@ router.get('/all', (req, res) => {
     ) cl ON cl.entity_id = v.entity_id
     ORDER BY v.scheduled_date ASC
   `).all();
-  res.json(rows);
-});
 
-// GET /api/visits/counts
-router.get('/counts', (req, res) => {
-  const counts = db.prepare(`
-    SELECT
-      COUNT(*) as total,
-      SUM(CASE WHEN scheduled_date < date('now') THEN 1 ELSE 0 END) as overdue,
-      SUM(CASE WHEN scheduled_date = date('now') THEN 1 ELSE 0 END) as due_today
-    FROM visit_queue
-  `).get();
-  res.json(counts);
+  res.json(rows);
 });
 
 // PUT /api/visits/:id — update working notes, lock, reschedule
