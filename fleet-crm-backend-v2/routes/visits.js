@@ -12,7 +12,7 @@
 const express = require('express');
 const db      = require('../db/schema');
 const { requireAuth } = require('../middleware/auth');
-const { calcFollowUpDate, calcVisitDate, appendCallLog, cancelOldFollowUps, clearAllCompanyQueues } = require('./shared');
+const { appendCallLog, cancelOldFollowUps, clearAllCompanyQueues, scheduleNextAction } = require('./shared');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -124,18 +124,7 @@ router.post('/:id/complete', (req, res) => {
     "SELECT COUNT(*) as cnt FROM call_log WHERE entity_id = ? AND log_type = 'company'"
   ).get(company.id).cnt;
 
-  let next_action_date = null;
-  if (next_action === 'Call')  next_action_date = next_action_date_override || calcFollowUpDate('company', contact_type, 'call');
-  if (next_action === 'Visit') next_action_date = next_action_date_override || calcFollowUpDate('company', contact_type, 'visit');
-  if (next_action === 'Mail')  next_action_date = next_action_date_override || calcFollowUpDate('company', contact_type, 'mail');
-  if (next_action === 'Email') next_action_date = next_action_date_override || calcFollowUpDate('company', contact_type, 'email');
-
-  const nextStage = next_action === 'Stop'  ? 'dead'
-    : next_action === 'Visit' ? 'visit'
-    : next_action === 'Call'  ? 'call'
-    : next_action === 'Mail'  ? 'mail'
-    : next_action === 'Email' ? 'email'
-    : 'call';
+  // next_action_date and nextStage calculated inside scheduleNextAction
 
   let logEntry;
 
@@ -190,78 +179,14 @@ router.post('/:id/complete', (req, res) => {
     // Remove from visit queue
     db.prepare('DELETE FROM visit_queue WHERE id = ?').run(visit.id);
 
-    // Create next action
-    if (next_action === 'Call' && next_action_date) {
-      clearAllCompanyQueues(company.id);
-      const preferred = db.prepare(
-        'SELECT * FROM company_contacts WHERE company_id = ? AND is_preferred = 1'
-      ).get(company.company_id);
-
-      // Insert into follow_ups for due-date tracking
-      db.prepare(`
-        INSERT INTO follow_ups
-          (source_type, entity_id, company_id_str, entity_name, phone, direct_line,
-           industry, contact_name, due_date, source_log_id)
-        VALUES ('company', ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        company.id, company.company_id, company.name, company.main_phone,
-        direct_line || visit.direct_line || preferred?.direct_line || null,
-        company.industry,
-        contact_name || visit.contact_name || preferred?.name || null,
-        next_action_date, logEntry.id
-      );
-
-      // ALSO insert into calling_queue so company is visible immediately
-      // The calling queue JOIN only surfaces follow_ups due today; calling_queue has no date filter
-      const existingCQ = db.prepare("SELECT id FROM calling_queue WHERE queue_type='company' AND entity_id=?").get(company.id);
-      if (!existingCQ) {
-        db.prepare(`INSERT INTO calling_queue (queue_type, entity_id, contact_name, direct_line, notes, added_by)
-          VALUES ('company', ?, ?, ?, ?, ?)`).run(
-          company.id,
-          contact_name || visit.contact_name || preferred?.name || null,
-          direct_line  || visit.direct_line  || preferred?.direct_line || null,
-          notes || null, req.user?.id || null
-        );
-      }
-    } else if (next_action === 'Visit' && next_action_date) {
-      db.prepare(`
-        INSERT INTO visit_queue
-          (company_id, entity_id, entity_name, scheduled_date, address, city, contact_name, direct_line, email, source_log_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        company.company_id, company.id, company.name, next_action_date,
-        company.address, company.city,
-        contact_name || visit.contact_name || null,
-        direct_line  || visit.direct_line  || null,
-        email        || visit.email        || null,
-        logEntry.id
-      );
-    } else if (next_action === 'Mail') {
-      clearAllCompanyQueues(company.id);
-      const mailDate = next_action_date_override || calcFollowUpDate('company', contact_type, 'mail');
-      db.prepare(`INSERT INTO follow_ups (source_type,entity_id,company_id_str,entity_name,phone,direct_line,industry,contact_name,due_date,source_log_id,next_action) VALUES ('company',?,?,?,?,?,?,?,?,?,'Mail')`)
-        .run(company.id,company.company_id,company.name,company.main_phone,
-             direct_line||visit.direct_line||null,company.industry,
-             contact_name||visit.contact_name||null,mailDate,logEntry.id);
-      db.prepare("UPDATE companies SET pipeline_stage='mail', stage_updated_at=datetime('now'), updated_at=datetime('now') WHERE id=?").run(company.id);
-    } else if (next_action === 'Email') {
-      clearAllCompanyQueues(company.id);
-      const existingEmail = db.prepare("SELECT id FROM calling_queue WHERE queue_type='email' AND entity_id=?").get(company.id);
-      if (!existingEmail) {
-        db.prepare(`INSERT INTO calling_queue (queue_type, entity_id, contact_name, direct_line, notes, added_by)
-          VALUES ('email', ?, ?, ?, ?, ?)`).run(company.id,
-          contact_name || visit.contact_name || null,
-          direct_line  || visit.direct_line  || null,
-          notes || null, req.user?.id || null);
-      }
-      db.prepare("UPDATE companies SET pipeline_stage='email', stage_updated_at=datetime('now'), updated_at=datetime('now') WHERE id=?").run(company.id);
-    } else if (next_action === 'Stop') {
-      clearAllCompanyQueues(company.id);
-    }
-
-    // Update pipeline stage
-    db.prepare(`UPDATE companies SET pipeline_stage=?, stage_updated_at=datetime('now'), updated_at=datetime('now') WHERE id=?`)
-      .run(nextStage, company.id);
+    // Schedule next action — single source of truth
+    const { next_action_date: nad, nextStage: ns } = scheduleNextAction(db, {
+      company, contact_type, next_action, next_action_date_override,
+      contact_name: contact_name||visit.contact_name||null,
+      direct_line:  direct_line||visit.direct_line||null,
+      email:        email||visit.email||null,
+      log_id:       logEntry.id,
+    });
 
     db.exec('COMMIT');
   } catch (e) {
@@ -273,7 +198,7 @@ router.post('/:id/complete', (req, res) => {
     message: 'Visit logged successfully.',
     log_id: logEntry.id,
     next_action,
-    next_action_date,
+    next_action_date: nad,
   });
 });
 
