@@ -106,6 +106,7 @@ router.post('/company/:id', (req, res) => {
 
   // next_action_date and nextStage handled inside scheduleNextAction
   let logEntry;
+  let nad;
 
   db.exec('BEGIN TRANSACTION');
   try {
@@ -160,13 +161,13 @@ router.post('/company/:id', (req, res) => {
     }
 
     // Schedule next action — single source of truth
-    const { next_action_date: nad, nextStage: ns } = scheduleNextAction(db, {
+    ({ next_action_date: nad } = scheduleNextAction(db, {
       company, contact_type, next_action, next_action_date_override,
       contact_name: contact_name||null,
       direct_line:  direct_line||null,
       email:        email||null,
       log_id:       logEntry.id,
-    });
+    }));
 
     db.exec('COMMIT');
   } catch (e) {
