@@ -159,7 +159,7 @@ export default function CallingQueue() {
         </div>
 
         {/* Queue table */}
-        <div className="table-card">
+        <div className="table-card calling-queue-card">
           <div className="table-card-header">
             <span style={{ fontSize:15 }}>📞</span>
             <span className="table-card-title">Calling Queue</span>
