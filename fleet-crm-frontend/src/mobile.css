@@ -230,3 +230,30 @@
     overflow: visible !important;
   }
 }
+@media (max-width: 900px) {
+  div[style*="grid-template-columns: 300px 1fr"] {
+    display: flex !important;
+    flex-direction: column !important;
+    grid-template-columns: 1fr !important;
+    overflow: visible !important;
+  }
+
+  div[style*="grid-template-columns: 300px 1fr"] > div {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    border-right: 0 !important;
+  }
+
+  div[style*="position: relative; overflow: hidden; min-width: 0px;"] {
+    min-height: 220px !important;
+    height: 220px !important;
+    max-height: 220px !important;
+  }
+
+  .leaflet-container {
+    width: 100% !important;
+    height: 220px !important;
+    min-height: 220px !important;
+  }
+}
