@@ -50,7 +50,6 @@
     z-index: 1 !important;
   }
 
-  /* SIDEBAR (YOUR WORKING VERSION) */
   .sidebar {
     position: fixed;
     top: 0;
@@ -74,19 +73,6 @@
   .sidebar.open {
     left: 0 !important;
   }
-}
-@media (max-width: 900px) {
-
-  .call-modal-overlay {
-    position: fixed !important;
-    top: 56px !important;
-    left: 0 !important;
-    right: 0 !important;
-    bottom: 0 !important;
-    padding: 0 !important;
-    display: block !important;
-    z-index: 10001 !important;
-  }
 
   .mobile-backdrop {
     position: fixed;
@@ -98,26 +84,6 @@
     z-index: 9998;
   }
 
-}
-
-  .call-modal {
-    width: 100% !important;
-    max-width: 100% !important;
-    height: calc(100vh - 56px) !important;
-    max-height: calc(100vh - 56px) !important;
-    margin: 0 !important;
-    border-radius: 0 !important;
-    overflow-y: auto !important;
-    overflow-x: hidden !important;
-  }
-}
-@media (max-width: 900px) {
-  .call-modal > div {
-    min-height: 100%;
-  }
-}
-
-@media (max-width: 900px) {
   .call-modal-overlay {
     position: fixed !important;
     top: 56px !important;
@@ -147,8 +113,7 @@
   .call-modal * {
     max-width: 100% !important;
   }
-}
-@media (max-width: 900px) {
+
   .call-modal > div {
     height: auto !important;
     min-height: 0 !important;
