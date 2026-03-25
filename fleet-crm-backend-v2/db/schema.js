@@ -311,6 +311,7 @@ const migrations = [
   "INSERT OR IGNORE INTO config_settings (key, value, label) VALUES ('tekmetric_env', 'production', 'Tekmetric Environment')",
   "INSERT OR IGNORE INTO config_settings (key, value, label) VALUES ('tekmetric_poll_interval', '5', 'Tekmetric Poll Interval')",
   "INSERT OR IGNORE INTO config_settings (key, value, label) VALUES ('tekmetric_oil_interval', '90', 'Tekmetric Oil Interval')",
+  "INSERT OR IGNORE INTO config_settings (key, value, label) VALUES ('call_followup_days', '3', 'Default Call Follow-up Days')",
 ];
 for (const sql of migrations) {
   try { db.exec(sql); } catch(e) { /* column already exists — skip */ }
