@@ -72,7 +72,7 @@ export default function CallingQueue() {
       api.scorecardEntries(60).then(d => setScoreEntries(d)).finally(() => setScoresLoading(false));
     }
   }, [view]);
-  useEffect(() => { api.contactTypes().then(d => setContactTypes(d)); }, []);
+  useEffect(() => { api.contactTypes().then(d => setContactTypes(d?.configured?.filter(r => (r.action_type||'call') === 'call').map(r => r.contact_type) || [])); }, []);
   // Clear selected panel when navigating away
   useEffect(() => { return () => setSelected(null); }, []);
 
