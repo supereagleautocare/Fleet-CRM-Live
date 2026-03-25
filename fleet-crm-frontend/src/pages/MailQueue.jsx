@@ -121,7 +121,6 @@ export default function MailQueue() {
     style={{ fontWeight:700, fontSize:13, color:'var(--navy-700)', cursor:'pointer', textDecoration:'underline', textDecorationStyle:'dotted', textUnderlineOffset:3, display:'inline' }}
     onClick={e=>{ e.stopPropagation(); navigate('/companies?company='+row.id); }}
     title="Open company profile"
-  >{row.name}</div><div className="company-id">{row.company_id}</div></td>
                         <td><span className="phone-num">{fmtPhone(row.main_phone)}</span></td>
                         <td>{row.industry?<span className="badge badge-gray">{row.industry}</span>:'—'}</td>
                         <td>
