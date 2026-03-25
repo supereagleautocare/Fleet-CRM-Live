@@ -371,7 +371,7 @@ router.post('/log-mail/:id', (req, res) => {
     "SELECT COUNT(*) as cnt FROM call_log WHERE entity_id = ? AND log_type = 'company' AND log_category = 'mail'"
   ).get(company.id).cnt;
 
-  const next_action_date = next_action_date_override || calcFollowUpDate('company', 'Mail');
+  const next_action_date = next_action_date_override || calcFollowUpDate('company', contact_type, 'mail');
 
   db.exec('BEGIN TRANSACTION');
   try {
@@ -454,7 +454,7 @@ router.post('/log-email/:id', (req, res) => {
     "SELECT COUNT(*) as cnt FROM call_log WHERE entity_id = ? AND log_type = 'company' AND log_category = 'email'"
   ).get(company.id).cnt;
 
-  const next_action_date = next_action_date_override || calcFollowUpDate('company', 'Email');
+  const next_action_date = next_action_date_override || calcFollowUpDate('company', contact_type, 'email');
 
   db.exec('BEGIN TRANSACTION');
   try {
