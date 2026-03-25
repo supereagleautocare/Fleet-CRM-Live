@@ -211,7 +211,6 @@ export default function CallingQueue() {
                             onClick={e=>{ e.stopPropagation(); navigate('/companies?company='+row.id); }}
                             title="Open company profile"
                           >{row.name}</div>
-                          {row.company_id && <div className="company-id">{row.company_id}</div>}
                         </td>
                         <td><span className="phone-num">{fmtPhone(row.main_phone)}</span></td>
                         <td>{row.industry?<span className="badge badge-gray">{row.industry}</span>:'—'}</td>
