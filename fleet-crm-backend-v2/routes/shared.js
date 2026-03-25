@@ -217,6 +217,12 @@ function scheduleNextAction(db, { company, contact_type, next_action, next_actio
   }
 
   db.prepare(`UPDATE companies SET pipeline_stage=?,stage_updated_at=datetime('now'),updated_at=datetime('now') WHERE id=?`).run(nextStage,company.id);
+
+  // Update the call_log row with the calculated next_action_date so history shows it
+  if (log_id && next_action_date) {
+    db.prepare(`UPDATE call_log SET next_action_date = ? WHERE id = ?`).run(next_action_date, log_id);
+  }
+
   return { next_action_date, nextStage };
 }
 
