@@ -199,3 +199,20 @@
     min-height: 260px !important;
   }
 }
+@media (max-width: 900px) {
+  .main-content {
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    height: calc(100vh - 56px) !important;
+  }
+
+  .page-body {
+    overflow: visible !important;
+  }
+}
+@media (max-width: 900px) {
+  .table-card {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+}
