@@ -99,3 +99,8 @@
     overflow-x: hidden !important;
   }
 }
+@media (max-width: 900px) {
+  .call-modal > div {
+    min-height: 100%;
+  }
+}
