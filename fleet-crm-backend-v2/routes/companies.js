@@ -377,7 +377,7 @@ router.post('/queue/:queueId/complete', (req, res) => {
   ).get(company.id).cnt;
 
   let next_action_date = null;
-  if (next_action === 'Call')  next_action_date = next_action_date_override || calcFollowUpDate('company', contact_type);
+  if (next_action === 'Call')  next_action_date = next_action_date_override || calcFollowUpDate('company', contact_type, 'call');
   if (next_action === 'Visit') next_action_date = next_action_date_override || calcVisitDate();
 
   const nextStage = next_action === 'Stop'  ? 'dead'
@@ -488,7 +488,7 @@ router.post('/queue/:queueId/complete', (req, res) => {
       );
    } else if (next_action === 'Mail') {
       cancelOldFollowUps('company', company.id);
-      const mailDate = next_action_date_override || calcFollowUpDate('company', 'Mail');
+      const mailDate = next_action_date_override || calcFollowUpDate('company', contact_type, 'mail');
       db.prepare(`
         INSERT INTO follow_ups
           (source_type, entity_id, company_id_str, entity_name, phone, direct_line, industry, contact_name, due_date, source_log_id, next_action)
@@ -498,7 +498,7 @@ router.post('/queue/:queueId/complete', (req, res) => {
 
     } else if (next_action === 'Email') {
       cancelOldFollowUps('company', company.id);
-      const emailDate = next_action_date_override || calcFollowUpDate('company', 'Email');
+      const emailDate = next_action_date_override || calcFollowUpDate('company', contact_type, 'email');
       db.prepare(`
         INSERT INTO follow_ups
           (source_type, entity_id, company_id_str, entity_name, phone, direct_line, industry, contact_name, due_date, source_log_id, next_action)
