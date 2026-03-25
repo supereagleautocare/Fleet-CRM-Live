@@ -25,30 +25,25 @@ function getSetting(key, fallback = null) {
 
 // ─── Calculate follow-up date based on contact_type rules ─────────────────────
 // Returns a date string "YYYY-MM-DD" or null
-function calcFollowUpDate(source, contact_type) {
-  // Look for exact contact_type rule first
-  const rule = db.prepare(`
-    SELECT days FROM config_rules
-    WHERE (source = ? OR source = 'both')
-      AND contact_type = ?
-      AND enabled = 1
-    ORDER BY CASE WHEN source = ? THEN 0 ELSE 1 END
-    LIMIT 1
-  `).get(source, contact_type, source);
+function calcFollowUpDate(source, contact_type, action_type) {
+  // Look for exact contact_type + action_type rule first
+  if (contact_type) {
+    const rule = db.prepare(`
+      SELECT days FROM config_rules
+      WHERE contact_type = ?
+        AND action_type = ?
+        AND enabled = 1
+      LIMIT 1
+    `).get(contact_type, action_type || 'call');
 
-  if (rule) return addDays(rule.days);
+    if (rule) return addDays(rule.days);
+  }
 
-  // Fall back to action-type-level setting from config settings table
-  const ct = (contact_type || '').toLowerCase();
-  if (ct === 'mail sent' || ct === 'mail') {
-    const days = parseInt(getSetting('mail_followup_days', '30'), 10);
-    return addDays(days);
-  }
-  if (ct === 'email sent' || ct === 'email') {
-    const days = parseInt(getSetting('email_followup_days', '14'), 10);
-    return addDays(days);
-  }
-  return addDays(3); // default fallback
+  // Fall back to the default for that queue
+  if (action_type === 'mail')  return addDays(parseInt(getSetting('mail_followup_days',  '30'), 10));
+  if (action_type === 'email') return addDays(parseInt(getSetting('email_followup_days', '14'), 10));
+  if (action_type === 'visit') return addDays(parseInt(getSetting('visit_delay_days',    '3'),  10));
+  return addDays(3); // call default
 }
 
 // ─── Calculate visit date ─────────────────────────────────────────────────────
