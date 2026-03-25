@@ -11,19 +11,19 @@
     overflow-x: hidden;
   }
 
-  .mobile-topbar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    background: #111;
-    color: #fff;
-    padding: 12px 14px;
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 56px;
-    z-index: 10000;
+ .mobile-topbar {
+   display: flex;
+   align-items: center;
+   justify-content: space-between;
+   background: #111;
+   color: #fff;
+   padding: 0 14px;
+   position: fixed;
+   top: 0;
+   left: 0;
+   right: 0;
+   height: 56px;
+   z-index: 10000;
   }
 
   .mobile-menu-btn {
