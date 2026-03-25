@@ -365,7 +365,7 @@ router.post('/log-mail/:id', (req, res) => {
   const company = db.prepare('SELECT * FROM companies WHERE id = ?').get(req.params.id);
   if (!company) return res.status(404).json({ error: 'Company not found.' });
 
-  const { mail_piece, notes, next_action, next_action_date_override } = req.body;
+  const { mail_piece, contact_type, notes, next_action, next_action_date_override } = req.body;
 
   const priorAttempts = db.prepare(
     "SELECT COUNT(*) as cnt FROM call_log WHERE entity_id = ? AND log_type = 'company' AND log_category = 'mail'"
@@ -383,7 +383,7 @@ router.post('/log-mail/:id', (req, res) => {
       phone: company.main_phone,
       industry: company.industry,
       action_type: 'Mail',
-      contact_type: 'Mail Sent',
+      contact_type: contact_type || 'Mail Sent',
       notes: notes || null,
       next_action: next_action || 'Call',
       next_action_date,
@@ -448,7 +448,7 @@ router.post('/log-email/:id', (req, res) => {
   const company = db.prepare('SELECT * FROM companies WHERE id = ?').get(req.params.id);
   if (!company) return res.status(404).json({ error: 'Company not found.' });
 
-  const { email_template, email_to, notes, next_action, next_action_date_override } = req.body;
+  const { email_template, email_to, contact_type, notes, next_action, next_action_date_override } = req.body;
 
   const priorAttempts = db.prepare(
     "SELECT COUNT(*) as cnt FROM call_log WHERE entity_id = ? AND log_type = 'company' AND log_category = 'email'"
@@ -466,7 +466,7 @@ router.post('/log-email/:id', (req, res) => {
       phone: company.main_phone,
       industry: company.industry,
       action_type: 'Email',
-      contact_type: 'Email Sent',
+      contact_type: contact_type || 'Email Sent',
       notes: notes || null,
       next_action: next_action || 'Call',
       next_action_date,
