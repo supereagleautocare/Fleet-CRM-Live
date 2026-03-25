@@ -258,8 +258,21 @@ export default function CallingQueue() {
           )}
         </div>
 
-        {/* Inline log panel */}
-       {selected && <div className="mobile-companypanel-wrap"><CompanyPanel key={selected.id} row={{ ...selected, entity_id: selected.id, company_name: selected.name, main_phone: selected.main_phone }} sourceType="company" contactTypes={contactTypes} onComplete={handleComplete} onClose={() => setSelected(null)} saving={saving} /></div>}
+      {/* Inline log panel */}
+       {selected && (
+        <div className="mobile-companypanel-wrap">
+          <CompanyPanel
+            key={selected.id}
+            row={{ ...selected, entity_id: selected.id, company_name: selected.name, main_phone: selected.main_phone }}
+            sourceType="company"
+            contactTypes={contactTypes}
+            onComplete={handleComplete}
+            onClose={() => setSelected(null)}
+            saving={saving}
+          />
+       </div>
+     )}
+     </div>} 
       {/* ── Score History ── */}
       {view === 'scores' && (
         <div className="page-body" style={{ display:'flex', flexDirection:'column', gap:12 }}>
@@ -345,6 +358,5 @@ export default function CallingQueue() {
           onSaved={()=>{ setPendingScorecard(null); setManualScorecard(false); showToast('✅ Scorecard saved'); }}
         />
       )}
-    </div>
   );
 }
