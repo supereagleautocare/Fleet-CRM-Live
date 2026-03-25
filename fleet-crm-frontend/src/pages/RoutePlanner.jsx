@@ -1246,20 +1246,22 @@ export default function RoutePlanner({ embedded = false }) {
                       // visitId = visit_queue row id; companyId = companies row id
                       if (stop.visitId) {
                         await api.completeVisit(stop.visitId, {
-                          contact_type: logForm.contact_type,
-                          next_action:  logForm.next_action,
-                          notes:        logForm.notes,
-                          contact_name: logForm.contact_name,
-                          direct_line:  logForm.direct_line || undefined,
+                          contact_type:      logForm.contact_type,
+                          next_action:       logForm.next_action,
+                          notes:             logForm.notes,
+                          contact_name:      logForm.contact_name,
+                          direct_line:       logForm.direct_line || undefined,
+                          counts_as_attempt: contactTypes.find(ct => ct.contact_type === logForm.contact_type)?.counts_as_attempt ?? 1,
                         });
                       } else if (stop.companyId) {
                         // Fallback: schedule then complete if visitId missing
                         const vr = await api.scheduleVisit(stop.companyId);
                         await api.completeVisit(vr.id, {
-                          contact_type: logForm.contact_type,
-                          next_action:  logForm.next_action,
-                          notes:        logForm.notes,
-                          contact_name: logForm.contact_name,
+                          contact_type:      logForm.contact_type,
+                          next_action:       logForm.next_action,
+                          notes:             logForm.notes,
+                          contact_name:      logForm.contact_name,
+                          counts_as_attempt: contactTypes.find(ct => ct.contact_type === logForm.contact_type)?.counts_as_attempt ?? 1,
                         });
                       } else {
                         throw new Error('No visit ID — cannot log this stop');
