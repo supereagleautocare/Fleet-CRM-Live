@@ -259,20 +259,7 @@ export default function CallingQueue() {
         </div>
 
         {/* Inline log panel */}
-        {selected && (
-         <div style={{ width:'100%', maxWidth:'100%', overflow:'hidden' }}>
-          <CompanyPanel
-            key={selected.id}
-            row={{ ...selected, entity_id: selected.id, company_name: selected.name, main_phone: selected.main_phone }}
-            sourceType="company"
-            contactTypes={contactTypes}
-            onComplete={handleComplete}
-            onClose={() => setSelected(null)}
-            saving={saving}
-          />
-          </div>
-        )}
-      </div>}
+       {selected && <div className="mobile-companypanel-wrap"><CompanyPanel key={selected.id} row={{ ...selected, entity_id: selected.id, company_name: selected.name, main_phone: selected.main_phone }} sourceType="company" contactTypes={contactTypes} onComplete={handleComplete} onClose={() => setSelected(null)} saving={saving} /></div>}
       {/* ── Score History ── */}
       {view === 'scores' && (
         <div className="page-body" style={{ display:'flex', flexDirection:'column', gap:12 }}>
