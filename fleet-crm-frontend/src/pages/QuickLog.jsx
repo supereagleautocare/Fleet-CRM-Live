@@ -319,7 +319,7 @@ export default function QuickLog() {
                 {actionMode === 'email' && (
                   <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
                     <div className="form-group" style={{ margin:0 }}>
-                      <label className="form-label">Template / Campaign *</label>
+                      <label className="form-label">Template / Campaign</label>
                       <input className="form-input" placeholder="e.g. Intro Email, Follow-up #1…" value={form.email_template} onChange={e=>set('email_template',e.target.value)}/>
                     </div>
                     <div className="form-group" style={{ margin:0 }}>
