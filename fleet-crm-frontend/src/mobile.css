@@ -11,19 +11,19 @@
     overflow-x: hidden;
   }
 
- .mobile-topbar {
-   display: flex;
-   align-items: center;
-   justify-content: space-between;
-   background: #111;
-   color: #fff;
-   padding: 0 14px;
-   position: fixed;
-   top: 0;
-   left: 0;
-   right: 0;
-   height: 56px;
-   z-index: 10000;
+  .mobile-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #111;
+    color: #fff;
+    padding: 0 14px;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 56px;
+    z-index: 10000;
   }
 
   .mobile-menu-btn {
@@ -37,7 +37,10 @@
     position: relative !important;
     width: 100% !important;
     max-width: 100% !important;
+    min-height: 100vh !important;
+    height: auto !important;
     overflow-x: hidden !important;
+    overflow-y: auto !important;
   }
 
   .main-content {
@@ -48,22 +51,52 @@
     padding-top: 72px !important;
     position: relative !important;
     z-index: 1 !important;
+    min-height: calc(100vh - 72px) !important;
+    height: auto !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
   }
 
   .page-header {
-    padding-top: 8px !important;
+    height: auto !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+    padding: 8px !important;
+  }
+
+  .page-header > * {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .page-header * {
+    white-space: normal !important;
   }
 
   .page-body {
+    display: flex !important;
+    flex-direction: column !important;
     width: 100% !important;
     padding: 8px !important;
     box-sizing: border-box !important;
+    overflow: visible !important;
+  }
+
+  .page-body > div {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
   }
 
   .table-card {
     width: 100% !important;
     max-width: 100% !important;
     margin: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
   }
 
   .sidebar {
@@ -136,60 +169,6 @@
     max-height: none !important;
     overflow: visible !important;
   }
-}
-@media (max-width: 900px) {
-  .page-header {
-    height: auto !important;
-    display: flex !important;
-    flex-direction: column !important;
-    align-items: stretch !important;
-    gap: 8px !important;
-    padding: 8px !important;
-  }
-
-  .page-header > * {
-    width: 100% !important;
-    max-width: 100% !important;
-  }
-}
-@media (max-width: 900px) {
-  .page-header {
-    flex-wrap: wrap !important;
-  }
-
-  .page-header * {
-    white-space: normal !important;
-  }
-}
-@media (max-width: 900px) {
-  .page-body {
-    display: flex !important;
-    flex-direction: column !important;
-  }
-
-  .page-body > div {
-    width: 100% !important;
-    max-width: 100% !important;
-    min-width: 0 !important;
-  }
-
-  [style*="grid-template-columns"] {
-    grid-template-columns: 1fr !important;
-  }
-
-  [style*="display: grid"] {
-    grid-template-columns: 1fr !important;
-  }
-
-  input,
-  select,
-  button {
-    max-width: 100% !important;
-  }
-
-  .table-card {
-    overflow: hidden !important;
-  }
 
   .leaflet-container,
   .mapboxgl-map,
@@ -198,21 +177,10 @@
     height: 260px !important;
     min-height: 260px !important;
   }
-}
-@media (max-width: 900px) {
-  .main-content {
-    overflow-y: auto !important;
-    overflow-x: hidden !important;
-    height: calc(100vh - 56px) !important;
-  }
 
-  .page-body {
-    overflow: visible !important;
-  }
-}
-@media (max-width: 900px) {
-  .table-card {
-    max-height: none !important;
-    overflow: visible !important;
+  input,
+  select,
+  button {
+    max-width: 100% !important;
   }
 }
