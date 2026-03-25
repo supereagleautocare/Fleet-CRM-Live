@@ -1,8 +1,12 @@
+/* HIDE MOBILE STUFF ON DESKTOP */
 .mobile-topbar {
   display: none;
 }
 
+/* MOBILE ONLY */
 @media (max-width: 900px) {
+
+  /* TOP BAR */
   .mobile-topbar {
     display: flex;
     align-items: center;
@@ -21,6 +25,7 @@
     line-height: 1;
   }
 
+  /* LAYOUT RESET */
   .app-layout {
     display: block;
     position: relative;
@@ -29,10 +34,12 @@
   .main-content {
     width: 100%;
     margin-left: 0 !important;
+    padding-left: 0 !important;
     position: relative;
     z-index: 1;
   }
 
+  /* SIDEBAR (FIXED OVERLAY) */
   .sidebar {
     position: fixed;
     top: 0;
@@ -40,12 +47,22 @@
     width: 85%;
     max-width: 260px;
     height: 100vh;
+    background: #020617; /* match your dark theme */
     z-index: 9999;
     transition: left 0.25s ease;
     overflow-y: auto;
+
+    /* override desktop styles */
+    margin-left: 0 !important;
+    transform: none !important;
   }
 
   .sidebar.open {
     left: 0;
+  }
+
+  /* OPTIONAL: make content dim when open (nice UX) */
+  .sidebar.open ~ .main-content {
+    filter: brightness(0.7);
   }
 }
