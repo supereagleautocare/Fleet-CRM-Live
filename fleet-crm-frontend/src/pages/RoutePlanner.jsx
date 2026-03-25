@@ -1177,8 +1177,7 @@ export default function RoutePlanner({ embedded = false }) {
         } : null);
         if (!stop) return null;
         const ctypes = contactTypes.filter(ct => ct.action_type==='visit' && ct.enabled!==0);
-        const fallback = ['Spoke To Decision Maker','Spoke To Receptionist','Left Materials','No One Available','Drop Off Flyer'];
-        const typeOptions = ctypes.length > 0 ? ctypes.map(ct=>ct.contact_type) : fallback;
+        const typeOptions = ctypes.map(ct=>ct.contact_type);
         return (
           <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:2000,display:'flex',alignItems:'center',justifyContent:'center',padding:20}}
             onClick={e=>{if(e.target===e.currentTarget){ setLoggingStop(null); setQueueStatus(null); }}}>
