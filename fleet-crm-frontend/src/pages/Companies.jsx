@@ -70,6 +70,22 @@ function PipelineBar({ company, onMove, onStatusChange }) {
             </div>
           ))}
         </div>
+        {/* Follow-up date */}
+        {(company.followup_due || company.follow_up?.due_date) && (() => {
+          const due = company.followup_due || company.follow_up?.due_date;
+          const isOverdue = new Date(due+'T00:00:00') < new Date();
+          const isToday = due === new Date().toISOString().split('T')[0];
+          return (
+            <div style={{ fontSize:11, fontWeight:700, padding:'4px 10px', borderRadius:8,
+              background: isOverdue?'#fef2f2':isToday?'#fffbeb':'#f0fdf4',
+              color: isOverdue?'#dc2626':isToday?'#92400e':'#15803d',
+              border: `1px solid ${isOverdue?'#fca5a5':isToday?'#fde68a':'#bbf7d0'}`,
+              flexShrink:0,
+            }}>
+              📅 Due {isToday?'Today':isOverdue?'Overdue':new Date(due+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}
+            </div>
+          );
+        })()}
         {/* Queue status + Company status */}
         <div style={{ display:'flex', gap:6, flexShrink:0, alignItems:'center' }}>
           <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
