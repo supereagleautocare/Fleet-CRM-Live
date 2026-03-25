@@ -125,7 +125,7 @@ router.post('/company/:id', (req, res) => {
       contact_type,
       notes: notes || null,
       next_action,
-      next_action_date,
+      next_action_date: null,
       attempt_number: priorAttempts + 1,
       logged_by: req.user.id,
       logged_by_name: req.user.name,
