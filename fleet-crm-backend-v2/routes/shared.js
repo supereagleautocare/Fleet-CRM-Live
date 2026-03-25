@@ -210,7 +210,7 @@ function scheduleNextAction(db, { company, contact_type, next_action, next_actio
     const preferred = db.prepare('SELECT * FROM company_contacts WHERE company_id=? AND is_preferred=1').get(company.company_id);
     db.prepare(`INSERT INTO visit_queue (company_id,entity_id,entity_name,scheduled_date,address,city,contact_name,direct_line,email,source_log_id) VALUES (?,?,?,?,?,?,?,?,?,?)`)
       .run(company.company_id,company.id,company.name,next_action_date,company.address,company.city,
-           contact_name||preferred?.name||null, direct_line||preferred?.direct_line||null, email||preferred?.email||null, log_id||null);
+           contact_name||null, direct_line||null, email||null, log_id||null);
   } else {
     db.prepare(`INSERT INTO follow_ups (source_type,entity_id,company_id_str,entity_name,phone,direct_line,industry,contact_name,due_date,source_log_id,next_action) VALUES ('company',?,?,?,?,?,?,?,?,?,?)`)
       .run(company.id,company.company_id,company.name,company.main_phone, direct_line||null,company.industry,contact_name||null,next_action_date,log_id||null,next_action);
