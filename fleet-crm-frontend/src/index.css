@@ -234,7 +234,7 @@ html, body, #root {
 /* ── Tables ───────────────────────────────────────────────── */
 .table-card {
   background: white; border-radius: var(--r-lg);
-  border: 1px solid var(--gray-200); overflow: hidden;
+  border: 1px solid var(--gray-200); overflow: visible;
 }
 
 .table-card-header {
@@ -246,7 +246,7 @@ html, body, #root {
 .table-card-title  { font-size: 13px; font-weight: 700; color: var(--gray-800); }
 .table-card-count  { font-size: 11px; color: var(--gray-400); }
 
-.table-wrapper { overflow-x: auto; overflow-y: auto; }
+.table-wrapper { overflow-x: auto; overflow-y: visible; }
 
 table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 
