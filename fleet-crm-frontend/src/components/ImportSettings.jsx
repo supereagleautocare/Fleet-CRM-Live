@@ -15,7 +15,7 @@
 import { useState, useRef } from 'react';
 import { api } from '../api.js';
 import { useApp } from '../App.jsx';
-import NewCompaniesImport from './NewCompaniesImport.jsx';
+
 // ── Column positions in the call log CSV ─────────────────────────────────────
 // Headers: Completed, Notes, Contact Type, Contact Date, Phone, Direct Line,
 //          Contact Name, Email, Role/Title, Company Name, Company ID, Industry,
@@ -307,26 +307,6 @@ if (hasImported) return <div style={{padding:20}}>✅ Call history already impor
 
 return (
   <div style={{ maxWidth:1000 }}>
-
-    {/* 🔀 Import Mode Switch */}
-    <div style={{ display:'flex', gap:8, marginBottom:16 }}>
-      <button
-        className={`btn ${importMode === 'history' ? 'btn-primary' : 'btn-ghost'}`}
-        onClick={() => setImportMode('history')}
-      >
-        📥 Import Call History
-      </button>
-      <button
-        className={`btn ${importMode === 'companies' ? 'btn-primary' : 'btn-ghost'}`}
-        onClick={() => setImportMode('companies')}
-      >
-        🏢 Import New Companies
-      </button>
-    </div>
-
-    {importMode === 'companies' ? (
-      <NewCompaniesImport />
-    ) : (
       <>
         <div style={{ marginBottom:20 }}>
           <div style={{ fontWeight:800, fontSize:18, color:'var(--navy-800)', marginBottom:4 }}>
