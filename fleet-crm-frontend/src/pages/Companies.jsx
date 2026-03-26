@@ -1,4 +1,4 @@
-
+import CompanyMergeModal from '../components/CompanyMergeModal.jsx';
 import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import AddressAutocomplete from '../components/AddressAutocomplete.jsx';
@@ -1015,58 +1015,17 @@ async function handleImport(e) {
         />
       )}
       {merging && (
-        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.5)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000 }}>
-          <div style={{ background:'white', borderRadius:14, padding:28, width:420, boxShadow:'0 20px 60px rgba(0,0,0,.2)' }}>
-            <div style={{ fontWeight:800, fontSize:16, marginBottom:4 }}>🔀 Merge Company</div>
-            <div style={{ fontSize:12, color:'var(--gray-500)', marginBottom:16 }}>
-              All history, contacts and queue entries from <strong>{selected?.name}</strong> will be moved into the company you choose below, then <strong>{selected?.name}</strong> will be deleted.
-            </div>
-            <input className="form-input" placeholder="Search company to merge into…"
-              value={mergeSearch}
-              onChange={async e => {
-               const q = e.target.value;
-               setMergeSearch(q);
-
-               if (q.trim().length >= 2) {
-               try {
-                    const results = await api.searchCompanyName(q.trim());
-                   setMergeResults((results || []).filter(r => r.id !== selected?.id));
-                 } catch (err) {
-                   setMergeResults([]);
-                   showToast(err.message || 'Search failed', 'error');
-                 }
-               } else {
-                 setMergeResults([]);
-               }
-             }}
-            />
-            {mergeResults.length > 0 && (
-              <div style={{ marginTop:8, border:'1px solid var(--gray-200)', borderRadius:8, overflow:'hidden' }}>
-                {mergeResults.map(r => (
-                  <div key={r.id} style={{ padding:'10px 14px', borderBottom:'1px solid var(--gray-100)', cursor:'pointer' }}
-                    onClick={async () => {
-                      if (!confirm(`Merge ${selected.name} INTO ${r.name}? This cannot be undone.`)) return;
-                      try {
-                        await api.mergeCompany(selected.id, r.id);
-                        showToast(`Merged into ${r.name}`);
-                        setMerging(false);
-                        setSelected(null);
-                        await load();
-                        await refreshCounts();
-                      } catch(err) { showToast(err.message, 'error'); }
-                    }}>
-                    <div style={{ fontWeight:600, fontSize:13 }}>{r.name}</div>
-                    <div style={{ fontSize:11, color:'var(--gray-400)' }}>{r.city}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-            <div style={{ display:'flex', justifyContent:'flex-end', marginTop:16 }}>
-              <button className="btn btn-ghost" onClick={()=>setMerging(false)}>Cancel</button>
-            </div>
-          </div>
-        </div>
-      )}
+        <CompanyMergeModal
+          sourceCompany={selected}
+          onClose={() => setMerging(false)}
+          onMerged={(targetId) => {
+            setMerging(false);
+            setSelected(null);
+            load();
+            refreshCounts();
+          }}
+        />
+       )}
     </>
   );
 }
