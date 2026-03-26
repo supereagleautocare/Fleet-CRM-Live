@@ -38,8 +38,10 @@ const COL_ALIASES = {
   state:        ['state', 'st', 'province'],
   zip:          ['zip', 'postal', 'zipcode', 'zip code', 'postal code'],
   industry:     ['industry', 'type', 'sector', 'category', 'business type'],
-  contact_name: ['contact', 'contact name', 'owner', 'manager', 'person', 'key contact', 'primary contact'],
-  notes:        ['notes', 'note', 'comments', 'comment', 'description', 'memo'],
+  contact_name:    ['contact', 'contact name', 'owner', 'manager', 'person', 'key contact', 'primary contact'],
+  notes:           ['notes', 'note', 'comments', 'comment', 'description', 'memo'],
+  next_follow_up:  ['follow up', 'follow-up', 'followup', 'next follow up', 'next_follow_up', 'due date', 'due', 'next contact', 'next call date'],
+  contact_role:    ['contact role', 'role', 'title', 'contact title', 'position'],
 };
 
 function detectColumns(headers) {
@@ -146,8 +148,10 @@ export default function SimpleImport({ onDone }) {
         state:        get('state'),
         zip:          get('zip'),
         industry:     get('industry'),
-        contact_name: get('contact_name'),
-        notes:        get('notes'),
+        contact_name:   get('contact_name'),
+        contact_role:   get('contact_role'),
+        notes:          get('notes'),
+        next_follow_up: get('next_follow_up'),
       };
     }).filter(r => r.name); // must have a name
 
@@ -218,8 +222,14 @@ export default function SimpleImport({ onDone }) {
         pipeline_stage: stage,
         existing_crm_id: r.dupe_id || null,
         // If there's a contact name, send it as the first contact
-        contact_name: r.contact_name || null,
-        // No history for fresh imports
+        contact_name:   r.contact_name || null,
+        contact_role:   r.contact_role || null,
+        next_follow_up: r.next_follow_up || null,
+        contacts: r.contact_name ? [{
+          name: r.contact_name,
+          role_title: r.contact_role || null,
+          is_preferred: 1,
+        }] : [],
         history: [],
       }));
 
