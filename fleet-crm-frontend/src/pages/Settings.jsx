@@ -352,6 +352,20 @@ export default function Settings() {
           onSaved={()=>setPreviewScorecard(null)}
         />
       )}
+      <div className="table-card" style={{ padding:'20px 24px', marginTop:16 }}>
+  <div style={{ fontWeight:700, fontSize:15, marginBottom:8 }}>🔧 Database Tools</div>
+  <div style={{ fontSize:13, color:'var(--gray-500)', marginBottom:12 }}>
+    Fix missing follow-up dates for imported companies. Safe to run multiple times.
+  </div>
+  <button className="btn btn-primary" onClick={async () => {
+    try {
+      const res = await api.post('/companies/backfill-followups');
+      alert(`Done! Created ${res.created} follow-up records.`);
+    } catch(e) { alert('Error: ' + e.message); }
+  }}>
+    🔄 Backfill Follow-Up Dates
+  </button>
+</div>
     </>
   );
 }
