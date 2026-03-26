@@ -453,8 +453,9 @@ export default function ImportSettings() {
           <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12, marginBottom:20 }}>
             {[
               { label:'New Companies Created', val:result.imported, color:'#15803d' },
-              { label:'History Added To Existing', val:result.skipped, color:'#1e40af' },
-              { label:'Call History Entries', val:result.history||0, color:'#7c3aed' },
+              { label:'Matched Existing Companies', val:result.matched_existing || result.skipped, color:'#1e40af' },
+              { label:'Call History Entries Imported', val:result.history||0, color:'#7c3aed' },
+              { label:'Duplicate History Skipped', val:result.duplicate_history||0, color:'#92400e' },
               { label:'Errors', val:result.errors?.length||0, color:result.errors?.length?'#dc2626':'#94a3b8' },
             ].map((s,i)=>(
               <div key={i} style={{ background:'white', borderRadius:8, padding:'12px 16px', border:'1px solid var(--gray-200)' }}>
