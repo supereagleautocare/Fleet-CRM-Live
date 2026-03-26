@@ -341,22 +341,23 @@ export default function Settings() {
             )}
           </>
         )}
-      </div>
-      </div>
-      {/* Database Tools */}
-      <div className="table-card" style={{ padding:'20px 24px', marginTop:16, marginLeft:22, marginRight:22 }}>
-        <div style={{ fontWeight:700, fontSize:15, marginBottom:8 }}>🔧 Database Tools</div>
-        <div style={{ fontSize:13, color:'var(--gray-500)', marginBottom:12 }}>
-          Fix missing follow-up dates for companies already in the database. Safe to run multiple times.
+
+        {/* Database Tools */}
+        <div className="table-card" style={{ padding:'20px 24px', marginTop:16 }}>
+          <div style={{ fontWeight:700, fontSize:15, marginBottom:8 }}>🔧 Database Tools</div>
+          <div style={{ fontSize:13, color:'var(--gray-500)', marginBottom:12 }}>
+            Fix missing follow-up dates for companies already in the database. Safe to run multiple times.
+          </div>
+          <button className="btn btn-primary" onClick={async () => {
+            try {
+              const res = await api.backfillFollowups();
+              alert(`Done! Created ${res.created} follow-up records.`);
+            } catch(e) { alert('Error: ' + e.message); }
+          }}>
+            🔄 Backfill Follow-Up Dates
+          </button>
         </div>
-        <button className="btn btn-primary" onClick={async () => {
-          try {
-            const res = await api.backfillFollowups();
-            alert(`Done! Created ${res.created} follow-up records.`);
-          } catch(e) { alert('Error: ' + e.message); }
-        }}>
-          🔄 Backfill Follow-Up Dates
-        </button>
+
       </div>
 
       {previewScorecard && (
