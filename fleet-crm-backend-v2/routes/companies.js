@@ -969,24 +969,42 @@ router.post('/:id/merge/:into_id', (req, res) => {
     const values = [];
 
     for (const field of MERGEABLE_FIELDS) {
-      const choice = field_choices[field] || 'target'; // default: keep target
-      const srcVal = source[field];
-      const tgtVal = target[field];
+  const choice = field_choices[field] || 'target';
+  const srcVal = source[field];
+  const tgtVal = target[field];
 
-      let merged;
-      if (choice === 'source') {
-        merged = srcVal || tgtVal; // fall back to target if source empty
-      } else if (choice === 'combine' && srcVal && tgtVal) {
-        merged = `${tgtVal}\n\n---\n\n${srcVal}`; // target first, then source
-      } else {
-        merged = tgtVal || srcVal; // keep target, fall back to source
-      }
-
-      if (merged !== undefined) {
-        updates.push(`${field} = ?`);
-        values.push(merged);
-      }
+  // Special case: keep both phone numbers
+  if (field === 'main_phone' && choice === 'both' && srcVal && tgtVal) {
+    // Keep target's number as main phone on the company record
+    updates.push('main_phone = ?');
+    values.push(tgtVal);
+    // Save source's number as a contact entry so it isn't lost
+    const contactName = source.name + ' (alternate number)';
+    const existingAlt = db.prepare(
+      'SELECT id FROM company_contacts WHERE company_id = ? AND direct_line = ?'
+    ).get(target.company_id, srcVal);
+    if (!existingAlt) {
+      db.prepare(
+        'INSERT INTO company_contacts (company_id, name, role_title, direct_line, is_preferred) VALUES (?, ?, ?, ?, 0)'
+      ).run(target.company_id, contactName, 'Alternate Phone', srcVal);
     }
+    continue; // skip the normal update logic below
+  }
+
+  let merged;
+  if (choice === 'source') {
+    merged = srcVal || tgtVal;
+  } else if (choice === 'combine' && srcVal && tgtVal) {
+    merged = tgtVal + '\n\n---\n\n' + srcVal;
+  } else {
+    merged = tgtVal || srcVal;
+  }
+
+  if (merged !== undefined) {
+    updates.push(`${field} = ?`);
+    values.push(merged);
+  }
+}
 
     // Also inherit pipeline_stage and company_status if target is 'new'
     if (target.pipeline_stage === 'new' && source.pipeline_stage !== 'new') {
