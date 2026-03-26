@@ -653,11 +653,21 @@ router.post('/import', (req, res) => {
           if (!inQ) db.prepare("INSERT INTO calling_queue (queue_type, entity_id, added_by) VALUES ('company', ?, ?)").run(companyDbId, req.user.id);
         }
 
-        // Set follow-up date if provided and in the future
-        if (row.next_follow_up && new Date(row.next_follow_up) > new Date()) {
+        // Save preferred contact if provided
+        if (row.contact_name) {
+          const existing = db.prepare('SELECT id FROM company_contacts WHERE company_id=? AND lower(name)=lower(?)').get(companyIdStr, row.contact_name);
+          if (!existing) {
+            db.prepare(`INSERT INTO company_contacts (company_id, name, role_title, is_preferred) VALUES (?,?,?,1)`)
+              .run(companyIdStr, row.contact_name, row.contact_role||null);
+          }
+        }
+
+        // Set follow-up date if provided
+        if (row.next_follow_up) {
+          const today = new Date().toISOString().split('T')[0];
+          const useDate = new Date(row.next_follow_up) > new Date() ? row.next_follow_up : today;
           db.prepare("INSERT INTO follow_ups (source_type,entity_id,company_id_str,entity_name,phone,due_date,next_action) VALUES ('company',?,?,?,?,?,?)")
-            .run(companyDbId, companyIdStr, name, phone||null, row.next_follow_up, row.last_next_action||'Call');
-          // Also set pipeline stage to 'call' since they have history
+            .run(companyDbId, companyIdStr, name, phone||null, useDate, row.last_next_action||'Call');
           db.prepare("UPDATE companies SET pipeline_stage='call' WHERE id=?").run(companyDbId);
         }
       }
