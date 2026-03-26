@@ -302,6 +302,7 @@ export default function ImportSettings() {
  const dncCount       = companies.filter(co => checked[co.original_id || co.company_name] && co.isDNC).length;
 
 // ── Render ─────────────────────────────────────────────────────────────────
+// ── Render ─────────────────────────────────────────────────────────────────
 return (
   <div style={{ maxWidth:1000 }}>
 
@@ -321,11 +322,9 @@ return (
       </button>
     </div>
 
-    {/* 🏢 New Companies Import */}
-    {importMode === 'companies' && <NewCompaniesImport />}
-
-    {/* 📥 Call History Import */}
-    {importMode === 'history' && (
+    {importMode === 'companies' ? (
+      <NewCompaniesImport />
+    ) : (
       <>
         <div style={{ marginBottom:20 }}>
           <div style={{ fontWeight:800, fontSize:18, color:'var(--navy-800)', marginBottom:4 }}>
@@ -336,145 +335,175 @@ return (
             Duplicate sync artifacts are removed automatically.
           </div>
         </div>
-      {/* ── STEP 1: Upload ── */}
-      {step === 'upload' && (
-        <div>
-          <div style={{ background:'#f8fafc', border:'2px dashed var(--gray-300)', borderRadius:12, padding:40, textAlign:'center' }}>
-            <div style={{ fontSize:40, marginBottom:12 }}>📄</div>
-            <div style={{ fontWeight:800, fontSize:16, color:'var(--navy-800)', marginBottom:8 }}>
-              Company Call Log CSV
-            </div>
-            <div style={{ fontSize:12, color:'var(--gray-500)', marginBottom:20, lineHeight:1.8 }}>
-              Export from your old system as <strong>CSV UTF-8</strong><br/>
-              (Excel: File → Save As → CSV UTF-8 (Comma delimited))<br/>
-              Expected columns: Company ID, Company Name, Phone, Contact Type, Notes, Contact Date, Next Follow-up Date, etc.
-            </div>
-            <input ref={fileRef} type="file" accept=".csv" onChange={handleFile} style={{ display:'none' }}/>
-            <button className="btn btn-primary" style={{ fontSize:14, padding:'10px 28px' }} onClick={()=>fileRef.current?.click()}>
-              📁 Choose CSV File
-            </button>
-          </div>
 
-          <div style={{ marginTop:20, padding:'14px 18px', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:10, fontSize:12, color:'#92400e', lineHeight:1.9 }}>
-            <strong>What this import does:</strong><br/>
-            ✓ Reads every call entry from your CSV<br/>
-            ✓ Removes duplicate sync artifacts automatically<br/>
-            ✓ Groups entries by company name + phone (falls back safely when data is messy)<br/>
-            ✓ Checks which companies already exist in your CRM<br/>
-            ✓ Shows you a full review table — nothing imports until you confirm<br/>
-            ✓ For existing companies, only adds call history (doesn't overwrite company data)<br/>
-            ✓ For new companies, creates the company + attaches all history<br/>
-            ✓ Uses the most recent entry's follow-up date as the due date (exact date preserved)<br/>
-            ✓ Companies where the last contact was "Do Not Call" are marked dead and skipped from queue
-          </div>
-        </div>
-      )}
-
-      {/* ── STEP 2: Review ── */}
-      {step === 'review' && (
-        <>
-          {/* Stats bar */}
-          <div style={{ display:'flex', gap:10, marginBottom:16, flexWrap:'wrap' }}>
-            {[
-              { label:'Total Entries', val:parseStats.total, color:'var(--navy-800)' },
-              { label:'Duplicates Removed', val:parseStats.dupes, color:'#d97706', sub:'sync artifacts' },
-              { label:'Unique Entries', val:parseStats.deduped, color:'#15803d' },
-              { label:'Companies', val:parseStats.companies, color:'#1e40af' },
-            ].map((s,i)=>(
-              <div key={i} style={{ flex:1, minWidth:130, background:'#f8fafc', border:'1px solid var(--gray-200)', borderRadius:8, padding:'10px 14px' }}>
-                <div style={{ fontSize:10, color:'var(--gray-400)', textTransform:'uppercase', letterSpacing:'.07em', marginBottom:2 }}>{s.label}</div>
-                <div style={{ fontSize:22, fontWeight:900, color:s.color }}>{s.val.toLocaleString()}</div>
-                {s.sub && <div style={{ fontSize:10, color:'var(--gray-400)' }}>{s.sub}</div>}
+        {/* ── STEP 1: Upload ── */}
+        {step === 'upload' && (
+          <div>
+            <div style={{ background:'#f8fafc', border:'2px dashed var(--gray-300)', borderRadius:12, padding:40, textAlign:'center' }}>
+              <div style={{ fontSize:40, marginBottom:12 }}>📄</div>
+              <div style={{ fontWeight:800, fontSize:16, color:'var(--navy-800)', marginBottom:8 }}>
+                Company Call Log CSV
               </div>
-            ))}
-          </div>
-
-          {/* Selection summary + actions */}
-          <div style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 16px', background:'var(--navy-950)', borderRadius:10, marginBottom:12, flexWrap:'wrap' }}>
-            <div style={{ fontSize:13, fontWeight:700, color:'white' }}>
-              {selectedCount} selected · {newCount} new companies · {existingCount} add history to existing · {historyCount.toLocaleString()} entries
-              {dncCount > 0 && <span style={{ color:'#fca5a5', marginLeft:8 }}>· {dncCount} Do Not Call → dead</span>}
-            </div>
-            <div style={{ marginLeft:'auto', display:'flex', gap:6 }}>
-              <button className="btn btn-ghost btn-sm" style={{ color:'rgba(255,255,255,.7)', border:'1px solid rgba(255,255,255,.2)' }} onClick={()=>toggleAll(true)}>Select All</button>
-              <button className="btn btn-ghost btn-sm" style={{ color:'rgba(255,255,255,.7)', border:'1px solid rgba(255,255,255,.2)' }} onClick={()=>toggleAll(false)}>Deselect All</button>
-            </div>
-          </div>
-
-          {/* Add to queue option */}
-          <label style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 14px', background:'#fefce8', border:'1px solid #fde68a', borderRadius:8, marginBottom:12, cursor:'pointer', fontSize:12, fontWeight:600 }}>
-            <input type="checkbox" checked={addToQueue} onChange={e=>setAddToQueue(e.target.checked)} style={{ accentColor:'var(--navy-800)', width:14, height:14 }}/>
-            Add all NEW companies to Calling Queue after import
-          </label>
-
-          {/* Review table */}
-          <div style={{ border:'1px solid var(--gray-200)', borderRadius:10, overflow:'hidden', marginBottom:16 }}>
-            {/* Table header */}
-            <div style={{ display:'grid', gridTemplateColumns:'32px 1fr 80px 100px 80px 120px 1fr', gap:0, padding:'8px 12px', background:'var(--gray-50)', borderBottom:'1px solid var(--gray-200)', fontSize:10, fontWeight:700, color:'var(--gray-400)', textTransform:'uppercase', letterSpacing:'.06em' }}>
-              <div/>
-              <div>Company</div>
-              <div>Calls</div>
-              <div>Status</div>
-              <div>Last Type</div>
-              <div>Date Range</div>
-              <div>Last Note</div>
+              <div style={{ fontSize:12, color:'var(--gray-500)', marginBottom:20, lineHeight:1.8 }}>
+                Export from your old system as <strong>CSV UTF-8</strong><br/>
+                (Excel: File → Save As → CSV UTF-8 (Comma delimited))<br/>
+                Expected columns: Company ID, Company Name, Phone, Contact Type, Notes, Contact Date, Next Follow-up Date, etc.
+              </div>
+              <input ref={fileRef} type="file" accept=".csv" onChange={handleFile} style={{ display:'none' }}/>
+              <button className="btn btn-primary" style={{ fontSize:14, padding:'10px 28px' }} onClick={()=>fileRef.current?.click()}>
+                📁 Choose CSV File
+              </button>
             </div>
 
-            <div style={{ maxHeight:500, overflowY:'auto' }}>
-              {companies.map(co => {
-                const key = co.original_id || co.company_name;
-                const isChecked = !!checked[key];
-                const badge = TYPE_BADGE[co.lastType] || { bg:'#f9fafb', color:'#374151' };
-                return (
-                  <div key={key}
-                    style={{ display:'grid', gridTemplateColumns:'32px 1fr 80px 100px 80px 120px 1fr', gap:0, padding:'9px 12px', borderBottom:'1px solid var(--gray-100)', background:isChecked?(co.isDNC?'#fef2f2':'white'):'#fafafa', opacity:isChecked?1:.55, alignItems:'center', cursor:'pointer' }}
-                    onClick={()=>setChecked(p=>({...p,[key]:!p[key]}))}>
-                    <input type="checkbox" checked={isChecked} onChange={()=>{}} style={{ accentColor:'var(--navy-800)', width:13, height:13 }}/>
-                    <div>
-                      <div style={{ fontWeight:700, fontSize:12, color:co.isDNC?'#dc2626':'var(--navy-800)' }}>{co.company_name}</div>
-                      <div style={{ fontSize:10, color:'var(--gray-400)' }}>{co.original_id} {co.phone && `· ${co.phone}`} {co.industry && `· ${co.industry}`}</div>
-                      {co.isDNC && <div style={{ fontSize:10, fontWeight:700, color:'#dc2626', marginTop:2 }}>🚫 Do Not Call — will be marked dead</div>}
-                    </div>
-                    <div style={{ fontSize:13, fontWeight:800, color:'var(--navy-800)', textAlign:'center' }}>{co.entries.length}</div>
-                    <div>
-                      {co.existingCrmId ? (
-                        <span style={{ fontSize:10, fontWeight:700, background:'#eff6ff', color:'#1e40af', padding:'2px 8px', borderRadius:20 }}>+ History Only</span>
-                      ) : (
-                        <span style={{ fontSize:10, fontWeight:700, background:'#f0fdf4', color:'#15803d', padding:'2px 8px', borderRadius:20 }}>🆕 New Company</span>
-                      )}
-                    </div>
-                    <div>
-                      <span style={{ fontSize:10, fontWeight:600, padding:'2px 7px', borderRadius:12, background:badge.bg, color:badge.color }}>
-                        {co.lastType}
-                      </span>
-                    </div>
-                    <div style={{ fontSize:10, color:'var(--gray-500)' }}>
-                      {fmtDate(co.firstDate)}<br/>
-                      <span style={{ color:'var(--gray-400)' }}>→ {fmtDate(co.lastDate)}</span>
-                    </div>
-                    <div style={{ fontSize:11, color:'var(--gray-500)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:260 }} title={co.lastNote}>
-                      {co.lastNote || '—'}
-                    </div>
-                  </div>
-                );
-              })}
+            <div style={{ marginTop:20, padding:'14px 18px', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:10, fontSize:12, color:'#92400e', lineHeight:1.9 }}>
+              <strong>What this import does:</strong><br/>
+              ✓ Reads every call entry from your CSV<br/>
+              ✓ Removes duplicate sync artifacts automatically<br/>
+              ✓ Groups entries by company name + phone (falls back safely when data is messy)<br/>
+              ✓ Checks which companies already exist in your CRM<br/>
+              ✓ Shows you a full review table — nothing imports until you confirm<br/>
+              ✓ For existing companies, only adds call history (doesn't overwrite company data)<br/>
+              ✓ For new companies, creates the company + attaches all history<br/>
+              ✓ Uses the most recent entry's follow-up date as the due date (exact date preserved)<br/>
+              ✓ Companies where the last contact was "Do Not Call" are marked dead and skipped from queue
             </div>
           </div>
+        )}
 
-          {/* Confirm button */}
-          <div style={{ display:'flex', gap:10, alignItems:'center' }}>
-            <button className="btn btn-ghost" onClick={()=>{ setStep('upload'); setCompanies([]); }}>← Start Over</button>
-            <button className="btn btn-primary btn-lg" style={{ flex:1 }} onClick={handleImport} disabled={importing || selectedCount === 0}>
-              {importing ? '⏳ Importing…' : `✅ Import ${selectedCount} Companies · ${historyCount.toLocaleString()} History Entries`}
+        {/* ── STEP 2: Review ── */}
+        {step === 'review' && (
+          <>
+            <div style={{ display:'flex', gap:10, marginBottom:16, flexWrap:'wrap' }}>
+              {[
+                { label:'Total Entries', val:parseStats.total, color:'var(--navy-800)' },
+                { label:'Duplicates Removed', val:parseStats.dupes, color:'#d97706', sub:'sync artifacts' },
+                { label:'Unique Entries', val:parseStats.deduped, color:'#15803d' },
+                { label:'Companies', val:parseStats.companies, color:'#1e40af' },
+              ].map((s,i)=>(
+                <div key={i} style={{ flex:1, minWidth:130, background:'#f8fafc', border:'1px solid var(--gray-200)', borderRadius:8, padding:'10px 14px' }}>
+                  <div style={{ fontSize:10, color:'var(--gray-400)', textTransform:'uppercase', letterSpacing:'.07em', marginBottom:2 }}>{s.label}</div>
+                  <div style={{ fontSize:22, fontWeight:900, color:s.color }}>{s.val.toLocaleString()}</div>
+                  {s.sub && <div style={{ fontSize:10, color:'var(--gray-400)' }}>{s.sub}</div>}
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 16px', background:'var(--navy-950)', borderRadius:10, marginBottom:12, flexWrap:'wrap' }}>
+              <div style={{ fontSize:13, fontWeight:700, color:'white' }}>
+                {selectedCount} selected · {newCount} new companies · {existingCount} add history to existing · {historyCount.toLocaleString()} entries
+                {dncCount > 0 && <span style={{ color:'#fca5a5', marginLeft:8 }}>· {dncCount} Do Not Call → dead</span>}
+              </div>
+              <div style={{ marginLeft:'auto', display:'flex', gap:6 }}>
+                <button className="btn btn-ghost btn-sm" style={{ color:'rgba(255,255,255,.7)', border:'1px solid rgba(255,255,255,.2)' }} onClick={()=>toggleAll(true)}>Select All</button>
+                <button className="btn btn-ghost btn-sm" style={{ color:'rgba(255,255,255,.7)', border:'1px solid rgba(255,255,255,.2)' }} onClick={()=>toggleAll(false)}>Deselect All</button>
+              </div>
+            </div>
+
+            <label style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 14px', background:'#fefce8', border:'1px solid #fde68a', borderRadius:8, marginBottom:12, cursor:'pointer', fontSize:12, fontWeight:600 }}>
+              <input type="checkbox" checked={addToQueue} onChange={e=>setAddToQueue(e.target.checked)} style={{ accentColor:'var(--navy-800)', width:14, height:14 }}/>
+              Add all NEW companies to Calling Queue after import
+            </label>
+
+            <div style={{ border:'1px solid var(--gray-200)', borderRadius:10, overflow:'hidden', marginBottom:16 }}>
+              <div style={{ display:'grid', gridTemplateColumns:'32px 1fr 80px 100px 80px 120px 1fr', gap:0, padding:'8px 12px', background:'var(--gray-50)', borderBottom:'1px solid var(--gray-200)', fontSize:10, fontWeight:700, color:'var(--gray-400)', textTransform:'uppercase', letterSpacing:'.06em' }}>
+                <div/>
+                <div>Company</div>
+                <div>Calls</div>
+                <div>Status</div>
+                <div>Last Type</div>
+                <div>Date Range</div>
+                <div>Last Note</div>
+              </div>
+
+              <div style={{ maxHeight:500, overflowY:'auto' }}>
+                {companies.map(co => {
+                  const key = co.original_id || co.company_name;
+                  const isChecked = !!checked[key];
+                  const badge = TYPE_BADGE[co.lastType] || { bg:'#f9fafb', color:'#374151' };
+                  return (
+                    <div
+                      key={key}
+                      style={{ display:'grid', gridTemplateColumns:'32px 1fr 80px 100px 80px 120px 1fr', gap:0, padding:'9px 12px', borderBottom:'1px solid var(--gray-100)', background:isChecked?(co.isDNC?'#fef2f2':'white'):'#fafafa', opacity:isChecked?1:.55, alignItems:'center', cursor:'pointer' }}
+                      onClick={()=>setChecked(p=>({...p,[key]:!p[key]}))}
+                    >
+                      <input type="checkbox" checked={isChecked} onChange={()=>{}} style={{ accentColor:'var(--navy-800)', width:13, height:13 }}/>
+                      <div>
+                        <div style={{ fontWeight:700, fontSize:12, color:co.isDNC?'#dc2626':'var(--navy-800)' }}>{co.company_name}</div>
+                        <div style={{ fontSize:10, color:'var(--gray-400)' }}>{co.original_id} {co.phone && `· ${co.phone}`} {co.industry && `· ${co.industry}`}</div>
+                        {co.isDNC && <div style={{ fontSize:10, fontWeight:700, color:'#dc2626', marginTop:2 }}>🚫 Do Not Call — will be marked dead</div>}
+                      </div>
+                      <div style={{ fontSize:13, fontWeight:800, color:'var(--navy-800)', textAlign:'center' }}>{co.entries.length}</div>
+                      <div>
+                        {co.existingCrmId ? (
+                          <span style={{ fontSize:10, fontWeight:700, background:'#eff6ff', color:'#1e40af', padding:'2px 8px', borderRadius:20 }}>+ History Only</span>
+                        ) : (
+                          <span style={{ fontSize:10, fontWeight:700, background:'#f0fdf4', color:'#15803d', padding:'2px 8px', borderRadius:20 }}>🆕 New Company</span>
+                        )}
+                      </div>
+                      <div>
+                        <span style={{ fontSize:10, fontWeight:600, padding:'2px 7px', borderRadius:12, background:badge.bg, color:badge.color }}>
+                          {co.lastType}
+                        </span>
+                      </div>
+                      <div style={{ fontSize:10, color:'var(--gray-500)' }}>
+                        {fmtDate(co.firstDate)}<br/>
+                        <span style={{ color:'var(--gray-400)' }}>→ {fmtDate(co.lastDate)}</span>
+                      </div>
+                      <div style={{ fontSize:11, color:'var(--gray-500)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:260 }} title={co.lastNote}>
+                        {co.lastNote || '—'}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div style={{ display:'flex', gap:10, alignItems:'center' }}>
+              <button className="btn btn-ghost" onClick={()=>{ setStep('upload'); setCompanies([]); }}>← Start Over</button>
+              <button className="btn btn-primary btn-lg" style={{ flex:1 }} onClick={handleImport} disabled={importing || selectedCount === 0}>
+                {importing ? '⏳ Importing…' : `✅ Import ${selectedCount} Companies · ${historyCount.toLocaleString()} History Entries`}
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* ── STEP 3: Done ── */}
+        {step === 'done' && result && (
+          <div style={{ background:'#f0fdf4', border:'1.5px solid #bbf7d0', borderRadius:12, padding:28 }}>
+            <div style={{ fontSize:20, fontWeight:900, color:'#15803d', marginBottom:16 }}>✅ Import Complete</div>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12, marginBottom:20 }}>
+              {[
+                { label:'New Companies Created', val:result.imported, color:'#15803d' },
+                { label:'Matched Existing Companies', val:result.matched_existing || 0, color:'#1e40af' },
+                { label:'Call History Entries Imported', val:result.history||0, color:'#7c3aed' },
+                { label:'Duplicate History Skipped', val:result.duplicate_history||0, color:'#92400e' },
+                { label:'Errors', val:result.errors?.length||0, color:result.errors?.length?'#dc2626':'#94a3b8' },
+              ].map((s,i)=>(
+                <div key={i} style={{ background:'white', borderRadius:8, padding:'12px 16px', border:'1px solid var(--gray-200)' }}>
+                  <div style={{ fontSize:10, color:'var(--gray-400)', textTransform:'uppercase', letterSpacing:'.07em', marginBottom:4 }}>{s.label}</div>
+                  <div style={{ fontSize:26, fontWeight:900, color:s.color }}>{s.val?.toLocaleString?.()??s.val}</div>
+                </div>
+              ))}
+            </div>
+            {result.errors?.length > 0 && (
+              <div style={{ background:'#fef2f2', border:'1px solid #fca5a5', borderRadius:8, padding:'10px 14px', marginBottom:16, fontSize:12, color:'#dc2626' }}>
+                <strong>Errors ({result.errors.length}):</strong> {result.errors.slice(0,3).map(e=>e.error||e).join(' · ')}
+              </div>
+            )}
+            <div style={{ fontSize:13, color:'#15803d', marginBottom:16 }}>
+              Go to <strong>Companies</strong> to verify the import. Each company now has its full call history.
+              {addToQueue && ' New companies have been added to your Calling Queue.'}
+            </div>
+            <button className="btn btn-ghost" onClick={()=>{ setStep('upload'); setCompanies([]); setResult(null); setParseStats(null); }}>
+              ← Import Another File
             </button>
           </div>
         )}
-          
-        </>
-     )}
-   </div>
- );
- }
+      </>
+    )}
+  </div>
+);
+}
       {/* ── STEP 3: Done ── */}
       {step === 'done' && result && (
         <div style={{ background:'#f0fdf4', border:'1.5px solid #bbf7d0', borderRadius:12, padding:28 }}>
