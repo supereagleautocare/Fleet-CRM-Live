@@ -531,22 +531,19 @@ export default function RoutePlanner({ embedded = false }) {
 
 
   async function addNearbyToRoute(company) {
-  try {
-    // Schedule into visit queue (not calling queue)
-    const visit = await api.scheduleVisit(company.id);
-    showToast(`${company.name} added to Visit Queue`);
-    // Refresh visits list
-    const data = await api.visitsAll();
-    setVisits(data);
-    // Auto-select this stop
-    const t = {...stopTimes};
-    const o = [...order];
-    if (!t[visit.id]) { t[visit.id] = 20; o.push(visit.id); }
-    setStopTimes(t);
-    setOrder(o);
-    setSelected(prev => new Set([...prev, visit.id]));
-    setTab('planner');
-  } catch(e) { showToast(e.message, 'error'); }
+    try {
+      const visit = await api.scheduleVisit(company.id);
+      showToast(`${company.name} added to Visit Queue`);
+      const data = await api.visitsAll();
+      setVisits(data);
+      const t = {...stopTimes};
+      const o = [...order];
+      if (!t[visit.id]) { t[visit.id] = 20; o.push(visit.id); }
+      setStopTimes(t);
+      setOrder(o);
+      setSelected(prev => new Set([...prev, visit.id]));
+      setTab('planner');
+    } catch(e) { showToast(e.message, 'error'); }
   }
 
   // ── Nearby computed ───────────────────────────────────────────────────────
