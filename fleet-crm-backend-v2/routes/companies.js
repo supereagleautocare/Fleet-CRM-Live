@@ -587,12 +587,13 @@ router.post('/import', (req, res) => {
             }
           }
           // Set follow-up date if provided and future
-          if (row.next_follow_up && new Date(row.next_follow_up) > new Date()) {
-            const fu = db.prepare("SELECT id FROM follow_ups WHERE entity_id=? AND source_type='company' AND is_locked=0").get(ex.id);
-            if (!fu) {
-              db.prepare("INSERT INTO follow_ups (source_type,entity_id,company_id_str,entity_name,phone,due_date,next_action) VALUES ('company',?,?,?,?,?,?)")
-                .run(ex.id,ex.company_id,ex.name,ex.main_phone,row.next_follow_up,row.last_next_action||'Call');
-            }
+         if (row.next_follow_up) {
+          const today = new Date().toISOString().split('T')[0];
+          const useDate = new Date(row.next_follow_up) > new Date() ? row.next_follow_up : today;
+          db.prepare("INSERT INTO follow_ups (source_type,entity_id,company_id_str,entity_name,phone,due_date,next_action) VALUES ('company',?,?,?,?,?,?)")
+            .run(companyDbId, companyIdStr, name, phone||null, useDate, row.last_next_action||'Call');
+          db.prepare("UPDATE companies SET pipeline_stage='call' WHERE id=?").run(companyDbId);
+        }
           }
           results.skipped++;
           continue;
