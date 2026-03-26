@@ -239,7 +239,7 @@ export default function ImportSettings() {
 
     // Init all new + existing checked; skips unchecked
     const initChecked = {};
-    for (const co of list) initChecked[co.original_id || co.name] = true;
+    for (const co of list) initChecked[co.original_id || co.company_name] = true;
 
     setCompanies(list);
     setChecked(initChecked);
@@ -249,19 +249,19 @@ export default function ImportSettings() {
 
   function toggleAll(val) {
     const next = {};
-    for (const co of companies) next[co.original_id || co.name] = val;
+    for (const co of companies) next[co.original_id || co.company_name] = val;
     setChecked(next);
   }
 
   async function handleImport() {
-    const toImport = companies.filter(co => checked[co.original_id || co.name]);
+    const toImport = companies.filter(co => checked[co.original_id || co.company_name]);
     if (!toImport.length) { showToast('Nothing selected', 'error'); return; }
 
     setImporting(true);
     try {
       // Build payload — one company per entry with full history array
       const payload = toImport.map(co => ({
-        name:               co.name,
+        name:               co.company_name,
         main_phone:         co.phone,
         industry:           co.industry,
         original_company_id: co.original_id,
@@ -286,7 +286,7 @@ export default function ImportSettings() {
         })),
       }));
 
-      const r = await api.importCompanies(payload, addToQueue);
+      const r = await api.importCompanies(payload);
       setResult({ ...r, imported_count: toImport.filter(c=>!c.existingCrmId).length, history_count: toImport.reduce((s,c)=>s+c.entries.length,0) });
       setStep('done');
     } catch(e) {
@@ -294,11 +294,11 @@ export default function ImportSettings() {
     } finally { setImporting(false); }
   }
 
-  const selectedCount  = companies.filter(co => checked[co.original_id || co.name]).length;
-  const newCount       = companies.filter(co => checked[co.original_id || co.name] && !co.existingCrmId).length;
-  const existingCount  = companies.filter(co => checked[co.original_id || co.name] && co.existingCrmId).length;
-  const historyCount   = companies.filter(co => checked[co.original_id || co.name]).reduce((s,c)=>s+c.entries.length,0);
-  const dncCount       = companies.filter(co => checked[co.original_id || co.name] && co.isDNC).length;
+  const selectedCount  = companies.filter(co => checked[co.original_id || co.company_name]).length;
+ const newCount       = companies.filter(co => checked[co.original_id || co.company_name] && !co.existingCrmId).length;
+ const existingCount  = companies.filter(co => checked[co.original_id || co.company_name] && co.existingCrmId).length;
+ const historyCount   = companies.filter(co => checked[co.original_id || co.company_name]).reduce((s,c)=>s+c.entries.length,0);
+ const dncCount       = companies.filter(co => checked[co.original_id || co.company_name] && co.isDNC).length;
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
