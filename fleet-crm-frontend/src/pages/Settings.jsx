@@ -342,7 +342,7 @@ export default function Settings() {
           </>
         )}
       </div>
-
+      </div>
       {/* Database Tools */}
       <div className="table-card" style={{ padding:'20px 24px', marginTop:16, marginLeft:22, marginRight:22 }}>
         <div style={{ fontWeight:700, fontSize:15, marginBottom:8 }}>🔧 Database Tools</div>
