@@ -178,7 +178,7 @@ export default function SimpleImport({ onDone }) {
 
     // Default: check all NEW, uncheck dupes
     const initChecked = {};
-    for (const r of enriched) initChecked[r._idx] = !r.dupe_id;
+    for (const r of enriched) initChecked[r._idx] = true;
     setChecked(initChecked);
     setRows(enriched);
 
@@ -399,7 +399,7 @@ export default function SimpleImport({ onDone }) {
               <div>Status</div>
             </div>
 
-            <div style={{ maxHeight: 480, overflowY: 'auto' }}>
+            <div style={{ maxHeight: 600, overflowY: 'auto' }}>
               {rows.map(r => {
                 const isChecked = !!checked[r._idx];
                 return (
@@ -446,12 +446,17 @@ export default function SimpleImport({ onDone }) {
                     {/* Status badge */}
                     <div>
                       {r.dupe_id ? (
-                        <span style={{ fontSize: 10, fontWeight: 700, background: '#fffbeb', color: '#92400e', padding: '2px 8px', borderRadius: 20 }}>
-                          ⚠️ Already exists
-                        </span>
+                        <div>
+                          <span style={{ fontSize: 10, fontWeight: 700, background: '#fffbeb', color: '#92400e', padding: '2px 8px', borderRadius: 20 }}>
+                            🔀 Merge into existing
+                          </span>
+                          <div style={{ fontSize: 10, color: 'var(--gray-400)', marginTop: 3 }}>
+                            Matches: <strong>{r.dupe_name}</strong> — history + contacts will be combined
+                          </div>
+                        </div>
                       ) : (
                         <span style={{ fontSize: 10, fontWeight: 700, background: '#f0fdf4', color: '#15803d', padding: '2px 8px', borderRadius: 20 }}>
-                          🆕 New
+                          🆕 New Company
                         </span>
                       )}
                     </div>
