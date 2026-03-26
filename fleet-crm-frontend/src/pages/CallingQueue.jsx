@@ -229,12 +229,10 @@ export default function CallingQueue() {
                         </td>
                         <td style={{ whiteSpace:'nowrap' }}>
                           {row.due_date
-                            ? <>
-                                {status==='overdue' && <span className="badge badge-overdue">Overdue</span>}
-                                {status==='today'   && <span className="badge badge-today">Today</span>}
-                                {status==='upcoming'&& <span style={{ fontSize:12, color:'var(--gray-500)' }}>{fmtDate(row.due_date)}</span>}
-                              </>
-                            : <span style={{ fontSize:11, color:'var(--gray-300)' }}>No date set</span>}
+                             ? <span style={{ fontSize:12, color:'var(--gray-700)', fontWeight:500 }}>
+                                 {fmtDate(row.due_date)}
+                               </span>
+                             : <span style={{ fontSize:11, color:'var(--gray-300)' }}>No date set</span>}
                         </td>
                         <td style={{ fontSize:11, color:'var(--gray-500)', maxWidth:140, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                           {row.last_contact_type || '—'}
