@@ -307,7 +307,6 @@ if (hasImported) return <div style={{padding:20}}>✅ Call history already impor
 
 return (
   <div style={{ maxWidth:1000 }}>
-      <>
         <div style={{ marginBottom:20 }}>
           <div style={{ fontWeight:800, fontSize:18, color:'var(--navy-800)', marginBottom:4 }}>
             📥 Import Call History
@@ -480,9 +479,7 @@ return (
               ← Import Another File
             </button>
           </div>
-        )}
-      </>
-    )}
+      )}
   </div>
 );
 }
