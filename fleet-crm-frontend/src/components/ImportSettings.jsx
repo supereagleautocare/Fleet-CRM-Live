@@ -504,38 +504,4 @@ return (
   </div>
 );
 }
-      {/* ── STEP 3: Done ── */}
-      {step === 'done' && result && (
-        <div style={{ background:'#f0fdf4', border:'1.5px solid #bbf7d0', borderRadius:12, padding:28 }}>
-          <div style={{ fontSize:20, fontWeight:900, color:'#15803d', marginBottom:16 }}>✅ Import Complete</div>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12, marginBottom:20 }}>
-            {[
-              { label:'New Companies Created', val:result.imported, color:'#15803d' },
-              { label:'Matched Existing Companies', val:result.matched_existing || result.skipped, color:'#1e40af' },
-              { label:'Call History Entries Imported', val:result.history||0, color:'#7c3aed' },
-              { label:'Duplicate History Skipped', val:result.duplicate_history||0, color:'#92400e' },
-              { label:'Errors', val:result.errors?.length||0, color:result.errors?.length?'#dc2626':'#94a3b8' },
-            ].map((s,i)=>(
-              <div key={i} style={{ background:'white', borderRadius:8, padding:'12px 16px', border:'1px solid var(--gray-200)' }}>
-                <div style={{ fontSize:10, color:'var(--gray-400)', textTransform:'uppercase', letterSpacing:'.07em', marginBottom:4 }}>{s.label}</div>
-                <div style={{ fontSize:26, fontWeight:900, color:s.color }}>{s.val?.toLocaleString?.()??s.val}</div>
-              </div>
-            ))}
-          </div>
-          {result.errors?.length > 0 && (
-            <div style={{ background:'#fef2f2', border:'1px solid #fca5a5', borderRadius:8, padding:'10px 14px', marginBottom:16, fontSize:12, color:'#dc2626' }}>
-              <strong>Errors ({result.errors.length}):</strong> {result.errors.slice(0,3).map(e=>e.error||e).join(' · ')}
-            </div>
-          )}
-          <div style={{ fontSize:13, color:'#15803d', marginBottom:16 }}>
-            Go to <strong>Companies</strong> to verify the import. Each company now has its full call history.
-            {addToQueue && ' New companies have been added to your Calling Queue.'}
-          </div>
-          <button className="btn btn-ghost" onClick={()=>{ setStep('upload'); setCompanies([]); setResult(null); setParseStats(null); }}>
-            ← Import Another File
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
+     
