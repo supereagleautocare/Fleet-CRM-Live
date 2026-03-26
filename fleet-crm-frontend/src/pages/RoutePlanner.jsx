@@ -538,7 +538,7 @@ export default function RoutePlanner({ embedded = false }) {
       setVisits(data);
       const t = {...stopTimes};
       const o = [...order];
-      if (!t[visit.id]) { t[visit.id] = 20; o.push(visit.id); }
+      data.forEach(v => { if (!t[v.id]) { t[v.id] = 20; } if (!o.includes(v.id)) { o.push(v.id); } });
       setStopTimes(t);
       setOrder(o);
       setSelected(prev => new Set([...prev, visit.id]));
