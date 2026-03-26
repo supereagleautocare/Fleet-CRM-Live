@@ -115,7 +115,7 @@ const TYPE_BADGE = {
   'Call':          { bg:'#f0fdf4', color:'#15803d' },
 };
 
-export default function ImportSettings() {
+export default function ImportSettings({ onDone }) {
   const [step, setStep]           = useState('upload');
   const [companies, setCompanies] = useState([]);  // grouped, reviewed
   const [checked, setChecked]     = useState({});   // original_id → bool
