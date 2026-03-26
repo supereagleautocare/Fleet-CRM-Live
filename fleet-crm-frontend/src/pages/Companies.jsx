@@ -543,33 +543,32 @@ async function handleImport(e) {
         <span style={{ fontSize:12, color:'var(--gray-400)', marginLeft:'auto' }}>{companies.length} companies</span>
       </div>
 
-      {/* Import panel */}
-      {showImport && (
-        <div style={{ marginBottom:16, padding:'20px 24px', background:'white', borderRadius:10, border:'1px solid var(--gray-200)' }}>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
-            <div style={{ fontWeight:700, fontSize:15 }}>📥 Import Companies</div>
-            <button className="btn btn-ghost btn-sm" onClick={()=>setShowImport(false)}>✕ Close</button>
+     <div className="page-body">
+        {/* Import panel */}
+        {showImport && (
+          <div style={{ marginBottom:16, padding:'20px 24px', background:'white', borderRadius:10, border:'1px solid var(--gray-200)' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
+              <div style={{ fontWeight:700, fontSize:15 }}>📥 Import Companies</div>
+              <button className="btn btn-ghost btn-sm" onClick={()=>setShowImport(false)}>✕ Close</button>
+            </div>
+            {/* Tab switcher */}
+            <div style={{ display:'flex', gap:4, marginBottom:20, borderBottom:'2px solid var(--gray-100)', paddingBottom:0 }}>
+              {[
+                { key:'simple',  label:'🏢 New Companies CSV' },
+                { key:'history', label:'📋 Import Call History' },
+              ].map(t => (
+                <button key={t.key} onClick={()=>setImportTab(t.key)}
+                  style={{ padding:'8px 18px', border:'none', borderBottom: importTab===t.key ? '2px solid var(--navy-800)' : '2px solid transparent',
+                    marginBottom:'-2px', background:'none', fontWeight: importTab===t.key ? 700 : 500,
+                    color: importTab===t.key ? 'var(--navy-800)' : 'var(--gray-400)', cursor:'pointer', fontSize:13 }}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            {importTab === 'simple'  && <SimpleImport  onDone={() => { setShowImport(false); load(); }} />}
+            {importTab === 'history' && <ImportSettings />}
           </div>
-          {/* Tab switcher */}
-          <div style={{ display:'flex', gap:4, marginBottom:20, borderBottom:'2px solid var(--gray-100)', paddingBottom:0 }}>
-            {[
-              { key:'simple',  label:'🏢 New Companies CSV' },
-              { key:'history', label:'📋 Import Call History' },
-            ].map(t => (
-              <button key={t.key} onClick={()=>setImportTab(t.key)}
-                style={{ padding:'8px 18px', border:'none', borderBottom: importTab===t.key ? '2px solid var(--navy-800)' : '2px solid transparent',
-                  marginBottom:'-2px', background:'none', fontWeight: importTab===t.key ? 700 : 500,
-                  color: importTab===t.key ? 'var(--navy-800)' : 'var(--gray-400)', cursor:'pointer', fontSize:13 }}>
-                {t.label}
-              </button>
-            ))}
-          </div>
-          {importTab === 'simple'  && <SimpleImport  onDone={() => { setShowImport(false); load(); }} />}
-          {importTab === 'history' && <ImportSettings />}
-        </div>
-      )}
-      <div className="page-body">
-
+        )}
         {/* Company list — hidden when a company is selected */}
         {!selected && <div style={{ background:'white', borderRadius:10, border:'1px solid var(--gray-200)', overflow:'hidden', display:'flex', flexDirection:'column' }}>
          {loading ? (
