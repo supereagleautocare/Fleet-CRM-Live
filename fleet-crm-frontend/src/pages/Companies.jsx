@@ -5,8 +5,7 @@ import AddressAutocomplete from '../components/AddressAutocomplete.jsx';
 import { api, fmtPhone, fmtDate } from '../api.js';
 import { useApp } from '../App.jsx';
 import ScoreCardModal from '../components/ScoreCardModal.jsx';
-import ImportSettings from '../components/ImportSettings.jsx';
-// ── Note cell for history table ───────────────────────────────────────────────
+import ImportSettings from '../components/ImportSettings.jsx'; import SimpleImport from '../components/SimpleImport.jsx';// ── Note cell for history table ───────────────────────────────────────────────
 function NoteCell({ note }) {
   const [open, setOpen] = React.useState(false);
   return (
@@ -564,8 +563,8 @@ async function handleImport(e) {
                 </button>
               ))}
             </div>
-            {importTab === 'simple' && <ImportSettings onDone={() => { setShowImport(false); load(); refreshCounts(); }} />}
-            {importTab === 'history' && <ImportSettings />}
+            {importTab === 'simple' && <SimpleImport onDone={() => { setShowImport(false); load(); refreshCounts(); }} />}
+            {importTab === 'history' && <ImportSettings onDone={() => { setShowImport(false); load(); refreshCounts(); }} />}
           </div>
         )}
         {/* Company list — hidden when a company is selected */}
