@@ -468,9 +468,13 @@ return (
               {importing ? '⏳ Importing…' : `✅ Import ${selectedCount} Companies · ${historyCount.toLocaleString()} History Entries`}
             </button>
           </div>
+        )}
+          
         </>
-      )}
-
+     )}
+   </div>
+ );
+ }
       {/* ── STEP 3: Done ── */}
       {step === 'done' && result && (
         <div style={{ background:'#f0fdf4', border:'1.5px solid #bbf7d0', borderRadius:12, padding:28 }}>
