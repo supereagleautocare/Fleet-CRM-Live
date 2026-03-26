@@ -156,7 +156,7 @@ function ContactForm({ companyId, contact, onSave, onCancel }) {
     is_preferred: contact?.is_preferred ? true : false,
   });
   const [saving, setSaving] = useState(false);
-  const { showToast } = useApp();
+  const { showToast, refreshCounts } = useApp();
 
   function set(f, v) { setForm(p => ({...p, [f]: v})); }
 
@@ -565,7 +565,7 @@ async function handleImport(e) {
                 </button>
               ))}
             </div>
-            {importTab === 'simple'  && <SimpleImport  onDone={() => { setShowImport(false); load(); }} />}
+            {importTab === 'simple'  && <SimpleImport  onDone={() => { setShowImport(false); load(); refreshCounts(); }} />}
             {importTab === 'history' && <ImportSettings />}
           </div>
         )}
