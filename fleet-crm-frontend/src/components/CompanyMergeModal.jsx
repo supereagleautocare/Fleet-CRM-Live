@@ -1,14 +1,5 @@
 /**
  * CompanyMergeModal — robust company merge with field-by-field control
- *
- * What it does:
- *  1. Search for target company (with working live search)
- *  2. Side-by-side comparison of both companies
- *  3. Per-field radio: keep Source, keep Target, or Combine (for notes)
- *  4. Preview what the merged company will look like
- *  5. Confirm → POST /api/companies/:id/merge/:into_id with options
- *
- * Contacts + Call History always merge automatically (no data is lost).
  */
 import { useState, useRef, useEffect } from 'react';
 import { api, fmtPhone } from '../api.js';
@@ -16,7 +7,7 @@ import { useApp } from '../App.jsx';
 
 const FIELDS = [
   { key: 'name',       label: '🏢 Company Name' },
-  { key: 'main_phone', label: '📱 Main Phone',   fmt: fmtPhone },
+  { key: 'main_phone', label: '📱 Main Phone',   fmt: fmtPhone, canKeepBoth: true },
   { key: 'industry',   label: '🏭 Industry' },
   { key: 'address',    label: '📍 Address' },
   { key: 'city',       label: '🌆 City' },
@@ -32,19 +23,18 @@ function FieldValue({ val, fmt }) {
 }
 
 export default function CompanyMergeModal({ sourceCompany, onClose, onMerged }) {
-  const [step, setStep] = useState('search'); // search | configure | confirm
+  const [step, setStep] = useState('search');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [target, setTarget] = useState(null);
   const [targetFull, setTargetFull] = useState(null);
   const [loadingTarget, setLoadingTarget] = useState(false);
-  const [choices, setChoices] = useState({}); // field → 'source' | 'target' | 'combine'
+  const [choices, setChoices] = useState({});
   const [merging, setMerging] = useState(false);
   const debounceRef = useRef(null);
   const { showToast } = useApp();
 
-  // Debounced search
   useEffect(() => {
     clearTimeout(debounceRef.current);
     if (searchQuery.trim().length < 2) { setSearchResults([]); return; }
@@ -52,7 +42,6 @@ export default function CompanyMergeModal({ sourceCompany, onClose, onMerged }) 
       setSearching(true);
       try {
         const results = await api.searchCompanyName(searchQuery.trim());
-        // Exclude the source company itself
         setSearchResults((results || []).filter(r => r.id !== sourceCompany.id));
       } catch (e) {
         setSearchResults([]);
@@ -68,17 +57,18 @@ export default function CompanyMergeModal({ sourceCompany, onClose, onMerged }) 
     try {
       const full = await api.company(company.id);
       setTargetFull(full);
-      // Default choices: prefer whichever company has a value
       const defaultChoices = {};
       for (const f of FIELDS) {
         const srcVal = sourceCompany[f.key];
         const tgtVal = full[f.key];
         if (f.canCombine && srcVal && tgtVal) {
           defaultChoices[f.key] = 'combine';
+        } else if (f.canKeepBoth && srcVal && tgtVal) {
+          defaultChoices[f.key] = 'both';
         } else if (tgtVal && !srcVal) {
           defaultChoices[f.key] = 'target';
         } else {
-          defaultChoices[f.key] = 'source'; // default keep source (the company you opened)
+          defaultChoices[f.key] = 'source';
         }
       }
       setChoices(defaultChoices);
@@ -94,17 +84,16 @@ export default function CompanyMergeModal({ sourceCompany, onClose, onMerged }) 
     setChoices(c => ({ ...c, [field]: val }));
   }
 
-  // Build preview of what the merged company will look like
   function buildPreview() {
     const preview = {};
     for (const f of FIELDS) {
       const choice = choices[f.key];
-      if (choice === 'source') preview[f.key] = sourceCompany[f.key];
-      else if (choice === 'target') preview[f.key] = targetFull[f.key];
-      else if (choice === 'combine') {
-        const parts = [sourceCompany[f.key], targetFull[f.key]].filter(Boolean);
-        preview[f.key] = parts.join('\n\n---\n\n');
-      }
+      const srcVal = sourceCompany[f.key];
+      const tgtVal = targetFull[f.key];
+      if (choice === 'source') preview[f.key] = srcVal || tgtVal;
+      else if (choice === 'both') preview[f.key] = tgtVal || srcVal;
+      else if (choice === 'combine' && srcVal && tgtVal) preview[f.key] = tgtVal + '\n\n---\n\n' + srcVal;
+      else preview[f.key] = tgtVal || srcVal;
     }
     return preview;
   }
@@ -113,7 +102,7 @@ export default function CompanyMergeModal({ sourceCompany, onClose, onMerged }) 
     setMerging(true);
     try {
       await api.mergeCompany(sourceCompany.id, targetFull.id, { field_choices: choices });
-      showToast(`✅ Merged into ${targetFull.name}`);
+      showToast('Merged into ' + targetFull.name);
       onMerged(targetFull.id);
     } catch (e) {
       showToast('Merge failed: ' + e.message, 'error');
@@ -125,13 +114,16 @@ export default function CompanyMergeModal({ sourceCompany, onClose, onMerged }) 
   const preview = step === 'confirm' ? buildPreview() : null;
 
   return (
-    <div style={{
-      position: 'fixed', inset: 0,
-      background: 'rgba(6,13,31,.6)',
-      zIndex: 2000,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      padding: 20,
-    }} onClick={e => e.target === e.currentTarget && onClose()}>
+    <div
+      style={{
+        position: 'fixed', inset: 0,
+        background: 'rgba(6,13,31,.6)',
+        zIndex: 2000,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 20,
+      }}
+      onClick={e => e.target === e.currentTarget && onClose()}
+    >
       <div style={{
         background: 'white',
         borderRadius: 16,
@@ -151,45 +143,47 @@ export default function CompanyMergeModal({ sourceCompany, onClose, onMerged }) 
           flexShrink: 0,
         }}>
           <div>
-            <div style={{ fontWeight: 800, fontSize: 15, color: 'white' }}>
-              🔀 Merge Company
-            </div>
+            <div style={{ fontWeight: 800, fontSize: 15, color: 'white' }}>🔀 Merge Company</div>
             <div style={{ fontSize: 11, color: 'rgba(255,255,255,.4)', marginTop: 2 }}>
               {step === 'search' && 'Find the company to merge into'}
-              {step === 'configure' && `Merging "${sourceCompany.name}" → choose what to keep`}
+              {step === 'configure' && 'Merging "' + sourceCompany.name + '" choose what to keep'}
               {step === 'confirm' && 'Review and confirm'}
             </div>
           </div>
-          <button onClick={onClose} style={{
-            width: 30, height: 30, border: '1px solid rgba(255,255,255,.15)',
-            borderRadius: 8, background: 'transparent', color: 'rgba(255,255,255,.5)',
-            cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>✕</button>
+          <button
+            onClick={onClose}
+            style={{
+              width: 30, height: 30, border: '1px solid rgba(255,255,255,.15)',
+              borderRadius: 8, background: 'transparent', color: 'rgba(255,255,255,.5)',
+              cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >x</button>
         </div>
 
         {/* Step tabs */}
-        <div style={{
-          display: 'flex', background: 'var(--gray-50)',
-          borderBottom: '1px solid var(--gray-200)', flexShrink: 0,
-        }}>
+        <div style={{ display: 'flex', background: 'var(--gray-50)', borderBottom: '1px solid var(--gray-200)', flexShrink: 0 }}>
           {[
-            { id: 'search', num: '1', label: 'Find Company' },
+            { id: 'search',    num: '1', label: 'Find Company' },
             { id: 'configure', num: '2', label: 'Choose Fields' },
-            { id: 'confirm', num: '3', label: 'Confirm' },
-          ].map((s, i) => {
+            { id: 'confirm',   num: '3', label: 'Confirm' },
+          ].map(s => {
             const steps = ['search', 'configure', 'confirm'];
             const currentIdx = steps.indexOf(step);
             const thisIdx = steps.indexOf(s.id);
             const done = thisIdx < currentIdx;
             const active = s.id === step;
             return (
-              <div key={s.id} style={{
-                flex: 1, padding: '10px 12px',
-                display: 'flex', alignItems: 'center', gap: 8,
-                borderBottom: active ? '2px solid var(--navy-800)' : '2px solid transparent',
-                cursor: done ? 'pointer' : 'default',
-                opacity: thisIdx > currentIdx ? 0.4 : 1,
-              }} onClick={() => done && setStep(s.id)}>
+              <div
+                key={s.id}
+                style={{
+                  flex: 1, padding: '10px 12px',
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  borderBottom: active ? '2px solid var(--navy-800)' : '2px solid transparent',
+                  cursor: done ? 'pointer' : 'default',
+                  opacity: thisIdx > currentIdx ? 0.4 : 1,
+                }}
+                onClick={() => done && setStep(s.id)}
+              >
                 <div style={{
                   width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
                   background: done ? '#15803d' : active ? 'var(--navy-800)' : 'var(--gray-200)',
@@ -210,10 +204,9 @@ export default function CompanyMergeModal({ sourceCompany, onClose, onMerged }) 
         {/* Body */}
         <div style={{ flex: 1, overflowY: 'auto', padding: 22 }}>
 
-          {/* ── STEP 1: Search ── */}
+          {/* STEP 1: Search */}
           {step === 'search' && (
             <div>
-              {/* Source company reminder */}
               <div style={{
                 padding: '12px 16px', borderRadius: 10,
                 background: '#eff6ff', border: '1px solid #bfdbfe', marginBottom: 18,
@@ -223,7 +216,7 @@ export default function CompanyMergeModal({ sourceCompany, onClose, onMerged }) 
                 </div>
                 <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--navy-800)' }}>{sourceCompany.name}</div>
                 <div style={{ fontSize: 12, color: 'var(--gray-500)', marginTop: 2 }}>
-                  {fmtPhone(sourceCompany.main_phone)}{sourceCompany.industry ? ` · ${sourceCompany.industry}` : ''}
+                  {fmtPhone(sourceCompany.main_phone)}{sourceCompany.industry ? ' · ' + sourceCompany.industry : ''}
                 </div>
               </div>
 
@@ -234,27 +227,26 @@ export default function CompanyMergeModal({ sourceCompany, onClose, onMerged }) 
                 <input
                   className="form-input"
                   autoFocus
-                  placeholder="Type company name to search…"
+                  placeholder="Type company name to search..."
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
                   style={{ paddingLeft: 36, fontSize: 14 }}
                 />
                 <span style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', fontSize: 15, color: 'var(--gray-400)' }}>
-                  {searching ? '⏳' : '🔍'}
+                  {searching ? '...' : '🔍'}
                 </span>
               </div>
 
-              {/* Results */}
               {searchResults.length > 0 && (
                 <div style={{ border: '1px solid var(--gray-200)', borderRadius: 10, overflow: 'hidden' }}>
                   {searchResults.map((r, i) => (
-                    <div key={r.id}
+                    <div
+                      key={r.id}
                       onClick={() => selectTarget(r)}
                       style={{
                         padding: '12px 16px', cursor: 'pointer',
                         borderBottom: i < searchResults.length - 1 ? '1px solid var(--gray-100)' : 'none',
-                        background: 'white',
-                        transition: 'background .08s',
+                        background: 'white', transition: 'background .08s',
                       }}
                       onMouseEnter={e => e.currentTarget.style.background = 'var(--gray-50)'}
                       onMouseLeave={e => e.currentTarget.style.background = 'white'}
@@ -263,7 +255,6 @@ export default function CompanyMergeModal({ sourceCompany, onClose, onMerged }) 
                       <div style={{ fontSize: 11, color: 'var(--gray-400)', marginTop: 2, display: 'flex', gap: 10 }}>
                         <span>{fmtPhone(r.main_phone)}</span>
                         {r.city && <span>📍 {r.city}</span>}
-                        {r.is_multi_location ? <span className="badge badge-blue" style={{ fontSize: 9 }}>Multi-location</span> : null}
                       </div>
                     </div>
                   ))}
@@ -281,11 +272,10 @@ export default function CompanyMergeModal({ sourceCompany, onClose, onMerged }) 
 
               {loadingTarget && (
                 <div style={{ textAlign: 'center', padding: 20, color: 'var(--gray-400)' }}>
-                  Loading company details…
+                  Loading company details...
                 </div>
               )}
 
-              {/* Warning */}
               <div style={{
                 marginTop: 18, padding: '12px 16px', borderRadius: 8,
                 background: '#fffbeb', border: '1px solid #fde68a', fontSize: 12, color: '#92400e',
@@ -297,11 +287,10 @@ export default function CompanyMergeModal({ sourceCompany, onClose, onMerged }) 
             </div>
           )}
 
-          {/* ── STEP 2: Configure ── */}
+          {/* STEP 2: Configure */}
           {step === 'configure' && targetFull && (
             <div>
-              {/* Column headers */}
-              <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr 80px 1fr', gap: 0, marginBottom: 8 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr 90px 1fr', gap: 0, marginBottom: 8 }}>
                 <div />
                 <div style={{ padding: '8px 12px', background: '#eff6ff', borderRadius: '8px 0 0 0', border: '1px solid #bfdbfe', textAlign: 'center' }}>
                   <div style={{ fontSize: 9, fontWeight: 800, color: '#1d4ed8', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 2 }}>FROM (will be deleted)</div>
@@ -314,7 +303,6 @@ export default function CompanyMergeModal({ sourceCompany, onClose, onMerged }) 
                 </div>
               </div>
 
-              {/* Field rows */}
               <div style={{ border: '1px solid var(--gray-200)', borderRadius: 10, overflow: 'hidden' }}>
                 {FIELDS.map((field, idx) => {
                   const srcVal = sourceCompany[field.key];
@@ -323,14 +311,16 @@ export default function CompanyMergeModal({ sourceCompany, onClose, onMerged }) 
                   const bothEmpty = !srcVal && !tgtVal;
 
                   return (
-                    <div key={field.key} style={{
-                      display: 'grid',
-                      gridTemplateColumns: '160px 1fr 80px 1fr',
-                      borderBottom: idx < FIELDS.length - 1 ? '1px solid var(--gray-100)' : 'none',
-                      background: bothEmpty ? 'var(--gray-50)' : 'white',
-                      opacity: bothEmpty ? 0.5 : 1,
-                    }}>
-                      {/* Field label */}
+                    <div
+                      key={field.key}
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: '160px 1fr 90px 1fr',
+                        borderBottom: idx < FIELDS.length - 1 ? '1px solid var(--gray-100)' : 'none',
+                        background: bothEmpty ? 'var(--gray-50)' : 'white',
+                        opacity: bothEmpty ? 0.5 : 1,
+                      }}
+                    >
                       <div style={{
                         padding: '10px 14px',
                         borderRight: '1px solid var(--gray-100)',
@@ -340,7 +330,6 @@ export default function CompanyMergeModal({ sourceCompany, onClose, onMerged }) 
                         {field.label}
                       </div>
 
-                      {/* Source value */}
                       <div
                         onClick={() => !bothEmpty && srcVal && setChoice(field.key, 'source')}
                         style={{
@@ -355,13 +344,17 @@ export default function CompanyMergeModal({ sourceCompany, onClose, onMerged }) 
                         }}
                       >
                         {srcVal && (
-                          <input type="radio" checked={choice === 'source'} onChange={() => setChoice(field.key, 'source')}
-                            style={{ accentColor: '#1d4ed8', flexShrink: 0 }} onClick={e => e.stopPropagation()} />
+                          <input
+                            type="radio"
+                            checked={choice === 'source'}
+                            onChange={() => setChoice(field.key, 'source')}
+                            style={{ accentColor: '#1d4ed8', flexShrink: 0 }}
+                            onClick={e => e.stopPropagation()}
+                          />
                         )}
                         <FieldValue val={srcVal} fmt={field.fmt} />
                       </div>
 
-                      {/* Middle: combine button for notes */}
                       <div style={{
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         borderRight: '1px solid var(--gray-100)',
@@ -372,61 +365,86 @@ export default function CompanyMergeModal({ sourceCompany, onClose, onMerged }) 
                             onClick={() => setChoice(field.key, 'combine')}
                             style={{
                               padding: '3px 6px', borderRadius: 6, fontSize: 9, fontWeight: 700,
-                              border: `1.5px solid ${choice === 'combine' ? '#7c3aed' : 'var(--gray-200)'}`,
+                              border: '1.5px solid ' + (choice === 'combine' ? '#7c3aed' : 'var(--gray-200)'),
                               background: choice === 'combine' ? '#7c3aed' : 'white',
                               color: choice === 'combine' ? 'white' : 'var(--gray-400)',
                               cursor: 'pointer', whiteSpace: 'nowrap', lineHeight: 1.4,
                               transition: 'all .1s',
                             }}
                           >
-                            Combine<br/>both
+                            Combine<br />both
+                          </button>
+                        ) : field.canKeepBoth && srcVal && tgtVal ? (
+                          <button
+                            onClick={() => setChoice(field.key, 'both')}
+                            style={{
+                              padding: '3px 6px', borderRadius: 6, fontSize: 9, fontWeight: 700,
+                              border: '1.5px solid ' + (choice === 'both' ? '#0369a1' : 'var(--gray-200)'),
+                              background: choice === 'both' ? '#0369a1' : 'white',
+                              color: choice === 'both' ? 'white' : 'var(--gray-400)',
+                              cursor: 'pointer', whiteSpace: 'nowrap', lineHeight: 1.4,
+                              transition: 'all .1s',
+                            }}
+                          >
+                            Keep<br />both
                           </button>
                         ) : (
                           <span style={{ fontSize: 10, color: 'var(--gray-300)' }}>↔</span>
                         )}
                       </div>
 
-                      {/* Target value */}
                       <div
                         onClick={() => !bothEmpty && tgtVal && setChoice(field.key, 'target')}
                         style={{
                           padding: '10px 14px',
                           cursor: tgtVal ? 'pointer' : 'default',
-                          background: choice === 'target' ? '#f0fdf4' : 'transparent',
-                          borderLeft: choice === 'target' ? '3px solid #15803d' : '3px solid transparent',
+                          background: choice === 'target' || choice === 'both' ? '#f0fdf4' : 'transparent',
+                          borderLeft: choice === 'target' || choice === 'both' ? '3px solid #15803d' : '3px solid transparent',
                           fontSize: 12, color: 'var(--gray-700)',
                           display: 'flex', alignItems: 'center', gap: 8,
                           transition: 'all .1s',
                         }}
                       >
                         {tgtVal && (
-                          <input type="radio" checked={choice === 'target'} onChange={() => setChoice(field.key, 'target')}
-                            style={{ accentColor: '#15803d', flexShrink: 0 }} onClick={e => e.stopPropagation()} />
+                          <input
+                            type="radio"
+                            checked={choice === 'target' || choice === 'both'}
+                            onChange={() => setChoice(field.key, 'target')}
+                            style={{ accentColor: '#15803d', flexShrink: 0 }}
+                            onClick={e => e.stopPropagation()}
+                          />
                         )}
-                        <FieldValue val={tgtVal} fmt={field.fmt} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <FieldValue val={tgtVal} fmt={field.fmt} />
+                          {choice === 'both' && srcVal && tgtVal && (
+                            <div style={{ fontSize: 10, color: '#0369a1', marginTop: 3, fontWeight: 600 }}>
+                              📱 {field.fmt ? field.fmt(srcVal) : srcVal} → saved as contact
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   );
                 })}
               </div>
 
-              {/* Always-merged section */}
               <div style={{
                 marginTop: 16, padding: '12px 16px', borderRadius: 8,
                 background: '#f0fdf4', border: '1px solid #bbf7d0', fontSize: 12, color: '#15803d',
               }}>
-                <strong>✅ Always merged automatically (no data lost):</strong>
+                <strong>Always merged automatically (no data lost):</strong>
                 <div style={{ marginTop: 5, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
                   <span>📋 All call history</span>
                   <span>👥 All contacts</span>
                   <span>📅 Follow-ups</span>
                   <span>📋 Queue entries</span>
+                  <span>📱 Keep both phone → saved as contact</span>
                 </div>
               </div>
             </div>
           )}
 
-          {/* ── STEP 3: Confirm ── */}
+          {/* STEP 3: Confirm */}
           {step === 'confirm' && preview && (
             <div>
               <div style={{
@@ -445,11 +463,12 @@ export default function CompanyMergeModal({ sourceCompany, onClose, onMerged }) 
                 {FIELDS.map((field, idx) => {
                   const val = preview[field.key];
                   if (!val) return null;
+                  const isBoth = choices[field.key] === 'both';
                   return (
-                    <div key={field.key} style={{
-                      display: 'flex', gap: 0,
-                      borderBottom: idx < FIELDS.length - 1 ? '1px solid var(--gray-100)' : 'none',
-                    }}>
+                    <div
+                      key={field.key}
+                      style={{ display: 'flex', borderBottom: idx < FIELDS.length - 1 ? '1px solid var(--gray-100)' : 'none' }}
+                    >
                       <div style={{
                         padding: '10px 14px', width: 140, flexShrink: 0,
                         fontSize: 11, fontWeight: 700, color: 'var(--gray-400)',
@@ -464,6 +483,11 @@ export default function CompanyMergeModal({ sourceCompany, onClose, onMerged }) 
                             combined
                           </span>
                         )}
+                        {isBoth && sourceCompany[field.key] && (
+                          <div style={{ marginTop: 4, fontSize: 11, color: '#0369a1', fontWeight: 600 }}>
+                            📱 {field.fmt ? field.fmt(sourceCompany[field.key]) : sourceCompany[field.key]} will be saved as a contact
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
@@ -471,8 +495,8 @@ export default function CompanyMergeModal({ sourceCompany, onClose, onMerged }) 
               </div>
 
               <div style={{ fontSize: 12, color: 'var(--gray-500)', padding: '10px 14px', background: 'var(--gray-50)', borderRadius: 8 }}>
-                <strong>📋 Also transferring:</strong> {(sourceCompany.stats?.total_calls || 0)} call log entries,
-                all contacts, all follow-ups, and queue entries from "{sourceCompany.name}" into "{targetFull?.name}".
+                <strong>Also transferring:</strong> all call log entries, contacts, follow-ups, and queue entries
+                from "{sourceCompany.name}" into "{targetFull && targetFull.name}".
               </div>
             </div>
           )}
@@ -489,22 +513,22 @@ export default function CompanyMergeModal({ sourceCompany, onClose, onMerged }) 
           )}
           {step === 'configure' && (
             <>
-              <button className="btn btn-ghost" onClick={() => setStep('search')}>← Back</button>
+              <button className="btn btn-ghost" onClick={() => setStep('search')}>Back</button>
               <button className="btn btn-navy" onClick={() => setStep('confirm')}>
-                Preview Merge →
+                Preview Merge
               </button>
             </>
           )}
           {step === 'confirm' && (
             <>
-              <button className="btn btn-ghost" onClick={() => setStep('configure')}>← Back</button>
+              <button className="btn btn-ghost" onClick={() => setStep('configure')}>Back</button>
               <button
                 className="btn btn-danger"
                 disabled={merging}
                 onClick={handleMerge}
                 style={{ fontWeight: 800 }}
               >
-                {merging ? '⏳ Merging…' : `✅ Confirm Merge — Delete "${sourceCompany.name}"`}
+                {merging ? 'Merging...' : 'Confirm Merge — Delete "' + sourceCompany.name + '"'}
               </button>
             </>
           )}
