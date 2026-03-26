@@ -175,17 +175,17 @@ export default function CallingQueue() {
             </div>
           ) : (
             <div className="table-wrapper">
-              <table>
+              <table style={{ tableLayout:'fixed', width:'100%' }}>
                 <thead>
                   <tr>
-                    <th>#</th>
-                    <th>Company</th>
-                    <th>Phone</th>
-                    <th>Industry</th>
-                    <th>Contacts</th>
-                    <th>Preferred Contact</th>
-                    <th>Due</th>
-                    <th>Last Call</th>
+                    <th style={{ width:36 }}>#</th>
+                    <th style={{ width:'25%' }}>Company</th>
+                    <th style={{ width:130 }}>Phone</th>
+                    <th style={{ width:'18%' }}>Industry</th>
+                    <th style={{ width:80 }}>Contacts</th>
+                    <th style={{ width:'18%' }}>Preferred Contact</th>
+                    <th style={{ width:90 }}>Due</th>
+                    <th style={{ width:'15%' }}>Last Call</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -213,7 +213,7 @@ export default function CallingQueue() {
                           >{row.name}</div>
                         </td>
                         <td><span className="phone-num">{fmtPhone(row.main_phone)}</span></td>
-                        <td>{row.industry?<span className="badge badge-gray">{row.industry}</span>:'—'}</td>
+                        <td style={{ overflow:'hidden', maxWidth:0 }}>{row.industry?<span className="badge badge-gray" style={{ overflow:'hidden', textOverflow:'ellipsis', display:'block', maxWidth:'100%' }}>{row.industry}</span>:'—'}</td>
                         <td>
                           {(!row.call_count || row.call_count === 0)
                             ? <div style={{ fontSize:11, color:'var(--navy-600)', fontWeight:600 }}>First Time</div>
