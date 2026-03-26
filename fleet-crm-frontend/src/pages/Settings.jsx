@@ -361,7 +361,14 @@ export default function Settings() {
       </div>
 
       {previewScorecard && (
-</div>
+        <ScoreCardModal
+          entityName={`Preview — ${previewScorecard.scriptName}`}
+          entityId={null}
+          callLogId={null}
+          onClose={()=>setPreviewScorecard(null)}
+          onSaved={()=>setPreviewScorecard(null)}
+        />
+      )}
     </>
   );
 }
