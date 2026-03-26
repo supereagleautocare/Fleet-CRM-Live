@@ -15,7 +15,7 @@
 import { useState, useRef } from 'react';
 import { api } from '../api.js';
 import { useApp } from '../App.jsx';
-
+import NewCompaniesImport from './NewCompaniesImport.jsx';
 // ── Column positions in the call log CSV ─────────────────────────────────────
 // Headers: Completed, Notes, Contact Type, Contact Date, Phone, Direct Line,
 //          Contact Name, Email, Role/Title, Company Name, Company ID, Industry,
@@ -122,6 +122,7 @@ export default function ImportSettings() {
   const [addToQueue, setAddToQueue] = useState(false);
   const [importing, setImporting] = useState(false);
   const [result, setResult]       = useState(null);
+  const [importMode, setImportMode] = useState('history');
   const [parseStats, setParseStats] = useState(null);
   const fileRef                   = useRef();
   const { showToast }             = useApp();
@@ -300,17 +301,41 @@ export default function ImportSettings() {
  const historyCount   = companies.filter(co => checked[co.original_id || co.company_name]).reduce((s,c)=>s+c.entries.length,0);
  const dncCount       = companies.filter(co => checked[co.original_id || co.company_name] && co.isDNC).length;
 
-  // ── Render ─────────────────────────────────────────────────────────────────
-  return (
-    <div style={{ maxWidth:1000 }}>
-      <div style={{ marginBottom:20 }}>
-        <div style={{ fontWeight:800, fontSize:18, color:'var(--navy-800)', marginBottom:4 }}>📥 Import Call History</div>
-        <div style={{ fontSize:13, color:'var(--gray-500)', lineHeight:1.6 }}>
-          Upload your Company Call Log CSV. Every entry is reviewed before anything is written to the CRM.
-          Duplicate sync artifacts are removed automatically.
-        </div>
-      </div>
+// ── Render ─────────────────────────────────────────────────────────────────
+return (
+  <div style={{ maxWidth:1000 }}>
 
+    {/* 🔀 Import Mode Switch */}
+    <div style={{ display:'flex', gap:8, marginBottom:16 }}>
+      <button
+        className={`btn ${importMode === 'history' ? 'btn-primary' : 'btn-ghost'}`}
+        onClick={() => setImportMode('history')}
+      >
+        📥 Import Call History
+      </button>
+      <button
+        className={`btn ${importMode === 'companies' ? 'btn-primary' : 'btn-ghost'}`}
+        onClick={() => setImportMode('companies')}
+      >
+        🏢 Import New Companies
+      </button>
+    </div>
+
+    {/* 🏢 New Companies Import */}
+    {importMode === 'companies' && <NewCompaniesImport />}
+
+    {/* 📥 Call History Import */}
+    {importMode === 'history' && (
+      <>
+        <div style={{ marginBottom:20 }}>
+          <div style={{ fontWeight:800, fontSize:18, color:'var(--navy-800)', marginBottom:4 }}>
+            📥 Import Call History
+          </div>
+          <div style={{ fontSize:13, color:'var(--gray-500)', lineHeight:1.6 }}>
+            Upload your Company Call Log CSV. Every entry is reviewed before anything is written to the CRM.
+            Duplicate sync artifacts are removed automatically.
+          </div>
+        </div>
       {/* ── STEP 1: Upload ── */}
       {step === 'upload' && (
         <div>
@@ -406,7 +431,7 @@ export default function ImportSettings() {
                     onClick={()=>setChecked(p=>({...p,[key]:!p[key]}))}>
                     <input type="checkbox" checked={isChecked} onChange={()=>{}} style={{ accentColor:'var(--navy-800)', width:13, height:13 }}/>
                     <div>
-                      <div style={{ fontWeight:700, fontSize:12, color:co.isDNC?'#dc2626':'var(--navy-800)' }}>{co.name}</div>
+                      <div style={{ fontWeight:700, fontSize:12, color:co.isDNC?'#dc2626':'var(--navy-800)' }}>{co.company_name}</div>
                       <div style={{ fontSize:10, color:'var(--gray-400)' }}>{co.original_id} {co.phone && `· ${co.phone}`} {co.industry && `· ${co.industry}`}</div>
                       {co.isDNC && <div style={{ fontSize:10, fontWeight:700, color:'#dc2626', marginTop:2 }}>🚫 Do Not Call — will be marked dead</div>}
                     </div>
