@@ -17,6 +17,34 @@ const { getNextCompanyId, appendCallLog, cancelOldFollowUps, clearAllCompanyQueu
 const router = express.Router();
 router.use(requireAuth);
 
+function normalizePhone(val) {
+  return String(val || '').replace(/\D/g, '');
+}
+
+function normalizeName(val) {
+  return String(val || '')
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\b(inc|llc|l\.l\.c|co|corp|corporation|company|ltd|limited)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function cleanDateOnly(val) {
+  if (!val) return null;
+  const s = String(val).trim();
+  if (!s) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : d.toISOString().split('T')[0];
+}
+
+function contactDisplayName(val) {
+  const name = String(val || '').trim();
+  return name || 'Unnamed Contact';
+}
+
 // ═══════════════════════════════════════════════════════
 // COMPANY PROFILES
 // ═══════════════════════════════════════════════════════
@@ -50,13 +78,21 @@ router.get('/', (req, res) => {
       cc.name as preferred_contact_name,
       cc.role_title as preferred_contact_role,
       cl.contact_type as last_contact_type,
-      cl.logged_at as last_contacted
+      cl.logged_at as last_contacted,
+      fu.due_date as followup_due,
+      fu.next_action as followup_action
     FROM companies c
     LEFT JOIN company_contacts cc ON cc.company_id = c.company_id AND cc.is_preferred = 1
     LEFT JOIN (
       SELECT entity_id, contact_type, logged_at FROM call_log
       WHERE log_type='company' AND id IN (SELECT MAX(id) FROM call_log WHERE log_type='company' GROUP BY entity_id)
     ) cl ON cl.entity_id = c.id
+    LEFT JOIN (
+      SELECT entity_id, due_date, next_action
+      FROM follow_ups
+      WHERE source_type='company'
+        AND id IN (SELECT MAX(id) FROM follow_ups WHERE source_type='company' GROUP BY entity_id)
+    ) fu ON fu.entity_id = c.id
     ${where}
     ORDER BY c.name ASC
   `;
@@ -557,7 +593,8 @@ router.post('/import', (req, res) => {
   try {
     for (const row of companies) {
       const name  = (row.name || '').trim();
-      const phone = (row.main_phone || '').replace(/\D/g, '');
+      const phone = normalizePhone(row.main_phone);
+      const normalizedName = normalizeName(name);
       if (!name) { results.skipped++; continue; }
 
       // Fast path: if frontend already resolved the CRM id, use it directly
@@ -580,20 +617,25 @@ router.post('/import', (req, res) => {
                    action_type,next_action,next_action_date,attempt_number,logged_at,logged_by_name,counts_as_attempt)
                 VALUES ('company','call',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)
               `).run(ex.id,ex.company_id,ex.name,ex.main_phone,ex.industry||null,
-                h.contact_type||'Call',h.contact_name||null,h.role_title||null,h.direct_line||null,h.notes||null,
-                h.action_type||'Call',h.next_action||'Call',h.next_action_date||null,
+                h.contact_type||'Call',contactDisplayName(h.contact_name),h.role_title||null,normalizePhone(h.direct_line)||null,h.notes||null,
+                h.action_type||'Call','Call',cleanDateOnly(h.next_action_date),
                 h.attempt_number||1,h.logged_at||new Date().toISOString(),h.logged_by||'Import');
               results.history++;
             }
           }
-          // Set follow-up date if provided, or mark dead if Do Not Call
+          // Set follow-up date from the most recent imported row, or mark dead if latest row is Do Not Call
           if (row.is_dnc) {
+            db.prepare("DELETE FROM follow_ups WHERE entity_id=? AND source_type='company'").run(ex.id);
             db.prepare("UPDATE companies SET pipeline_stage='dead' WHERE id=?").run(ex.id);
-          } else if (row.next_follow_up) {
+          } else if (cleanDateOnly(row.next_follow_up)) {
+            const dueDate = cleanDateOnly(row.next_follow_up);
             const fuExists = db.prepare("SELECT id FROM follow_ups WHERE entity_id=? AND source_type='company'").get(ex.id);
-            if (!fuExists) {
-              db.prepare("INSERT INTO follow_ups (source_type,entity_id,company_id_str,entity_name,phone,due_date,next_action) VALUES ('company',?,?,?,?,?,?)")
-                .run(ex.id, ex.company_id, ex.name, ex.main_phone, row.next_follow_up, row.last_next_action||'Call');
+            if (fuExists) {
+              db.prepare("UPDATE follow_ups SET due_date=?, next_action='Call', next_action_date=?, entity_name=?, phone=? WHERE id=?")
+                .run(dueDate, dueDate, ex.name, ex.main_phone, fuExists.id);
+            } else {
+              db.prepare("INSERT INTO follow_ups (source_type,entity_id,company_id_str,entity_name,phone,due_date,next_action,next_action_date) VALUES ('company',?,?,?,?,?,?,?)")
+                .run(ex.id, ex.company_id, ex.name, ex.main_phone, dueDate, 'Call', dueDate);
             }
             db.prepare("UPDATE companies SET pipeline_stage='call' WHERE id=?").run(ex.id);
           }
@@ -602,15 +644,18 @@ router.post('/import', (req, res) => {
         }
       }
 
-      // Dedup: check by phone first, then by name
+      // Dedup: match by name + phone first, then name, then phone
       let existingId = null;
-      if (phone) {
-        const byPhone = db.prepare('SELECT id, company_id FROM companies WHERE main_phone = ?').get(phone);
-        if (byPhone) existingId = byPhone.id;
-      }
-      if (!existingId && name) {
-        const byName = db.prepare('SELECT id, company_id FROM companies WHERE lower(name) = lower(?) AND status = ?').get(name, 'active');
+      const existingCompanies = db.prepare("SELECT id, company_id, name, main_phone FROM companies WHERE status = 'active'").all();
+      const exactNamePhone = existingCompanies.find(co => normalizedName && phone && normalizeName(co.name) === normalizedName && normalizePhone(co.main_phone) === phone);
+      if (exactNamePhone) existingId = exactNamePhone.id;
+      if (!existingId) {
+        const byName = existingCompanies.find(co => normalizedName && normalizeName(co.name) === normalizedName);
         if (byName) existingId = byName.id;
+      }
+      if (!existingId) {
+        const byPhone = existingCompanies.find(co => phone && normalizePhone(co.main_phone) === phone);
+        if (byPhone) existingId = byPhone.id;
       }
 
       let companyDbId, companyIdStr;
@@ -653,34 +698,39 @@ router.post('/import', (req, res) => {
           if (!inQ) db.prepare("INSERT INTO calling_queue (queue_type, entity_id, added_by) VALUES ('company', ?, ?)").run(companyDbId, req.user.id);
         }
 
-        // Save preferred contact if provided
-        if (row.contact_name) {
-          const existing = db.prepare('SELECT id FROM company_contacts WHERE company_id=? AND lower(name)=lower(?)').get(companyIdStr, row.contact_name);
-          if (!existing) {
-            db.prepare(`INSERT INTO company_contacts (company_id, name, role_title, is_preferred) VALUES (?,?,?,1)`)
-              .run(companyIdStr, row.contact_name, row.contact_role||null);
-          }
-        }
-
-        // Set follow-up date if provided, or mark dead if Do Not Call
+                // Set follow-up date from the most recent imported row, or mark dead if latest row is Do Not Call
         if (row.is_dnc) {
+          db.prepare("DELETE FROM follow_ups WHERE entity_id=? AND source_type='company'").run(companyDbId);
           db.prepare("UPDATE companies SET pipeline_stage='dead' WHERE id=?").run(companyDbId);
-        } else if (row.next_follow_up) {
-          db.prepare("INSERT INTO follow_ups (source_type,entity_id,company_id_str,entity_name,phone,due_date,next_action) VALUES ('company',?,?,?,?,?,?)")
-            .run(companyDbId, companyIdStr, name, phone||null, row.next_follow_up, row.last_next_action||'Call');
+        } else if (cleanDateOnly(row.next_follow_up)) {
+          const dueDate = cleanDateOnly(row.next_follow_up);
+          db.prepare("INSERT INTO follow_ups (source_type,entity_id,company_id_str,entity_name,phone,due_date,next_action,next_action_date) VALUES ('company',?,?,?,?,?,?,?)")
+            .run(companyDbId, companyIdStr, name, phone||null, dueDate, 'Call', dueDate);
           db.prepare("UPDATE companies SET pipeline_stage='call' WHERE id=?").run(companyDbId);
         }
       }
 
-      // Import contacts
+       // Import contacts (including unnamed contacts with unique numbers/emails)
       if (Array.isArray(row.contacts)) {
+        let preferredSet = false;
         for (const c of row.contacts) {
-          const cname = (c.name || '').trim();
-          if (!cname) continue;
-          const dup = db.prepare('SELECT id FROM company_contacts WHERE company_id = ? AND lower(name) = lower(?)').get(companyIdStr, cname);
+          const cname = contactDisplayName(c.name);
+          const directLine = normalizePhone(c.direct_line);
+          const email = String(c.email || '').trim().toLowerCase() || null;
+          const roleTitle = String(c.role_title || '').trim() || null;
+          const dup = db.prepare(`
+            SELECT id FROM company_contacts
+            WHERE company_id = ?
+              AND lower(name) = lower(?)
+              AND COALESCE(direct_line,'') = COALESCE(?, '')
+              AND COALESCE(lower(email),'') = COALESCE(?, '')
+              AND COALESCE(lower(role_title),'') = COALESCE(lower(?), '')
+          `).get(companyIdStr, cname, directLine || '', email || '', roleTitle || '');
           if (!dup) {
+            const shouldPrefer = !preferredSet && c.is_preferred ? 1 : 0;
             db.prepare(`INSERT INTO company_contacts (company_id, name, role_title, direct_line, email, is_preferred) VALUES (?,?,?,?,?,?)`)
-              .run(companyIdStr, cname, c.role_title||null, (c.direct_line||'').replace(/\D/g,'')||null, c.email||null, c.is_preferred?1:0);
+              .run(companyIdStr, cname, roleTitle, directLine || null, email, shouldPrefer);
+            if (shouldPrefer) preferredSet = true;
             results.contacts++;
           }
         }
@@ -700,10 +750,10 @@ router.post('/import', (req, res) => {
             VALUES ('company','call',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)
           `).run(
             companyDbId, companyIdStr, name, phone||null, row.industry||null,
-            h.contact_type||'Spoke To', h.contact_name||null, h.role_title||null,
-            (h.direct_line||'').replace(/\D/g,'')||null, h.email||null,
-            h.notes||null, h.action_type||'Call', h.next_action||'Call',
-            h.next_action_date||null, h.attempt_number||1,
+            h.contact_type||'Spoke To', contactDisplayName(h.contact_name), h.role_title||null,
+            normalizePhone(h.direct_line)||null, h.email||null,
+            h.notes||null, h.action_type||'Call', 'Call',
+            cleanDateOnly(h.next_action_date), h.attempt_number||1,
             loggedAt, h.logged_by||'Import'
           );
           results.history++;
