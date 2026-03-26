@@ -587,7 +587,7 @@ router.post('/import', (req, res) => {
     return res.status(400).json({ error: 'Provide an array of companies to import.' });
   }
 
-  const results = { imported: 0, skipped: 0, contacts: 0, history: 0, errors: [] };
+  const results = { imported: 0, skipped: 0, contacts: 0, history: 0, duplicate_history: 0, matched_existing: 0, errors: [] };
 
   db.exec('BEGIN TRANSACTION');
   try {
@@ -599,6 +599,7 @@ router.post('/import', (req, res) => {
 
       // Fast path: if frontend already resolved the CRM id, use it directly
       if (row.existing_crm_id) {
+        results.matched_existing++;
         const ex = db.prepare('SELECT * FROM companies WHERE id = ?').get(row.existing_crm_id);
         if (ex) {
           // Attach history to existing company
@@ -609,7 +610,7 @@ router.post('/import', (req, res) => {
               const dup = db.prepare(
                 "SELECT id FROM call_log WHERE entity_id=? AND contact_type=? AND date(logged_at)=date(?) AND SUBSTR(notes,1,30)=SUBSTR(?,1,30)"
               ).get(ex.id, h.contact_type||'', h.logged_at||'', h.notes||'');
-              if (dup) continue;
+              if (dup) { results.duplicate_history++; continue; }
               db.prepare(`
                 INSERT INTO call_log
                   (log_type,log_category,entity_id,company_id_str,entity_name,phone,industry,
