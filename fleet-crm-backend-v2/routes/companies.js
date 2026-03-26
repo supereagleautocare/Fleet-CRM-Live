@@ -138,7 +138,19 @@ router.get('/nearby-data', (req, res) => {
   `).all();
   res.json(companies);
 });
-
+// GET /api/companies/search-name?q=... — find companies with similar name (for duplicate detection)
+router.get('/search-name', (req, res) => {
+  const { q } = req.query;
+  if (!q || q.trim().length < 2) return res.json([]);
+  const term = q.trim().toLowerCase();
+  const rows = db.prepare(`
+    SELECT id, name, main_phone, address, city, is_multi_location, location_name, location_group
+    FROM companies
+    WHERE lower(name) LIKE ? AND status = 'active'
+    ORDER BY name ASC LIMIT 10
+  `).all(`%${term}%`);
+  res.json(rows);
+});
 // GET /api/companies/:id — single company with contacts, stats, branches
 router.get('/:id', (req, res) => {
   const company = db.prepare('SELECT * FROM companies WHERE id = ?').get(req.params.id);
@@ -191,19 +203,7 @@ router.get('/:id', (req, res) => {
   res.json({ ...company, contacts, stats, branches, in_queue: !!queueEntry, queue_entry: queueEntry||null, follow_up: followUp||null });
 });
 
-// GET /api/companies/search-name?q=... — find companies with similar name (for duplicate detection)
-router.get('/search-name', (req, res) => {
-  const { q } = req.query;
-  if (!q || q.trim().length < 2) return res.json([]);
-  const term = q.trim().toLowerCase();
-  const rows = db.prepare(`
-    SELECT id, name, main_phone, address, city, is_multi_location, location_name, location_group
-    FROM companies
-    WHERE lower(name) LIKE ? AND status = 'active'
-    ORDER BY name ASC LIMIT 10
-  `).all(`%${term}%`);
-  res.json(rows);
-});
+
 
 // POST /api/companies — create new company profile
 router.post('/', (req, res) => {
@@ -906,5 +906,240 @@ router.post('/backfill-followups', (req, res) => {
     created++;
   }
   res.json({ message: `Created ${created} follow-up records.`, created });
+});
+// ─────────────────────────────────────────────────────────────────────────────
+// BACKEND PATCH: fleet-crm-backend-v2/routes/companies.js
+//
+// TWO THINGS TO FIX:
+//
+// FIX 1 — Route ordering bug (search-name returns 404)
+//   The route  router.get('/search-name', ...)  is currently placed AFTER
+//   router.get('/:id', ...), so Express treats "search-name" as a company ID
+//   and returns "Company not found."
+//
+//   SOLUTION: Move the /search-name route to BEFORE /:id.
+//   Find this block in companies.js (currently near line 113):
+//
+//     // GET /api/companies/:id — single company with contacts, stats, branches
+//     router.get('/:id', (req, res) => {
+//
+//   And move router.get('/search-name', ...) to appear BEFORE that block.
+//   The /search-name route is already defined — just cut it and paste it above /:id.
+//
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// FIX 2 — Add the merge endpoint
+//   Add this entire block BEFORE the module.exports line at the bottom of companies.js.
+//
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── MERGE TWO COMPANIES ───────────────────────────────────────────────────────
+// POST /api/companies/:id/merge/:into_id
+//
+// Body: { field_choices: { name: 'source'|'target'|'combine', main_phone: 'source'|'target', ... } }
+//
+// What this does:
+//   1. Validates both companies exist
+//   2. Applies field choices to build the merged company record
+//   3. Transfers: call_log, company_contacts, follow_ups, calling_queue, visit_queue
+//   4. Removes source company
+//   All inside a transaction — if anything fails, nothing changes.
+//
+router.post('/:id/merge/:into_id', (req, res) => {
+  const sourceId = parseInt(req.params.id);
+  const targetId = parseInt(req.params.into_id);
+  const { field_choices = {} } = req.body;
+
+  if (sourceId === targetId) {
+    return res.status(400).json({ error: 'Cannot merge a company into itself.' });
+  }
+
+  const source = db.prepare('SELECT * FROM companies WHERE id = ?').get(sourceId);
+  if (!source) return res.status(404).json({ error: 'Source company not found.' });
+
+  const target = db.prepare('SELECT * FROM companies WHERE id = ?').get(targetId);
+  if (!target) return res.status(404).json({ error: 'Target company not found.' });
+
+  const MERGEABLE_FIELDS = ['name', 'main_phone', 'industry', 'address', 'city', 'state', 'zip', 'website', 'notes'];
+
+  db.exec('BEGIN TRANSACTION');
+  try {
+    // ── 1. Build merged field values ────────────────────────────────────────
+    const updates = [];
+    const values = [];
+
+    for (const field of MERGEABLE_FIELDS) {
+      const choice = field_choices[field] || 'target'; // default: keep target
+      const srcVal = source[field];
+      const tgtVal = target[field];
+
+      let merged;
+      if (choice === 'source') {
+        merged = srcVal || tgtVal; // fall back to target if source empty
+      } else if (choice === 'combine' && srcVal && tgtVal) {
+        merged = `${tgtVal}\n\n---\n\n${srcVal}`; // target first, then source
+      } else {
+        merged = tgtVal || srcVal; // keep target, fall back to source
+      }
+
+      if (merged !== undefined) {
+        updates.push(`${field} = ?`);
+        values.push(merged);
+      }
+    }
+
+    // Also inherit pipeline_stage and company_status if target is 'new'
+    if (target.pipeline_stage === 'new' && source.pipeline_stage !== 'new') {
+      updates.push('pipeline_stage = ?');
+      values.push(source.pipeline_stage);
+    }
+    if ((!target.company_status || target.company_status === 'prospect') && source.company_status && source.company_status !== 'prospect') {
+      updates.push('company_status = ?');
+      values.push(source.company_status);
+    }
+
+    updates.push("updated_at = datetime('now')");
+    values.push(targetId);
+
+    if (updates.length > 1) { // at least one real field + updated_at
+      db.prepare(`UPDATE companies SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+    }
+
+    // ── 2. Transfer call_log ────────────────────────────────────────────────
+    db.prepare(`
+      UPDATE call_log
+      SET entity_id = ?, company_id_str = ?, entity_name = ?
+      WHERE entity_id = ? AND log_type = 'company'
+    `).run(targetId, target.company_id, target.name, sourceId);
+
+    // ── 3. Transfer contacts (skip duplicates by name) ──────────────────────
+    const existingContacts = db.prepare(
+      'SELECT name FROM company_contacts WHERE company_id = ?'
+    ).all(target.company_id).map(c => c.name.toLowerCase().trim());
+
+    const sourceContacts = db.prepare(
+      'SELECT * FROM company_contacts WHERE company_id = ?'
+    ).all(source.company_id);
+
+    for (const contact of sourceContacts) {
+      const isDupe = existingContacts.includes(contact.name.toLowerCase().trim());
+      if (isDupe) {
+        // Update the existing contact with any missing info
+        db.prepare(`
+          UPDATE company_contacts
+          SET
+            direct_line  = COALESCE(NULLIF(direct_line, ''), ?),
+            email        = COALESCE(NULLIF(email, ''),        ?),
+            role_title   = COALESCE(NULLIF(role_title, ''),  ?),
+            notes        = COALESCE(NULLIF(notes, ''),        ?)
+          WHERE company_id = ? AND lower(name) = lower(?)
+        `).run(
+          contact.direct_line || null,
+          contact.email       || null,
+          contact.role_title  || null,
+          contact.notes       || null,
+          target.company_id,
+          contact.name
+        );
+      } else {
+        // Insert as new contact (never preferred — target's preferred stays)
+        db.prepare(`
+          INSERT INTO company_contacts
+            (company_id, name, role_title, direct_line, email, notes, is_preferred)
+          VALUES (?, ?, ?, ?, ?, ?, 0)
+        `).run(
+          target.company_id,
+          contact.name,
+          contact.role_title  || null,
+          contact.direct_line || null,
+          contact.email       || null,
+          contact.notes       || null
+        );
+        existingContacts.push(contact.name.toLowerCase().trim());
+      }
+    }
+
+    // ── 4. Transfer follow_ups ──────────────────────────────────────────────
+    // Remove target's existing follow-up if source has one with a date
+    const sourceFU = db.prepare(
+      "SELECT * FROM follow_ups WHERE entity_id = ? AND source_type = 'company' ORDER BY id DESC LIMIT 1"
+    ).get(sourceId);
+    const targetFU = db.prepare(
+      "SELECT * FROM follow_ups WHERE entity_id = ? AND source_type = 'company' ORDER BY id DESC LIMIT 1"
+    ).get(targetId);
+
+    if (sourceFU && !targetFU) {
+      // Move source follow-up to target
+      db.prepare(`
+        UPDATE follow_ups
+        SET entity_id = ?, company_id_str = ?, entity_name = ?, phone = ?
+        WHERE entity_id = ? AND source_type = 'company'
+      `).run(targetId, target.company_id, target.name, target.main_phone, sourceId);
+    } else if (sourceFU && targetFU) {
+      // Keep the one with the sooner due date, delete the other
+      if (sourceFU.due_date < targetFU.due_date) {
+        db.prepare("UPDATE follow_ups SET due_date = ?, next_action = ? WHERE id = ?").run(sourceFU.due_date, sourceFU.next_action, targetFU.id);
+      }
+      db.prepare("DELETE FROM follow_ups WHERE entity_id = ? AND source_type = 'company'").run(sourceId);
+    } else {
+      // No source follow-up, just clean up any orphans
+      db.prepare("DELETE FROM follow_ups WHERE entity_id = ? AND source_type = 'company'").run(sourceId);
+    }
+
+    // ── 5. Transfer calling_queue entries ───────────────────────────────────
+    const targetInQueue = db.prepare(
+      "SELECT id FROM calling_queue WHERE queue_type = 'company' AND entity_id = ?"
+    ).get(targetId);
+
+    if (!targetInQueue) {
+      // Move source queue entry to target
+      db.prepare(
+        "UPDATE calling_queue SET entity_id = ? WHERE queue_type = 'company' AND entity_id = ?"
+      ).run(targetId, sourceId);
+    } else {
+      // Target already in queue — just remove source duplicate
+      db.prepare(
+        "DELETE FROM calling_queue WHERE queue_type = 'company' AND entity_id = ?"
+      ).run(sourceId);
+    }
+
+    // ── 6. Transfer visit_queue entries ─────────────────────────────────────
+    db.prepare(`
+      UPDATE visit_queue
+      SET company_id = ?, entity_id = ?, entity_name = ?
+      WHERE entity_id = ?
+    `).run(target.company_id, targetId, target.name, sourceId);
+
+    // ── 7. Transfer scorecard_entries ───────────────────────────────────────
+    db.prepare(`
+      UPDATE scorecard_entries SET entity_id = ?, entity_name = ?
+      WHERE entity_id = ?
+    `).run(targetId, target.name, sourceId);
+
+    // ── 8. Log the merge in call_log (history audit) ─────────────────────────
+    db.prepare(`
+      INSERT INTO call_log
+        (log_type, log_category, entity_id, company_id_str, entity_name, action_type, contact_type, notes, logged_at)
+      VALUES ('company', 'move', ?, ?, ?, 'Move', 'Merged', ?, datetime('now'))
+    `).run(
+      targetId,
+      target.company_id,
+      target.name,
+      `Merged from: ${source.name} (ID: ${source.company_id})`
+    );
+
+    // ── 9. Delete source company ─────────────────────────────────────────────
+    db.prepare('DELETE FROM company_contacts WHERE company_id = ?').run(source.company_id);
+    db.prepare('DELETE FROM companies WHERE id = ?').run(sourceId);
+
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    return res.status(500).json({ error: 'Merge failed: ' + e.message });
+  }
+
+  // Return the updated target company
+  const merged = db.prepare('SELECT * FROM companies WHERE id = ?').get(targetId);
+  res.json({ ok: true, merged_into: merged });
 });
 module.exports = router;
