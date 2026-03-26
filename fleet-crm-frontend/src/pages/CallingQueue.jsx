@@ -227,7 +227,7 @@ export default function CallingQueue() {
                               </div>
                             : <span style={{ color:'var(--gray-300)' }}>—</span>}
                         </td>
-                        <td>
+                        <td style={{ whiteSpace:'nowrap' }}>
                           {row.due_date
                             ? <>
                                 {status==='overdue' && <span className="badge badge-overdue">Overdue</span>}
