@@ -236,8 +236,8 @@ export default function CallingQueue() {
                               </>
                             : <span style={{ fontSize:11, color:'var(--gray-300)' }}>No date set</span>}
                         </td>
-                        <td style={{ fontSize:11, color:'var(--gray-500)', maxWidth:140 }} className="truncate">
-                          {row.last_contact_type ? `${row.last_contact_type} · ${fmtDate(row.last_contacted)}` : '—'}
+                        <td style={{ fontSize:11, color:'var(--gray-500)', maxWidth:140, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                          {row.last_contact_type || '—'}
                         </td>
                         <td onClick={e=>e.stopPropagation()} style={{textAlign:'right'}}>
                           <RowActions
