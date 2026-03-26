@@ -145,11 +145,9 @@ export default function ImportSettings() {
     }
 
     // ── Step 3: Check which company IDs already exist in CRM ─────────────────
-    // We do this via a lightweight search by name/phone — batch fetch existing
     let existingByOrigId = {};
     try {
       const existing = await api.companies({ limit: 9999 });
-      // Index by company_id string (e.g. "CO-000044") and by phone
       for (const co of existing) {
         if (co.company_id) existingByOrigId[co.company_id] = co;
       }
@@ -161,16 +159,14 @@ export default function ImportSettings() {
       const lastEntry = entries[entries.length - 1];
       const firstEntry = entries[0];
 
-      // Most recent future follow-up date
-      const today = new Date();
-      let nextFollowUp = null;
-      for (const e of [...entries].reverse()) {
-        const d = parseDate(e[C.next_follow_up_date]);
-        if (d && new Date(d) >= today) { nextFollowUp = d; break; }
-      }
+      // Use the follow-up date from the most recent entry only — exact date, no substitution
+      const nextFollowUp = parseDate(lastEntry[C.next_follow_up_date]) || null;
 
       // Most recent next action
       const lastNextAction = lastEntry[C.next_action] || null;
+
+      // If the most recent contact type is Do Not Call, flag it — no queue, mark dead
+      const isDNC = (lastEntry[C.contact_type] || '').trim().toLowerCase() === 'do not call';
 
       const existing = existingByOrigId[co.original_id] || null;
 
@@ -182,7 +178,8 @@ export default function ImportSettings() {
         lastNote:       String(lastEntry[C.notes] || '').slice(0,120),
         lastType:       lastEntry[C.contact_type] || '',
         lastNextAction,
-        nextFollowUp,
+        nextFollowUp:   isDNC ? null : nextFollowUp,
+        isDNC,
         existingCrmId:  existing?.id || null,
         existingName:   existing?.name || null,
         status:         existing ? 'existing' : 'new',
@@ -220,6 +217,7 @@ export default function ImportSettings() {
         existing_crm_id:    co.existingCrmId,  // if already in CRM, skip create, just add history
         next_follow_up:     co.nextFollowUp,
         last_next_action:   co.lastNextAction,
+        is_dnc:             co.isDNC,
         history: co.entries.map(e => ({
           contact_type:     String(e[C.contact_type] || 'Call').trim(),
           contact_name:     String(e[C.contact_name] || '').trim() || null,
@@ -247,6 +245,7 @@ export default function ImportSettings() {
   const newCount       = companies.filter(co => checked[co.original_id || co.name] && !co.existingCrmId).length;
   const existingCount  = companies.filter(co => checked[co.original_id || co.name] && co.existingCrmId).length;
   const historyCount   = companies.filter(co => checked[co.original_id || co.name]).reduce((s,c)=>s+c.entries.length,0);
+  const dncCount       = companies.filter(co => checked[co.original_id || co.name] && co.isDNC).length;
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -287,7 +286,8 @@ export default function ImportSettings() {
             ✓ Shows you a full review table — nothing imports until you confirm<br/>
             ✓ For existing companies, only adds call history (doesn't overwrite company data)<br/>
             ✓ For new companies, creates the company + attaches all history<br/>
-            ✓ Sets the most recent <em>future</em> follow-up date only
+            ✓ Uses the most recent entry's follow-up date as the due date (exact date preserved)<br/>
+            ✓ Companies where the last contact was "Do Not Call" are marked dead and skipped from queue
           </div>
         </div>
       )}
@@ -315,6 +315,7 @@ export default function ImportSettings() {
           <div style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 16px', background:'var(--navy-950)', borderRadius:10, marginBottom:12, flexWrap:'wrap' }}>
             <div style={{ fontSize:13, fontWeight:700, color:'white' }}>
               {selectedCount} selected · {newCount} new companies · {existingCount} add history to existing · {historyCount.toLocaleString()} entries
+              {dncCount > 0 && <span style={{ color:'#fca5a5', marginLeft:8 }}>· {dncCount} Do Not Call → dead</span>}
             </div>
             <div style={{ marginLeft:'auto', display:'flex', gap:6 }}>
               <button className="btn btn-ghost btn-sm" style={{ color:'rgba(255,255,255,.7)', border:'1px solid rgba(255,255,255,.2)' }} onClick={()=>toggleAll(true)}>Select All</button>
@@ -348,12 +349,13 @@ export default function ImportSettings() {
                 const badge = TYPE_BADGE[co.lastType] || { bg:'#f9fafb', color:'#374151' };
                 return (
                   <div key={key}
-                    style={{ display:'grid', gridTemplateColumns:'32px 1fr 80px 100px 80px 120px 1fr', gap:0, padding:'9px 12px', borderBottom:'1px solid var(--gray-100)', background:isChecked?'white':'#fafafa', opacity:isChecked?1:.55, alignItems:'center', cursor:'pointer' }}
+                    style={{ display:'grid', gridTemplateColumns:'32px 1fr 80px 100px 80px 120px 1fr', gap:0, padding:'9px 12px', borderBottom:'1px solid var(--gray-100)', background:isChecked?(co.isDNC?'#fef2f2':'white'):'#fafafa', opacity:isChecked?1:.55, alignItems:'center', cursor:'pointer' }}
                     onClick={()=>setChecked(p=>({...p,[key]:!p[key]}))}>
                     <input type="checkbox" checked={isChecked} onChange={()=>{}} style={{ accentColor:'var(--navy-800)', width:13, height:13 }}/>
                     <div>
-                      <div style={{ fontWeight:700, fontSize:12, color:'var(--navy-800)' }}>{co.name}</div>
+                      <div style={{ fontWeight:700, fontSize:12, color:co.isDNC?'#dc2626':'var(--navy-800)' }}>{co.name}</div>
                       <div style={{ fontSize:10, color:'var(--gray-400)' }}>{co.original_id} {co.phone && `· ${co.phone}`} {co.industry && `· ${co.industry}`}</div>
+                      {co.isDNC && <div style={{ fontSize:10, fontWeight:700, color:'#dc2626', marginTop:2 }}>🚫 Do Not Call — will be marked dead</div>}
                     </div>
                     <div style={{ fontSize:13, fontWeight:800, color:'var(--navy-800)', textAlign:'center' }}>{co.entries.length}</div>
                     <div>
@@ -414,7 +416,7 @@ export default function ImportSettings() {
             </div>
           )}
           <div style={{ fontSize:13, color:'#15803d', marginBottom:16 }}>
-            Go to <strong>Companies</strong> to verify the import. Each company now has its full call history. 
+            Go to <strong>Companies</strong> to verify the import. Each company now has its full call history.
             {addToQueue && ' New companies have been added to your Calling Queue.'}
           </div>
           <button className="btn btn-ghost" onClick={()=>{ setStep('upload'); setCompanies([]); setResult(null); setParseStats(null); }}>
