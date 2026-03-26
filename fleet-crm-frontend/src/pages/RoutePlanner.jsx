@@ -1111,7 +1111,7 @@ export default function RoutePlanner({ embedded = false }) {
                   });
                   showToast('✅ ' + comp.name + ' added' + (autoOpt ? ' and route re-optimized' : ''));
                 } else {
-                  showToast('Plan a route first, then add stops from the map');
+                  await addNearbyToRoute(comp);
                 }
               } catch(e){ showToast(e.message,'error'); }
             }}
