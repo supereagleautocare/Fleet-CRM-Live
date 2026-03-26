@@ -103,7 +103,7 @@ export default function SimpleImport({ onDone }) {
   const [result, setResult]           = useState(null);
   const [unmappedCols, setUnmappedCols] = useState([]);       // columns we couldn't auto-detect
   const fileRef                       = useRef();
-  const { showToast }                 = useApp();
+  const { showToast, refreshCounts }  = useApp();
 
   // ── Step 1: File upload + parse ───────────────────────────────────────────
   async function handleFile(e) {
@@ -226,6 +226,7 @@ export default function SimpleImport({ onDone }) {
       const res = await api.importCompanies(payload, addToQueue);
       setResult({ ...res, stage, count: toImport.length });
       setStep('done');
+      refreshCounts();
     } catch(err) {
       showToast('Import failed: ' + err.message, 'error');
     } finally {
