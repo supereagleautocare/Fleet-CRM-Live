@@ -591,7 +591,7 @@ router.post('/import', (req, res) => {
 
   db.exec('BEGIN TRANSACTION');
   try {
-    const existingCompaniesAtStart = db.prepare("SELECT id, company_id, name, main_phone FROM companies WHERE status = 'active'").all();
+    const existingCompaniesAtStart = [];
 
     for (const row of companies) {
       const name  = (row.name || '').trim();
@@ -768,6 +768,118 @@ router.post('/import', (req, res) => {
   } catch (e) {
     db.exec('ROLLBACK');
     return res.status(500).json({ error: 'Import failed: ' + e.message });
+  }
+
+  res.status(201).json(results);
+});
+router.post('/import-new-companies', (req, res) => {
+  const { companies } = req.body;
+  if (!Array.isArray(companies) || companies.length === 0) {
+    return res.status(400).json({ error: 'Provide an array of companies to import.' });
+  }
+
+  const results = {
+    imported: 0,
+    duplicates: 0,
+    possible_duplicates: 0,
+    chains: 0,
+    review: [],
+    errors: []
+  };
+
+  db.exec('BEGIN TRANSACTION');
+  try {
+    const existingCompanies = db.prepare(`
+      SELECT id, company_id, name, main_phone, address, city, state, zip, location_group
+      FROM companies
+      WHERE status = 'active'
+    `).all();
+
+    for (const row of companies) {
+      const name = String(row.name || '').trim();
+      const phone = normalizePhone(row.main_phone);
+      const normalizedName = normalizeName(name);
+
+      if (!name) {
+        results.errors.push({ row, error: 'Missing company name' });
+        continue;
+      }
+
+      const exactNamePhone = existingCompanies.find(co =>
+        normalizedName &&
+        phone &&
+        normalizeName(co.name) === normalizedName &&
+        normalizePhone(co.main_phone) === phone
+      );
+
+      if (exactNamePhone) {
+        results.duplicates++;
+        results.review.push({
+          type: 'duplicate',
+          action: 'review',
+          incoming: row,
+          matched_company_id: exactNamePhone.id,
+          matched_name: exactNamePhone.name,
+          matched_phone: exactNamePhone.main_phone
+        });
+        continue;
+      }
+
+      const sameName = existingCompanies.find(co =>
+        normalizedName &&
+        normalizeName(co.name) === normalizedName
+      );
+
+      if (sameName) {
+        results.possible_duplicates++;
+        results.review.push({
+          type: 'possible_duplicate_or_chain',
+          action: 'review',
+          incoming: row,
+          matched_company_id: sameName.id,
+          matched_name: sameName.name,
+          matched_phone: sameName.main_phone
+        });
+        continue;
+      }
+
+      const company_id = getNextCompanyId();
+      const insertResult = db.prepare(`
+        INSERT INTO companies (
+          company_id, name, main_phone, industry, address, city, state, zip, website, notes, pipeline_stage
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new')
+      `).run(
+        company_id,
+        name,
+        phone || null,
+        row.industry || null,
+        row.address || null,
+        row.city || null,
+        row.state || null,
+        row.zip || null,
+        row.website || null,
+        row.notes || null
+      );
+
+      existingCompanies.push({
+        id: insertResult.lastInsertRowid,
+        company_id,
+        name,
+        main_phone: phone || null,
+        address: row.address || null,
+        city: row.city || null,
+        state: row.state || null,
+        zip: row.zip || null,
+        location_group: null
+      });
+
+      results.imported++;
+    }
+
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    return res.status(500).json({ error: 'New company import failed: ' + e.message });
   }
 
   res.status(201).json(results);
