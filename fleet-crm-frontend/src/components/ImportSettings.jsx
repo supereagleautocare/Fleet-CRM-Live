@@ -53,6 +53,11 @@ function parseDate(val) {
   return isNaN(d.getTime()) ? null : d.toISOString();
 }
 
+function parseDateOnly(val) {
+  const iso = parseDate(val);
+  return iso ? iso.split('T')[0] : null;
+}
+
 function fmtDate(iso) {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
@@ -65,11 +70,36 @@ function fmtPhone(p) {
   return d;
 }
 
-// Fingerprint for deduplication: company + date + type + note prefix
+function phoneDigits(p) {
+  return String(p || '').replace(/\D/g, '');
+}
+
+function normalizeName(name) {
+  return String(name || '')
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\b(inc|llc|l\.l\.c|co|corp|corporation|company|ltd|limited)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function contactKey(row) {
+  return [
+    String(row[C.contact_name] || '').trim().toLowerCase(),
+    phoneDigits(row[C.direct_line]),
+    String(row[C.email] || '').trim().toLowerCase(),
+    String(row[C.role_title] || '').trim().toLowerCase(),
+  ].join('|');
+}
+
+// Fingerprint for deduplication: company + phone + date + type + note prefix
 function fingerprint(row) {
+  const company = normalizeName(row[C.company_name] || row[C.company_id] || '');
+  const phone = phoneDigits(row[C.phone]);
   const date = String(row[C.contact_date]||'').slice(0,10);
   const note = String(row[C.notes]||'').slice(0,30).toLowerCase().replace(/\s+/g,' ').trim();
-  return `${row[C.company_id]}|${date}|${row[C.contact_type]}|${note}`;
+  return `${company}|${phone}|${date}|${row[C.contact_type]}|${note}`;
 }
 
 const TYPE_BADGE = {
@@ -125,59 +155,80 @@ export default function ImportSettings() {
       deduped.push(row);
     }
 
-    // ── Step 2: Group by Company ID ──────────────────────────────────────────
+        // ── Step 2: Group by Company Name + Phone, fallback to Company Name ─────
     const byCompany = {};
     for (const row of deduped) {
       const coId   = String(row[C.company_id] || '').trim();
       const coName = String(row[C.company_name] || '').trim();
-      const key    = coId || coName;
+      const phoneDigitsOnly = phoneDigits(row[C.phone]);
+      const normalizedName = normalizeName(coName);
+      const key = normalizedName ? `${normalizedName}|${phoneDigitsOnly}` : (coId || phoneDigitsOnly);
       if (!key) continue;
       if (!byCompany[key]) {
         byCompany[key] = {
-          original_id:  coId,
-          name:         coName,
+          original_id:  coId || null,
+          company_name: coName,
           phone:        fmtPhone(row[C.phone]),
           industry:     String(row[C.industry] || '').trim(),
           entries:      [],
+          normalizedName,
+          normalizedPhone: phoneDigitsOnly,
         };
       }
+      if (!byCompany[key].phone && row[C.phone]) byCompany[key].phone = fmtPhone(row[C.phone]);
+      if (!byCompany[key].industry && row[C.industry]) byCompany[key].industry = String(row[C.industry] || '').trim();
       byCompany[key].entries.push(row);
     }
 
-    // ── Step 3: Check which company IDs already exist in CRM ─────────────────
-    let existingByOrigId = {};
+    // ── Step 3: Check which companies already exist in CRM ───────────────────
+    let existingCompanies = [];
     try {
-      const existing = await api.companies({ limit: 9999 });
-      for (const co of existing) {
-        if (co.company_id) existingByOrigId[co.company_id] = co;
-      }
+      existingCompanies = await api.companies({ status: 'all' });
     } catch(e) { /* non-fatal — proceed without matching */ }
 
     // ── Step 4: Build review list ────────────────────────────────────────────
     const list = Object.values(byCompany).map(co => {
-      const entries = co.entries.sort((a,b) => new Date(a[C.contact_date]||0) - new Date(b[C.contact_date]||0));
+      const entries = [...co.entries].sort((a,b) => new Date(a[C.contact_date] || a[C.logged_at] || 0) - new Date(b[C.contact_date] || b[C.logged_at] || 0));
       const lastEntry = entries[entries.length - 1];
       const firstEntry = entries[0];
 
-      // Use the follow-up date from the most recent entry only — exact date, no substitution
-      const nextFollowUp = parseDate(lastEntry[C.next_follow_up_date]) || null;
-
-      // Most recent next action
-      const lastNextAction = lastEntry[C.next_action] || null;
-
-      // If the most recent contact type is Do Not Call, flag it — no queue, mark dead
+      const nextFollowUp = parseDateOnly(lastEntry[C.next_follow_up_date]) || null;
       const isDNC = (lastEntry[C.contact_type] || '').trim().toLowerCase() === 'do not call';
 
-      const existing = existingByOrigId[co.original_id] || null;
+      const existing = existingCompanies.find(ex => {
+        const exName = normalizeName(ex.name);
+        const exPhone = phoneDigits(ex.main_phone);
+        if (co.normalizedName && co.normalizedPhone && exName === co.normalizedName && exPhone === co.normalizedPhone) return true;
+        if (co.normalizedName && exName === co.normalizedName) return true;
+        if (co.normalizedPhone && exPhone === co.normalizedPhone) return true;
+        return false;
+      }) || null;
+
+      const seenContacts = new Set();
+      const contacts = [];
+      for (const entry of entries) {
+        const ck = contactKey(entry);
+        if (seenContacts.has(ck)) continue;
+        seenContacts.add(ck);
+        contacts.push({
+          name: String(entry[C.contact_name] || '').trim() || 'Unnamed Contact',
+          role_title: String(entry[C.role_title] || '').trim() || null,
+          direct_line: fmtPhone(entry[C.direct_line]),
+          email: String(entry[C.email] || '').trim() || null,
+          is_preferred: 0,
+        });
+      }
+      if (contacts.length) contacts[contacts.length - 1].is_preferred = 1;
 
       return {
         ...co,
         entries,
+        contacts,
         firstDate:      parseDate(firstEntry[C.contact_date]),
-        lastDate:       parseDate(lastEntry[C.contact_date]),
+        lastDate:       parseDate(lastEntry[C.contact_date] || lastEntry[C.logged_at]),
         lastNote:       String(lastEntry[C.notes] || '').slice(0,120),
         lastType:       lastEntry[C.contact_type] || '',
-        lastNextAction,
+        lastNextAction: 'Call',
         nextFollowUp:   isDNC ? null : nextFollowUp,
         isDNC,
         existingCrmId:  existing?.id || null,
@@ -216,8 +267,9 @@ export default function ImportSettings() {
         original_company_id: co.original_id,
         existing_crm_id:    co.existingCrmId,  // if already in CRM, skip create, just add history
         next_follow_up:     co.nextFollowUp,
-        last_next_action:   co.lastNextAction,
+        last_next_action:   'Call',
         is_dnc:             co.isDNC,
+        contacts:           co.contacts,
         history: co.entries.map(e => ({
           contact_type:     String(e[C.contact_type] || 'Call').trim(),
           contact_name:     String(e[C.contact_name] || '').trim() || null,
@@ -225,8 +277,9 @@ export default function ImportSettings() {
           direct_line:      fmtPhone(e[C.direct_line]),
           notes:            String(e[C.notes] || '').trim() || null,
           logged_at:        parseDate(e[C.contact_date]) || parseDate(e[C.logged_at]),
-          next_action:      String(e[C.next_action] || 'Call').replace(/stop/i,'Stop').trim(),
-          next_action_date: parseDate(e[C.next_follow_up_date]),
+          next_action:      'Call',
+          next_action_date: parseDateOnly(e[C.next_follow_up_date]),
+          email:            String(e[C.email] || '').trim() || null,
           attempt_number:   parseInt(e[C.attempt_count]) || 1,
           logged_by:        'Import',
           action_type:      'Call',
@@ -281,7 +334,7 @@ export default function ImportSettings() {
             <strong>What this import does:</strong><br/>
             ✓ Reads every call entry from your CSV<br/>
             ✓ Removes duplicate sync artifacts automatically<br/>
-            ✓ Groups entries by Company ID<br/>
+            ✓ Groups entries by company name + phone (falls back safely when data is messy)<br/>
             ✓ Checks which companies already exist in your CRM<br/>
             ✓ Shows you a full review table — nothing imports until you confirm<br/>
             ✓ For existing companies, only adds call history (doesn't overwrite company data)<br/>
