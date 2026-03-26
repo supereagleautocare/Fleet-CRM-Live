@@ -708,5 +708,27 @@ router.post('/import', (req, res) => {
 
   res.status(201).json(results);
 });
+router.post('/backfill-followups', (req, res) => {
+  const today = new Date().toISOString().split('T')[0];
+  const companies = db.prepare(`
+    SELECT c.id, c.company_id, c.name, c.main_phone, c.pipeline_stage
+    FROM companies c
+    WHERE c.status = 'active'
+      AND c.pipeline_stage IN ('new','call')
+      AND NOT EXISTS (
+        SELECT 1 FROM follow_ups WHERE entity_id = c.id AND source_type = 'company'
+      )
+  `).all();
 
+  let created = 0;
+  for (const co of companies) {
+    db.prepare(`
+      INSERT INTO follow_ups (source_type, entity_id, company_id_str, entity_name, phone, due_date, next_action)
+      VALUES ('company', ?, ?, ?, ?, ?, 'Call')
+    `).run(co.id, co.company_id, co.name, co.main_phone, today);
+    db.prepare("UPDATE companies SET pipeline_stage='call' WHERE id=?").run(co.id);
+    created++;
+  }
+  res.json({ message: `Created ${created} follow-up records.`, created });
+});
 module.exports = router;
