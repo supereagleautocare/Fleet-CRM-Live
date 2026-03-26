@@ -1024,12 +1024,21 @@ async function handleImport(e) {
             <input className="form-input" placeholder="Search company to merge into…"
               value={mergeSearch}
               onChange={async e => {
-                setMergeSearch(e.target.value);
-                if (e.target.value.length >= 2) {
-                  const results = await api.searchCompanyName(e.target.value);
-                  setMergeResults(results.filter(r => r.id !== selected?.id));
-                } else { setMergeResults([]); }
-              }}
+               const q = e.target.value;
+               setMergeSearch(q);
+
+               if (q.trim().length >= 2) {
+               try {
+                    const results = await api.searchCompanyName(q.trim());
+                   setMergeResults((results || []).filter(r => r.id !== selected?.id));
+                 } catch (err) {
+                   setMergeResults([]);
+                   showToast(err.message || 'Search failed', 'error');
+                 }
+               } else {
+                 setMergeResults([]);
+               }
+             }}
             />
             {mergeResults.length > 0 && (
               <div style={{ marginTop:8, border:'1px solid var(--gray-200)', borderRadius:8, overflow:'hidden' }}>
