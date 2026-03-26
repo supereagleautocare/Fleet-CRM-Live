@@ -598,7 +598,7 @@ router.post('/import', (req, res) => {
       if (!name) { results.skipped++; continue; }
 
       // Fast path: if frontend already resolved the CRM id, use it directly
-      if (row.existing_crm_id) {
+      if (false && row.existing_crm_id) {
         results.matched_existing++;
         const ex = db.prepare('SELECT * FROM companies WHERE id = ?').get(row.existing_crm_id);
         if (ex) {
@@ -650,6 +650,7 @@ router.post('/import', (req, res) => {
       const existingCompanies = db.prepare("SELECT id, company_id, name, main_phone FROM companies WHERE status = 'active'").all();
       const exactNamePhone = existingCompanies.find(co => normalizedName && phone && normalizeName(co.name) === normalizedName && normalizePhone(co.main_phone) === phone);
       if (exactNamePhone) existingId = exactNamePhone.id;
+      if (existingId) results.matched_existing++;
       if (!existingId) {
         const byName = existingCompanies.find(co => normalizedName && normalizeName(co.name) === normalizedName);
         if (byName) existingId = byName.id;
