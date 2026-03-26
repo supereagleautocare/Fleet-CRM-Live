@@ -286,7 +286,7 @@ export default function ImportSettings() {
         })),
       }));
 
-      const r = await api.importCompanies(payload);
+      const r = await api.importCallHistory(payload);
       setResult({ ...r, imported_count: toImport.filter(c=>!c.existingCrmId).length, history_count: toImport.reduce((s,c)=>s+c.entries.length,0) });
       setStep('done');
     } catch(e) {
@@ -397,7 +397,7 @@ export default function ImportSettings() {
 
             <div style={{ maxHeight:500, overflowY:'auto' }}>
               {companies.map(co => {
-                const key = co.original_id || co.name;
+                const key = co.original_id || co.company_name;
                 const isChecked = !!checked[key];
                 const badge = TYPE_BADGE[co.lastType] || { bg:'#f9fafb', color:'#374151' };
                 return (
