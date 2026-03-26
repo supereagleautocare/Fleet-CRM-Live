@@ -591,6 +591,8 @@ router.post('/import', (req, res) => {
 
   db.exec('BEGIN TRANSACTION');
   try {
+    const existingCompaniesAtStart = db.prepare("SELECT id, company_id, name, main_phone FROM companies WHERE status = 'active'").all();
+
     for (const row of companies) {
       const name  = (row.name || '').trim();
       const phone = normalizePhone(row.main_phone);
@@ -647,7 +649,7 @@ router.post('/import', (req, res) => {
 
       // Dedup: match by name + phone first, then name, then phone
       let existingId = null;
-      const existingCompanies = db.prepare("SELECT id, company_id, name, main_phone FROM companies WHERE status = 'active'").all();
+      const existingCompanies = existingCompaniesAtStart;
       const exactNamePhone = existingCompanies.find(co => normalizedName && phone && normalizeName(co.name) === normalizedName && normalizePhone(co.main_phone) === phone);
       if (exactNamePhone) existingId = exactNamePhone.id;
       if (existingId) results.matched_existing++;
