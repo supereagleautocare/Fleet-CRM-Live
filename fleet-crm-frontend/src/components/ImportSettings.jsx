@@ -116,16 +116,16 @@ const TYPE_BADGE = {
 };
 
 export default function ImportSettings({ onDone }) {
-  const [step, setStep]           = useState('upload');
-  const [companies, setCompanies] = useState([]);  // grouped, reviewed
-  const [checked, setChecked]     = useState({});   // original_id → bool
+  const [hasImported, setHasImported] = useState(false);
+  const [step, setStep] = useState('upload');
+  const [companies, setCompanies] = useState([]);
+  const [checked, setChecked] = useState({});
   const [addToQueue, setAddToQueue] = useState(false);
   const [importing, setImporting] = useState(false);
-  const [result, setResult]       = useState(null);
-  const [importMode, setImportMode] = useState('history');
+  const [result, setResult] = useState(null);
   const [parseStats, setParseStats] = useState(null);
-  const fileRef                   = useRef();
-  const { showToast }             = useApp();
+  const fileRef = useRef();
+  const { showToast } = useApp();
 
   async function handleFile(e) {
     const file = e.target.files[0];
@@ -289,7 +289,7 @@ export default function ImportSettings({ onDone }) {
 
       const r = await api.importCallHistory(payload);
       setResult({ ...r, imported_count: toImport.filter(c=>!c.existingCrmId).length, history_count: toImport.reduce((s,c)=>s+c.entries.length,0) });
-      setStep('done');
+      setStep('done'); setHasImported(true);
     } catch(e) {
       showToast('Import failed: ' + e.message, 'error');
     } finally { setImporting(false); }
@@ -303,6 +303,8 @@ export default function ImportSettings({ onDone }) {
 
 // ── Render ─────────────────────────────────────────────────────────────────
 // ── Render ─────────────────────────────────────────────────────────────────
+if (hasImported) return <div style={{padding:20}}>✅ Call history already imported</div>;
+
 return (
   <div style={{ maxWidth:1000 }}>
 
