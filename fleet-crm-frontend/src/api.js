@@ -153,6 +153,7 @@ export const api = {
   settings:        ()              => req('GET',  '/config/settings'),
   updateSetting:   (key, value)    => req('PUT',  `/config/settings/${key}`, { value }),
   contactTypes:    ()              => req('GET',  '/config/contact-types'),
+  backfillFollowups: ()            => req('POST', '/companies/backfill-followups'),
 };
 
 // ── Helpers ───────────────────────────────────────────
