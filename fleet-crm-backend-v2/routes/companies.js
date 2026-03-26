@@ -586,14 +586,14 @@ router.post('/import', (req, res) => {
               results.history++;
             }
           }
-          // Set follow-up date if provided
-          if (row.next_follow_up) {
-            const today = new Date().toISOString().split('T')[0];
-            const useDate = new Date(row.next_follow_up) > new Date() ? row.next_follow_up : today;
+          // Set follow-up date if provided, or mark dead if Do Not Call
+          if (row.is_dnc) {
+            db.prepare("UPDATE companies SET pipeline_stage='dead' WHERE id=?").run(ex.id);
+          } else if (row.next_follow_up) {
             const fuExists = db.prepare("SELECT id FROM follow_ups WHERE entity_id=? AND source_type='company'").get(ex.id);
             if (!fuExists) {
               db.prepare("INSERT INTO follow_ups (source_type,entity_id,company_id_str,entity_name,phone,due_date,next_action) VALUES ('company',?,?,?,?,?,?)")
-                .run(ex.id, ex.company_id, ex.name, ex.main_phone, useDate, row.last_next_action||'Call');
+                .run(ex.id, ex.company_id, ex.name, ex.main_phone, row.next_follow_up, row.last_next_action||'Call');
             }
             db.prepare("UPDATE companies SET pipeline_stage='call' WHERE id=?").run(ex.id);
           }
@@ -662,12 +662,12 @@ router.post('/import', (req, res) => {
           }
         }
 
-        // Set follow-up date if provided
-        if (row.next_follow_up) {
-          const today = new Date().toISOString().split('T')[0];
-          const useDate = new Date(row.next_follow_up) > new Date() ? row.next_follow_up : today;
+        // Set follow-up date if provided, or mark dead if Do Not Call
+        if (row.is_dnc) {
+          db.prepare("UPDATE companies SET pipeline_stage='dead' WHERE id=?").run(companyDbId);
+        } else if (row.next_follow_up) {
           db.prepare("INSERT INTO follow_ups (source_type,entity_id,company_id_str,entity_name,phone,due_date,next_action) VALUES ('company',?,?,?,?,?,?)")
-            .run(companyDbId, companyIdStr, name, phone||null, useDate, row.last_next_action||'Call');
+            .run(companyDbId, companyIdStr, name, phone||null, row.next_follow_up, row.last_next_action||'Call');
           db.prepare("UPDATE companies SET pipeline_stage='call' WHERE id=?").run(companyDbId);
         }
       }
