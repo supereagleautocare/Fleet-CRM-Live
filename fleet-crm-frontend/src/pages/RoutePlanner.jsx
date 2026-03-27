@@ -128,7 +128,7 @@ export default function RoutePlanner({ embedded = false }) {
   const KEY = 'AIzaSyBnxDgeGyXpuG-zWxyvgCuc8IjZVN-AkhE';
 
   // ── Route persistence via sessionStorage ────────────────────────────────
-  useEffect(() => {
+  ) => {
     if (route) {
       try { sessionStorage.setItem('fleet_route', JSON.stringify({ route, routeStopMins, arriveAt, endMode, endAddr })); }
       catch(_) {}
@@ -200,7 +200,64 @@ export default function RoutePlanner({ embedded = false }) {
 
   // Geocode nearby companies (use stored lat/lng first, geocode missing ones)
   useEffect(() => {
-    if (nearbyCompanies.length === 0) return;
+   if (nearbyCompanies.length === 0) return;
+   let cancelled = false;
+
+  (async () => {
+    setNearbyGeocoding(true);
+
+    // ── Step 1: Render everything with stored coords IMMEDIATELY ──
+    const withCoords    = nearbyCompanies.filter(c => c.lat && c.lng);
+    const missingCoords = nearbyCompanies.filter(c => !c.lat || !c.lng);
+
+    const initial = withCoords.map(c => ({
+      ...c, geoOk: true, priority: getPriority(c)
+    }));
+
+    // Show the map right away with whatever we already have
+    setNearbyMapped(initial);
+    setNearbyGeoCount(withCoords.length);
+
+    if (missingCoords.length === 0) {
+      setNearbyGeocoding(false);
+      return;
+    }
+
+    // ── Step 2: Geocode missing ones in batches of 3 ──────────────
+    const BATCH_SIZE = 3;
+    const results = [...initial];
+
+    for (let i = 0; i < missingCoords.length; i += BATCH_SIZE) {
+      if (cancelled) break;
+      const batch = missingCoords.slice(i, i + BATCH_SIZE);
+
+      const geocoded = await Promise.all(batch.map(async c => {
+        if (!c.address) return { ...c, lat: null, lng: null, geoOk: false, priority: getPriority(c) };
+        const geo = await geocode(`${c.address}, ${c.city || 'Charlotte'}, ${c.state || 'NC'}`);
+        if (geo.ok) {
+          // Save to DB in background so next load is instant
+          api.geocodeCompany(c.id, { lat: geo.lat, lng: geo.lng }).catch(() => {});
+        }
+        return { ...c, lat: geo.lat, lng: geo.lng, geoOk: geo.ok, priority: getPriority(c) };
+      }));
+
+      if (!cancelled) {
+        results.push(...geocoded);
+        setNearbyMapped([...results]);
+        setNearbyGeoCount(results.length);
+      }
+
+      // Brief pause between batches to respect Nominatim rate limit
+      if (i + BATCH_SIZE < missingCoords.length && !cancelled) {
+        await new Promise(r => setTimeout(r, 1100));
+      }
+    }
+
+    if (!cancelled) setNearbyGeocoding(false);
+  })();
+
+  return () => { cancelled = true; };
+}, [nearbyCompanies]);
     let cancelled = false;
     (async () => {
       setNearbyGeocoding(true);
