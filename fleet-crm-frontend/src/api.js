@@ -6,8 +6,6 @@ export function setToken(t) { token = t; }
 export function getToken()  { return token; }
 export function clearToken(){ token = null; }
 export function isLoggedIn(){ return !!token; } 
-
-geocodeLookup: (id) => req('GET', `/companies/${id}/geocode-lookup`),
   
 async function req(method, path, body) {
   const headers = { 'Content-Type': 'application/json' };
@@ -71,7 +69,7 @@ export const api = {
   nearbyData:      ()              => req('GET',  '/companies/nearby-data'),
   deleteCompany:  (id)          => req('DELETE', `/companies/${id}`),
   mergeCompany:   (id, into_id, opts) => req('POST', `/companies/${id}/merge/${into_id}`, opts || {}),
-
+  geocodeLookup:  (id)          => req('GET',  `/companies/${id}/geocode-lookup`),
   // ── Pipeline ─────────────────────────────────────────────────────────────
   pipelineBoard:    ()             => req('GET',    '/pipeline/board'),
   pipelineCounts:   ()             => req('GET',    '/pipeline/counts'),
