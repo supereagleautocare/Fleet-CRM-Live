@@ -128,7 +128,7 @@ export default function RoutePlanner({ embedded = false }) {
   const KEY = 'AIzaSyBnxDgeGyXpuG-zWxyvgCuc8IjZVN-AkhE';
 
   // ── Route persistence via sessionStorage ────────────────────────────────
-  useEffect(() => {
+  (() => {
     if (route) {
       try { sessionStorage.setItem('fleet_route', JSON.stringify({ route, routeStopMins, arriveAt, endMode, endAddr })); }
       catch(_) {}
@@ -139,7 +139,7 @@ export default function RoutePlanner({ embedded = false }) {
 
   // ── Clear stale route when start address changes ─────────────────────────
   const prevStartAddr = useRef(startAddr);
-  useEffect(() => {
+  (() => {
     if (prevStartAddr.current !== startAddr && route) {
       setRoute(null);
       showToast('Start address changed — re-plan your route', 'info');
@@ -148,7 +148,7 @@ export default function RoutePlanner({ embedded = false }) {
   }, [startAddr]);
 
   // Load data
-  useEffect(() => {
+  (() => {
     // Restore persisted route first
     try {
       const saved = sessionStorage.getItem('fleet_route');
@@ -182,7 +182,7 @@ export default function RoutePlanner({ embedded = false }) {
   }, []);
 
   // Get GPS
-  useEffect(() => {
+  (() => {
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
       pos => { const p={lat:pos.coords.latitude,lng:pos.coords.longitude}; setMyGps(p); setNearbyCenterPos(p); },
@@ -192,7 +192,7 @@ export default function RoutePlanner({ embedded = false }) {
   }, []);
 
   // Load nearby companies — refresh every time this tab mounts
-  useEffect(() => {
+  (() => {
     api.nearbyData()
       .then(data => { setNearbyCompanies(data); setNearbyMapped([]); })
       .catch(e => console.error(e));
@@ -208,6 +208,8 @@ export default function RoutePlanner({ embedded = false }) {
 
     // ── Step 1: Render everything with stored coords IMMEDIATELY ──
     const withCoords    = nearbyCompanies.filter(c => c.lat && c.lng);
+    setNearbyMapped(withCoords.map(c => ({ ...c, geoOk: true, priority: getPriority(c) })));
+    setNearbyGeoCount(withCoords.length);
     const missingCoords = nearbyCompanies.filter(c => !c.lat || !c.lng);
 
     const initial = withCoords.map(c => ({
