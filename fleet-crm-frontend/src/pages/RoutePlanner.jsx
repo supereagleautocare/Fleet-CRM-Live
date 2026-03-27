@@ -236,7 +236,9 @@ export default function RoutePlanner({ embedded = false }) {
         const geo = await geocode(`${c.address}, ${c.city || 'Charlotte'}, ${c.state || 'NC'}`);
         if (geo.ok) {
           // Save to DB in background so next load is instant
-          api.geocodeCompany(c.id, { lat: geo.lat, lng: geo.lng }).catch(() => {});
+          api.geocodeCompany(c.id, { lat: geo.lat, lng: geo.lng })
+            .then(() => console.log('✅ saved coords for', c.name))
+            .catch(e => console.error('❌ failed to save coords for', c.name, e.message));
         }
         return { ...c, lat: geo.lat, lng: geo.lng, geoOk: geo.ok, priority: getPriority(c) };
       }));
