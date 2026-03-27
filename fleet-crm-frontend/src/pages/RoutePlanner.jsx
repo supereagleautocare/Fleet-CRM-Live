@@ -196,7 +196,16 @@ useEffect(() => {
     api.nearbyData()
       .then(data => {
         const companies = data || [];
-        setNearbyCompanies(companies);
+        // Merge — never overwrite existing coords with null
+        setNearbyCompanies(prev => {
+          const coordMap = {};
+          prev.forEach(c => { if (c.lat && c.lng) coordMap[c.id] = { lat: c.lat, lng: c.lng }; });
+          return companies.map(c => ({
+            ...c,
+            lat: c.lat || coordMap[c.id]?.lat || null,
+            lng: c.lng || coordMap[c.id]?.lng || null,
+          }));
+        });
 
         // Count how many still need coordinates
         const missing = companies.filter(c => c.address && (!c.lat || !c.lng)).length;
