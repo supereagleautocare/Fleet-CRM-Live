@@ -5,7 +5,7 @@ let token = null;
 export function setToken(t) { token = t; }
 export function getToken()  { return token; }
 export function clearToken(){ token = null; }
-export function isLoggedIn(){ return !!token; }
+export function isLoggedIn(){ return !!token; } 
 
 async function req(method, path, body) {
   const headers = { 'Content-Type': 'application/json' };
