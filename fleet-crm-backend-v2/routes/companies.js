@@ -725,7 +725,8 @@ router.post('/import', (req, res) => {
         companyDbId = insertResult.lastInsertRowid;
         companyIdStr = company_id;
         results.imported++;
-
+        geocodeAndSave(db, companyDbId, row.address, row.city);
+        
         if (add_to_queue) {
           const inQ = db.prepare("SELECT id FROM calling_queue WHERE queue_type='company' AND entity_id=?").get(companyDbId);
           if (!inQ) db.prepare("INSERT INTO calling_queue (queue_type, entity_id, added_by) VALUES ('company', ?, ?)").run(companyDbId, req.user.id);
@@ -903,6 +904,7 @@ router.post('/import-new-companies', (req, res) => {
       });
 
       results.imported++;
+      geocodeAndSave(db, insertResult.lastInsertRowid, row.address, row.city);
     }
 
     db.exec('COMMIT');
