@@ -128,7 +128,7 @@ export default function RoutePlanner({ embedded = false }) {
   const KEY = 'AIzaSyBnxDgeGyXpuG-zWxyvgCuc8IjZVN-AkhE';
 
   // ── Route persistence via sessionStorage ────────────────────────────────
-  ) => {
+  useEffect(() => {
     if (route) {
       try { sessionStorage.setItem('fleet_route', JSON.stringify({ route, routeStopMins, arriveAt, endMode, endAddr })); }
       catch(_) {}
