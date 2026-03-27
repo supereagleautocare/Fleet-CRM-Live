@@ -186,12 +186,48 @@ export default function RoutePlanner({ embedded = false }) {
     );
   }, []);
 
-  // ── 6. Load nearby companies ──────────────────────────────────────────────
-  useEffect(() => {
+  // ── 6. Load nearby companies + auto-refresh while geocoding is running ────
+const [stillGeocoding, setStillGeocoding] = useState(0);
+
+useEffect(() => {
+  let interval = null;
+
+  function load() {
     api.nearbyData()
-      .then(data => setNearbyCompanies(data || []))
+      .then(data => {
+        const companies = data || [];
+        setNearbyCompanies(companies);
+
+        // Count how many still need coordinates
+        const missing = companies.filter(c => c.address && (!c.lat || !c.lng)).length;
+        setStillGeocoding(missing);
+
+        // If some are still missing, keep polling every 15 seconds
+        // Once they all have coords the interval clears itself
+        if (missing > 0 && !interval) {
+          interval = setInterval(() => {
+            api.nearbyData().then(fresh => {
+              const freshCompanies = fresh || [];
+              setNearbyCompanies(freshCompanies);
+              const stillMissing = freshCompanies.filter(c => c.address && (!c.lat || !c.lng)).length;
+              setStillGeocoding(stillMissing);
+              if (stillMissing === 0) {
+                clearInterval(interval);
+                interval = null;
+              }
+            }).catch(() => {});
+          }, 15000);
+        } else if (missing === 0 && interval) {
+          clearInterval(interval);
+          interval = null;
+        }
+      })
       .catch(e => console.error('nearbyData failed:', e));
-  }, []);
+  }
+
+  load();
+  return () => { if (interval) clearInterval(interval); };
+}, []);
 
   // ── 7. Map nearby companies — ONLY use stored coordinates, no geocoding ───
   // This keeps the page fast. Run the bulk geocode in Settings to populate coords.
@@ -873,6 +909,11 @@ export default function RoutePlanner({ embedded = false }) {
             </div>
             <div style={{marginTop:6,fontSize:10,color:'var(--gray-500)',textAlign:'right',padding:'2px 8px',background:'rgba(255,255,255,.8)',borderRadius:8}}>
               {nearbyMapped.length} companies on map
+              {stillGeocoding > 0 && (
+                <div style={{marginTop:4,fontSize:10,color:'var(--gray-400)'}}>
+                 ⏳ locating {stillGeocoding} more…
+               </div>
+             )}
             </div>
           </div>
 
