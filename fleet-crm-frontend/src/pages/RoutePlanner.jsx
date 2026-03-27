@@ -232,16 +232,14 @@ export default function RoutePlanner({ embedded = false }) {
       const batch = missingCoords.slice(i, i + BATCH_SIZE);
 
       const geocoded = await Promise.all(batch.map(async c => {
-        if (!c.address) return { ...c, lat: null, lng: null, geoOk: false, priority: getPriority(c) };
-        const geo = await geocode(`${c.address}, ${c.city || 'Charlotte'}, ${c.state || 'NC'}`);
-        if (geo.ok) {
-          // Save to DB in background so next load is instant
-          api.geocodeCompany(c.id, { lat: geo.lat, lng: geo.lng })
-            .then(() => console.log('✅ saved coords for', c.name))
-            .catch(e => console.error('❌ failed to save coords for', c.name, e.message));
+         if (!c.address) return { ...c, lat: null, lng: null, geoOk: false, priority: getPriority(c) };
+         try {
+          const result = await api.geocodeLookup(c.id);
+          return { ...c, lat: result.lat, lng: result.lng, geoOk: true, priority: getPriority(c) };
+        } catch(_) {
+          return { ...c, lat: null, lng: null, geoOk: false, priority: getPriority(c) };
         }
-        return { ...c, lat: geo.lat, lng: geo.lng, geoOk: geo.ok, priority: getPriority(c) };
-      }));
+}));
 
       if (!cancelled) {
         results.push(...geocoded);
