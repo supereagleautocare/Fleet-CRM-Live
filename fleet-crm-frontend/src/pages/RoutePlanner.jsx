@@ -15,16 +15,14 @@ function dist(a, b) {
   const x=Math.sin(dLat/2)**2+Math.cos(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.sin(dLng/2)**2;
   return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
 }
+
 function optimize(start, stops, end) {
-  // end = optional geo {lat,lng} destination to finish near
   if (stops.length <= 1) return stops.map(s=>({...s, driveMiles: dist(start,s)}));
   const rem=[...stops], out=[]; let cur=start;
   while(rem.length>0) {
-    // If end destination is set and only 1 stop left, pick the one nearest end
     const target = (end && rem.length === 1) ? end : null;
     let bi=0, bd=Infinity;
     rem.forEach((s,i)=>{
-      // Score: distance from current + (if end) distance to end
       const d = dist(cur,s) + (target ? dist(s,target)*0.5 : 0);
       if(d<bd){bd=d;bi=i;}
     });
@@ -32,26 +30,37 @@ function optimize(start, stops, end) {
   }
   return out;
 }
+
 function driveMins(miles) { return Math.max(1, Math.round((miles/25)*60)); }
 function fmt(m) { m=Math.round(m); if(m<60) return `${m}m`; return `${Math.floor(m/60)}h ${m%60>0?m%60+'m':''}`.trim(); }
 function fmtTime(date) { return date.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true}); }
 function addMins(date, mins) { return new Date(date.getTime()+mins*60000); }
 function nowTimeStr() { const n=new Date(); return `${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`; }
-function nowDateStr() { return new Date().toISOString().split('T')[0]; }
 
-async function geocode(address) {
+// Geocode via backend (avoids CORS issues) — only used when building a route
+async function geocodeViaBackend(companyId) {
   try {
-    const r = await fetch(
-      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1&countrycodes=us`,
-      { headers: {'Accept-Language':'en','User-Agent':'SuperEagleFleetCRM/1.0'} }
-    );
-    const d = await r.json();
-    if (d.length>0) return {lat:parseFloat(d[0].lat),lng:parseFloat(d[0].lon),ok:true};
-  } catch(_){}
-  return {lat:35.2271,lng:-80.8431,ok:false};
+    return await api.geocodeLookup(companyId);
+  } catch(_) { return null; }
 }
 
-// ── Priority for Nearby ───────────────────────────────────────────────────────
+// Fallback geocode for start/end address (not company-based)
+async function geocodeAddress(address) {
+  try {
+    const https = { get: null }; // not available in browser
+    // Use our backend proxy for address geocoding
+    const r = await fetch(`/api/geocode-address?q=${encodeURIComponent(address)}`, {
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('fleet_crm_token') || ''}` }
+    });
+    if (r.ok) {
+      const d = await r.json();
+      if (d.lat) return { lat: d.lat, lng: d.lng, ok: true };
+    }
+  } catch(_) {}
+  // Hard fallback to Charlotte center
+  return { lat: 35.2271, lng: -80.8431, ok: false };
+}
+
 function getPriority(company) {
   const today=new Date(); today.setHours(0,0,0,0);
   const dropIn=['Not Interested','Gatekeeper','No Answer','Voicemail','Left Message','Drop In'];
@@ -62,6 +71,7 @@ function getPriority(company) {
   if (company.last_contacted) { if((today-new Date(company.last_contacted))/86400000>30) return 'warm'; }
   return 'good';
 }
+
 const PRI = {
   hot:  {color:'#ef4444',dot:'🔴',label:'Drop In',   bg:'#fef2f2',border:'#fca5a5'},
   warm: {color:'#f59e0b',dot:'🟡',label:'Due Soon',  bg:'#fffbeb',border:'#fde68a'},
@@ -69,87 +79,50 @@ const PRI = {
   none: {color:'#94a3b8',dot:'⚪',label:'No Contact',bg:'#f8fafc',border:'#e2e8f0'},
 };
 
-// ── Main Export ───────────────────────────────────────────────────────────────
+// ── Main Component ────────────────────────────────────────────────────────────
 export default function RoutePlanner({ embedded = false }) {
-  const [tab, setTab] = useState('planner'); // 'planner' | 'nearby'
-
   // ── Planner state ─────────────────────────────────────────────────────────
-  const [visits, setVisits]         = useState([]);
-  const [selected, setSelected]     = useState(new Set());
-  const [stopTimes, setStopTimes]   = useState({});
-  const [order, setOrder]           = useState([]); // ordered visit IDs for manual reorder
-  const [startMode, setStartMode]   = useState('address'); // 'gps' | 'address'
-  const [startAddr, setStartAddr]   = useState('3816 Monroe Rd, Charlotte, NC 28205');
-  const [startGps, setStartGps]     = useState(null);
-  const [timeMode, setTimeMode]     = useState('now'); // 'now' | 'custom'
-  const [startTime, setStartTime]   = useState(nowTimeStr());
-  const [returnHome, setReturnHome] = useState(false);
-  const [endMode, setEndMode]       = useState('none');   // 'none' | 'home' | 'custom'
-  const [endAddr, setEndAddr]       = useState('');       // custom end address
-  const [endGeo,  setEndGeo]        = useState(null);     // geocoded end
-  const [autoOpt, setAutoOpt]       = useState(true);
-  const [planning, setPlanning]     = useState(false);
-  const [planStep, setPlanStep]     = useState('');
-  const [route, setRoute]           = useState(null);
-  const [routeStopMins, setRouteStopMins] = useState({}); // live-editable stop durations
-  const [arriveAt, setArriveAt]     = useState({}); // { stopId: 'HH:MM' } arrive-at targets
-  const [loggingStop, setLoggingStop] = useState(null); // stopId being quick-logged
-  const [logging, setLogging]         = useState(false);
-  const [logForm, setLogForm]         = useState({ contact_type:'', notes:'', contact_name:'', direct_line:'', next_action:'Call', next_action_date_override:'' });
-  const [stopFilter, setStopFilter]   = useState('today');
-  const [customFrom, setCustomFrom]   = useState('');
-  const [customTo, setCustomTo]       = useState('');
-  const [queueStatus, setQueueStatus] = useState(null); // {inCalling,inMail,inEmail,stage,followupDate}
-  const [error, setError]           = useState('');
-  const [loading, setLoading]       = useState(true);
-  const [forecast, setForecast]     = useState([]);
-  const [movingId, setMovingId]     = useState(null);
-
-  // ── Active route state ────────────────────────────────────────────────────
-  const [contactTypes, setContactTypes] = useState([]);
+  const [visits, setVisits]               = useState([]);
+  const [selected, setSelected]           = useState(new Set());
+  const [stopTimes, setStopTimes]         = useState({});
+  const [order, setOrder]                 = useState([]);
+  const [startMode, setStartMode]         = useState('address');
+  const [startAddr, setStartAddr]         = useState('3816 Monroe Rd, Charlotte, NC 28205');
+  const [timeMode, setTimeMode]           = useState('now');
+  const [startTime, setStartTime]         = useState(nowTimeStr());
+  const [endMode, setEndMode]             = useState('none');
+  const [endAddr, setEndAddr]             = useState('');
+  const [autoOpt, setAutoOpt]             = useState(true);
+  const [planning, setPlanning]           = useState(false);
+  const [planStep, setPlanStep]           = useState('');
+  const [route, setRoute]                 = useState(null);
+  const [routeStopMins, setRouteStopMins] = useState({});
+  const [arriveAt, setArriveAt]           = useState({});
+  const [loggingStop, setLoggingStop]     = useState(null);
+  const [logging, setLogging]             = useState(false);
+  const [logForm, setLogForm]             = useState({ contact_type:'', notes:'', contact_name:'', direct_line:'', next_action:'Call' });
+  const [stopFilter, setStopFilter]       = useState('today');
+  const [customFrom, setCustomFrom]       = useState('');
+  const [customTo, setCustomTo]           = useState('');
+  const [queueStatus, setQueueStatus]     = useState(null);
+  const [error, setError]                 = useState('');
+  const [loading, setLoading]             = useState(true);
+  const [forecast, setForecast]           = useState([]);
+  const [movingId, setMovingId]           = useState(null);
+  const [contactTypes, setContactTypes]   = useState([]);
+  const [myGps, setMyGps]                 = useState(null);
 
   // ── Nearby state ──────────────────────────────────────────────────────────
   const [nearbyCompanies, setNearbyCompanies] = useState([]);
   const [nearbyMapped, setNearbyMapped]       = useState([]);
-  const [nearbyGeocing, setNearbyGeocoding]   = useState(false);
-  const [nearbyGeoCount, setNearbyGeoCount]   = useState(0);
   const [nearbyFilter, setNearbyFilter]       = useState('all');
-  const [nearbyRadius, setNearbyRadius]       = useState(10);
-  const [nearbyCenterMode, setNearbyCenterMode] = useState('gps'); // 'gps'|'address'|'stop'
-  const [nearbyCenterAddr, setNearbyCenterAddr] = useState('');
-  const [nearbyCenterStop, setNearbyCenterStop] = useState('');
-  const [nearbyCenterPos, setNearbyCenterPos]   = useState(null);
-  const [myGps, setMyGps]                       = useState(null);
-  const [nearbyMapCompany, setNearbyMapCompany] = useState(null);
-  const [nearbyLocError, setNearbyLocError]     = useState('');
 
   const { showToast, refreshCounts } = useApp();
   const navigate = useNavigate();
-  const KEY = 'AIzaSyBnxDgeGyXpuG-zWxyvgCuc8IjZVN-AkhE';
-
-  // ── Route persistence via sessionStorage ────────────────────────────────
-  (() => {
-    if (route) {
-      try { sessionStorage.setItem('fleet_route', JSON.stringify({ route, routeStopMins, arriveAt, endMode, endAddr })); }
-      catch(_) {}
-    } else {
-      sessionStorage.removeItem('fleet_route');
-    }
-  }, [route, routeStopMins, arriveAt]);
-
-  // ── Clear stale route when start address changes ─────────────────────────
   const prevStartAddr = useRef(startAddr);
-  (() => {
-    if (prevStartAddr.current !== startAddr && route) {
-      setRoute(null);
-      showToast('Start address changed — re-plan your route', 'info');
-    }
-    prevStartAddr.current = startAddr;
-  }, [startAddr]);
 
-  // Load data
-  (() => {
-    // Restore persisted route first
+  // ── 1. Restore persisted route ────────────────────────────────────────────
+  useEffect(() => {
     try {
       const saved = sessionStorage.getItem('fleet_route');
       if (saved) {
@@ -163,13 +136,34 @@ export default function RoutePlanner({ embedded = false }) {
         }
       }
     } catch(_) {}
+  }, []);
 
+  // ── 2. Persist route to sessionStorage when it changes ───────────────────
+  useEffect(() => {
+    if (route) {
+      try { sessionStorage.setItem('fleet_route', JSON.stringify({ route, routeStopMins, arriveAt, endMode, endAddr })); }
+      catch(_) {}
+    } else {
+      sessionStorage.removeItem('fleet_route');
+    }
+  }, [route, routeStopMins, arriveAt]);
+
+  // ── 3. Clear stale route when start address changes ───────────────────────
+  useEffect(() => {
+    if (prevStartAddr.current !== startAddr && route) {
+      setRoute(null);
+      showToast('Start address changed — re-plan your route');
+    }
+    prevStartAddr.current = startAddr;
+  }, [startAddr]);
+
+  // ── 4. Load page data ─────────────────────────────────────────────────────
+  useEffect(() => {
     api.pipelineForecast().then(fc => setForecast(fc || [])).catch(()=>{});
     Promise.all([api.visitsAll(), api.contactTypes(), api.settings()])
       .then(([data, ct, settings]) => {
         setVisits(data);
         setContactTypes(ct.configured || []);
-        // Pre-load shop address from settings
         const shopAddr = settings?.find?.(s => s.key === 'shop_address')?.value;
         if (shopAddr) setStartAddr(shopAddr);
         const today = new Date().toISOString().split('T')[0];
@@ -178,105 +172,36 @@ export default function RoutePlanner({ embedded = false }) {
         data.forEach(v=>{ t[v.id]=20; o.push(v.id); });
         setStopTimes(t); setOrder(o);
       })
+      .catch(e => console.error('Failed to load visits page:', e))
       .finally(()=>setLoading(false));
   }, []);
 
-  // Get GPS
-  (() => {
+  // ── 5. Get GPS ────────────────────────────────────────────────────────────
+  useEffect(() => {
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
-      pos => { const p={lat:pos.coords.latitude,lng:pos.coords.longitude}; setMyGps(p); setNearbyCenterPos(p); },
-      () => { setMyGps({lat:35.2073,lng:-80.7980}); setNearbyCenterPos({lat:35.2073,lng:-80.7980}); setNearbyLocError('Location denied — using shop.'); },
+      pos => setMyGps({lat:pos.coords.latitude,lng:pos.coords.longitude}),
+      () => setMyGps({lat:35.2073,lng:-80.7980}),
       {timeout:8000}
     );
   }, []);
 
-  // Load nearby companies — refresh every time this tab mounts
-  (() => {
+  // ── 6. Load nearby companies ──────────────────────────────────────────────
+  useEffect(() => {
     api.nearbyData()
-      .then(data => { setNearbyCompanies(data); setNearbyMapped([]); })
-      .catch(e => console.error(e));
+      .then(data => setNearbyCompanies(data || []))
+      .catch(e => console.error('nearbyData failed:', e));
   }, []);
 
-  // Geocode nearby companies (use stored lat/lng first, geocode missing ones)
+  // ── 7. Map nearby companies — ONLY use stored coordinates, no geocoding ───
+  // This keeps the page fast. Run the bulk geocode in Settings to populate coords.
   useEffect(() => {
-   if (nearbyCompanies.length === 0) return;
-   let cancelled = false;
-
-  const startDelay = setTimeout(async () => {
-    setNearbyGeocoding(true);
-
-    // ── Step 1: Render everything with stored coords IMMEDIATELY ──
-    const withCoords    = nearbyCompanies.filter(c => c.lat && c.lng);
-    setNearbyMapped(withCoords.map(c => ({ ...c, geoOk: true, priority: getPriority(c) })));
-    setNearbyGeoCount(withCoords.length);
-    const missingCoords = nearbyCompanies.filter(c => !c.lat || !c.lng);
-
-    const initial = withCoords.map(c => ({
-      ...c, geoOk: true, priority: getPriority(c)
-    }));
-
-    // Show the map right away with whatever we already have
-    setNearbyMapped(initial);
-    setNearbyGeoCount(withCoords.length);
-
-    if (missingCoords.length === 0) {
-      setNearbyGeocoding(false);
-      return;
-    }
-
-    // ── Step 2: Geocode missing ones in batches of 3 ──────────────
-    const BATCH_SIZE = 3;
-    const results = [...initial];
-
-    for (let i = 0; i < missingCoords.length; i += BATCH_SIZE) {
-      if (cancelled) break;
-      const batch = missingCoords.slice(i, i + BATCH_SIZE);
-
-      const geocoded = await Promise.all(batch.map(async c => {
-         if (!c.address) return { ...c, lat: null, lng: null, geoOk: false, priority: getPriority(c) };
-         try {
-          const result = await api.geocodeLookup(c.id);
-          return { ...c, lat: result.lat, lng: result.lng, geoOk: true, priority: getPriority(c) };
-        } catch(_) {
-          return { ...c, lat: null, lng: null, geoOk: false, priority: getPriority(c) };
-        }
-}));
-
-      if (!cancelled) {
-        results.push(...geocoded);
-        setNearbyMapped([...results]);
-        setNearbyGeoCount(results.length);
-      }
-
-      // Brief pause between batches to respect Nominatim rate limit
-      if (i + BATCH_SIZE < missingCoords.length && !cancelled) {
-        await new Promise(r => setTimeout(r, 1100));
-      }
-    }
-
-    if (!cancelled) setNearbyGeocoding(false);
-  })();
-
-  return () => { cancelled = true; };
-}, [nearbyCompanies]);
-  
-  // Update nearby center when mode/stop changes
-  useEffect(() => {
-    if (nearbyCenterMode === 'gps') { setNearbyCenterPos(myGps); return; }
-    if (nearbyCenterMode === 'stop' && nearbyCenterStop && route) {
-      const stop = route.stops.find(s=>String(s.id)===String(nearbyCenterStop));
-      if (stop?.lat) setNearbyCenterPos({lat:stop.lat, lng:stop.lng});
-    }
-  }, [nearbyCenterMode, nearbyCenterStop, myGps]);
-
-  async function updateNearbyCenterAddr(addr) {
-    setNearbyCenterAddr(addr);
-    if (addr.length > 5) {
-      const geo = await geocode(addr + ', NC');
-      if (geo.ok) setNearbyCenterPos({lat:geo.lat, lng:geo.lng});
-    }
-  }
+    if (nearbyCompanies.length === 0) return;
+    const mapped = nearbyCompanies
+      .filter(c => c.lat && c.lng)
+      .map(c => ({ ...c, geoOk: true, priority: getPriority(c) }));
+    setNearbyMapped(mapped);
+  }, [nearbyCompanies]);
 
   // ── Planner functions ─────────────────────────────────────────────────────
   function toggleStop(id) {
@@ -284,7 +209,7 @@ export default function RoutePlanner({ embedded = false }) {
   }
   function moveUp(id) {
     setOrder(prev => {
-      const i = prev.indexOf(id); if (i<=0) return prev;
+      const i=prev.indexOf(id); if(i<=0) return prev;
       const n=[...prev]; [n[i-1],n[i]]=[n[i],n[i-1]]; return n;
     });
   }
@@ -297,7 +222,7 @@ export default function RoutePlanner({ embedded = false }) {
 
   async function getStartCoords() {
     if (startMode === 'gps' && myGps) return myGps;
-    return await geocode(startAddr + ', NC');
+    return await geocodeAddress(startAddr);
   }
 
   async function buildRoute() {
@@ -309,50 +234,95 @@ export default function RoutePlanner({ embedded = false }) {
       const startGeo = await getStartCoords();
       const sel = order.filter(id=>selected.has(id)).map(id=>visits.find(v=>v.id===id)).filter(Boolean);
       const geocoded = [];
+
       for (let i=0; i<sel.length; i++) {
-        const v=sel[i];
+        const v = sel[i];
         setPlanStep(`Locating ${i+1}/${sel.length}: ${v.entity_name}…`);
-        await new Promise(r=>setTimeout(r,350));
-        const addr = v.address ? `${v.address}, ${v.city||'Charlotte'}, NC` : `${v.entity_name}, Charlotte, NC`;
-        const geo = await geocode(addr);
-        geocoded.push({id:v.id,name:v.entity_name,address:v.address||'',city:v.city||'Charlotte',phone:v.direct_line||'',contact:v.contact_name||'',notes:v.notes||'',workingNotes:v.working_notes||'',scheduledDate:v.scheduled_date||'',stopMins:stopTimes[v.id]||20,lat:geo.lat,lng:geo.lng,geoOk:geo.ok,visitId:v.id,companyId:v.entity_id||v.id});
+
+        let lat = v.lat, lng = v.lng;
+
+        // If company doesn't have stored coords, try geocoding via backend
+        if (!lat || !lng) {
+          const result = await geocodeViaBackend(v.entity_id || v.id);
+          if (result) { lat = result.lat; lng = result.lng; }
+        }
+
+        // Final fallback: use Charlotte center so route still builds
+        if (!lat || !lng) { lat = 35.2271; lng = -80.8431; }
+
+        geocoded.push({
+          id: v.id,
+          name: v.entity_name,
+          address: v.address || '',
+          city: v.city || 'Charlotte',
+          phone: v.direct_line || '',
+          contact: v.contact_name || '',
+          notes: v.notes || '',
+          workingNotes: v.working_notes || '',
+          scheduledDate: v.scheduled_date || '',
+          stopMins: stopTimes[v.id] || 20,
+          lat, lng,
+          geoOk: !!(lat && lng),
+          visitId: v.id,
+          companyId: v.entity_id || v.id,
+        });
       }
+
       setPlanStep('Calculating best route…');
-      await new Promise(r=>setTimeout(r,150));
-      // Geocode custom end destination if set
+      await new Promise(r=>setTimeout(r,100));
+
       let endGeoLocal = null;
       if (endMode === 'custom' && endAddr.trim()) {
         setPlanStep('Locating end destination…');
-        endGeoLocal = await geocode(endAddr.trim() + ', NC');
-        setEndGeo(endGeoLocal);
+        endGeoLocal = await geocodeAddress(endAddr.trim());
       }
-      const ordered = autoOpt ? optimize(startGeo, geocoded, endGeoLocal) : geocoded.map((s,i)=>({...s,driveMiles:i===0?dist(startGeo,s):dist(geocoded[i-1],s)}));
+
+      const ordered = autoOpt
+        ? optimize(startGeo, geocoded, endGeoLocal)
+        : geocoded.map((s,i)=>({...s, driveMiles: i===0 ? dist(startGeo,s) : dist(geocoded[i-1],s)}));
+
       const timeStr = timeMode==='now' ? nowTimeStr() : startTime;
       const [h,m] = timeStr.split(':').map(Number);
       let clock=new Date(); clock.setHours(h,m,0,0);
-      const stops = ordered.map((stop,i) => {
-        const dm=driveMins(stop.driveMiles||0);
-        clock=addMins(clock,dm);
-        const arriveTime=fmtTime(clock);
-        clock=addMins(clock,stop.stopMins);
-        const leaveTime=fmtTime(clock);
-        return {...stop,driveMinutes:dm,arriveTime,leaveTime,stopNum:i+1};
+
+      const stops = ordered.map((stop) => {
+        const dm = driveMins(stop.driveMiles||0);
+        clock = addMins(clock, dm);
+        const arriveTime = fmtTime(clock);
+        clock = addMins(clock, stop.stopMins);
+        const leaveTime = fmtTime(clock);
+        return {...stop, driveMinutes:dm, arriveTime, leaveTime};
       });
-      let retMiles=0,retMins=0,retArrival='',retAddr='';
+
       const returnDest = (endMode==='custom' && endGeoLocal) ? endGeoLocal : startGeo;
       const shouldReturn = endMode === 'home' || (endMode==='custom' && endAddr.trim());
+      let retMiles=0, retMins=0, retArrival='', retAddr='';
+
       if (shouldReturn && stops.length>0) {
-        const last=stops[stops.length-1];
-        retMiles=dist(last,returnDest); retMins=driveMins(retMiles);
-        retArrival=fmtTime(addMins(clock,retMins));
+        const last = stops[stops.length-1];
+        retMiles = dist(last, returnDest);
+        retMins = driveMins(retMiles);
+        retArrival = fmtTime(addMins(clock, retMins));
         retAddr = endMode==='custom' && endAddr.trim() ? endAddr.trim() : '';
       }
-      const addrDisplay = startMode==='gps' ? 'Current Location' : startAddr;
+
       const initMins = {};
       stops.forEach(s => { initMins[s.id] = s.stopMins; });
       setRouteStopMins(initMins);
       setArriveAt({});
-      setRoute({stops,startAddr:addrDisplay,startGeo,startTime:timeStr,returnHome:shouldReturn,retMiles,retMins,retArrival,retAddr,endMode,endGeo:endGeoLocal,totalDrive:stops.reduce((s,x)=>s+x.driveMinutes,0)+retMins,totalStop:stops.reduce((s,x)=>s+x.stopMins,0),totalMiles:stops.reduce((s,x)=>s+(x.driveMiles||0),0)+retMiles,failed:stops.filter(s=>!s.geoOk).map(s=>s.name)});
+      setRoute({
+        stops,
+        startAddr: startMode==='gps' ? 'Current Location' : startAddr,
+        startGeo,
+        startTime: timeStr,
+        returnHome: shouldReturn,
+        retMiles, retMins, retArrival, retAddr,
+        endMode, endGeo: endGeoLocal,
+        totalDrive: stops.reduce((s,x)=>s+x.driveMinutes,0)+retMins,
+        totalStop:  stops.reduce((s,x)=>s+x.stopMins,0),
+        totalMiles: stops.reduce((s,x)=>s+(x.driveMiles||0),0)+retMiles,
+        failed: stops.filter(s=>!s.geoOk).map(s=>s.name),
+      });
     } catch(err) {
       setError('Route planning failed: '+err.message);
     } finally {
@@ -360,52 +330,7 @@ export default function RoutePlanner({ embedded = false }) {
     }
   }
 
-  // Recalculate timeline given live stop durations and arrive-by constraints
-  // recalcTimeline: forward pass that respects arriveAt constraints.
-  // If a stop has an arriveAt target AND the natural arrival is earlier than the target,
-  // the clock jumps to the target (waiting buffer). If the natural arrival is LATER,
-  // the stop is flagged as late but we still use the natural (can't go back in time).
-  function recalcTimeline(stops, stopMins, startTimeStr, startGeo, returnHome, arriveAtMap) {
-    const [h,m] = startTimeStr.split(':').map(Number);
-    // Use minute-of-day arithmetic to handle AM/PM correctly across long routes
-    let clockMin = h * 60 + m; // total minutes since midnight day 0 (can exceed 1440)
-    const result = stops.map((stop) => {
-      const dm = stop.driveMinutes || driveMins(stop.driveMiles||0);
-      clockMin += dm;
-      const naturalArriveMin = clockMin;
-      // If there's an arriveAt target, jump clock to it if we'd arrive early
-      let displayArriveMin = naturalArriveMin;
-      const targetStr = arriveAtMap?.[stop.id];
-      if (targetStr) {
-        const [th, tm] = targetStr.split(':').map(Number);
-        let targetMin = th * 60 + tm;
-        // Handle next-day targets: if target looks earlier than natural arrive, assume next day
-        if (targetMin < naturalArriveMin - 720) targetMin += 1440;
-        if (targetMin > naturalArriveMin) {
-          clockMin = targetMin; // wait until target time
-          displayArriveMin = targetMin;
-        }
-      }
-      clockMin = displayArriveMin;
-      const arriveTime = fmtMinOfDay(displayArriveMin);
-      const mins = stopMins[stop.id] ?? stop.stopMins ?? 20;
-      clockMin += mins;
-      const leaveTime = fmtMinOfDay(clockMin);
-      return {...stop, stopMins: mins, arriveTime, leaveTime, arriveMinOfDay: displayArriveMin, leaveMinOfDay: clockMin};
-    });
-    let retMiles = 0, retMins = 0, retArrival = '';
-    if (returnHome && result.length > 0) {
-      const last = result[result.length-1];
-      retMiles = dist(last, startGeo); retMins = driveMins(retMiles);
-      retArrival = fmtMinOfDay(clockMin + retMins);
-    }
-    return { stops: result, retMiles, retMins, retArrival,
-      totalDrive: result.reduce((s,x)=>s+x.driveMinutes,0)+retMins,
-      totalStop: result.reduce((s,x)=>s+x.stopMins,0),
-      totalMiles: result.reduce((s,x)=>s+(x.driveMiles||0),0)+retMiles };
-  }
-
-  // Format minutes-of-day (can be >1440 for next-day) as "3:45 PM" or "2:10 AM (+1)"
+  // ── Timeline recalculation ────────────────────────────────────────────────
   function fmtMinOfDay(min) {
     const nextDay = min >= 1440;
     const wrapped = ((min % 1440) + 1440) % 1440;
@@ -416,45 +341,66 @@ export default function RoutePlanner({ embedded = false }) {
     return nextDay ? label + ' (+1)' : label;
   }
 
-  // Convert 'HH:MM' to total minutes from midnight
-  function hhmm2min(str) { if(!str) return null; const [h,m]=str.split(':').map(Number); return h*60+m; }
-  // Convert total minutes from midnight to Date
-  function min2date(m) { const d=new Date(); d.setHours(Math.floor(((m%1440)+1440)%1440/60), Math.floor(((m%1440)+1440)%1440%60),0,0); return d; }
+  function recalcTimeline(stops, stopMins, startTimeStr, startGeo, returnHome, arriveAtMap={}) {
+    const [h,m] = startTimeStr.split(':').map(Number);
+    let clockMin = h * 60 + m;
+    const result = stops.map((stop) => {
+      const dm = stop.driveMinutes || driveMins(stop.driveMiles||0);
+      clockMin += dm;
+      let displayArriveMin = clockMin;
+      const targetStr = arriveAtMap?.[stop.id];
+      if (targetStr) {
+        const [th, tm] = targetStr.split(':').map(Number);
+        let targetMin = th * 60 + tm;
+        if (targetMin < clockMin - 720) targetMin += 1440;
+        if (targetMin > clockMin) { clockMin = targetMin; displayArriveMin = targetMin; }
+      }
+      clockMin = displayArriveMin;
+      const arriveTime = fmtMinOfDay(displayArriveMin);
+      const mins = stopMins[stop.id] ?? stop.stopMins ?? 20;
+      clockMin += mins;
+      const leaveTime = fmtMinOfDay(clockMin);
+      return {...stop, stopMins: mins, arriveTime, leaveTime, arriveMinOfDay: displayArriveMin, leaveMinOfDay: clockMin};
+    });
+    let retMiles=0, retMins=0, retArrival='';
+    if (returnHome && result.length > 0) {
+      const last = result[result.length-1];
+      retMiles = dist(last, startGeo); retMins = driveMins(retMiles);
+      retArrival = fmtMinOfDay(clockMin + retMins);
+    }
+    return {
+      stops: result, retMiles, retMins, retArrival,
+      totalDrive: result.reduce((s,x)=>s+x.driveMinutes,0)+retMins,
+      totalStop:  result.reduce((s,x)=>s+x.stopMins,0),
+      totalMiles: result.reduce((s,x)=>s+(x.driveMiles||0),0)+retMiles,
+    };
+  }
 
-  // computeArriveAtInfo: given a stop's arrive-at target and the RECALCULATED live stop data,
-  // work out buffer, required departure, leave-in countdown.
   function computeArriveAtInfo(stopIdx, targetStr, liveStops, stopMins, startTimeStr, timeModeArg) {
     if (!targetStr) return null;
     const [th, tm] = targetStr.split(':').map(Number);
     const prevStop = stopIdx > 0 ? liveStops[stopIdx - 1] : null;
+    const hhmm2min = s => { if(!s) return null; const [h,m]=s.split(':').map(Number); return h*60+m; };
     const prevLeaveMin = prevStop ? prevStop.leaveMinOfDay : hhmm2min(startTimeStr);
-    const driveToThis = liveStops[stopIdx].driveMinutes || driveMins(liveStops[stopIdx].driveMiles || 0);
+    const driveToThis = liveStops[stopIdx].driveMinutes || driveMins(liveStops[stopIdx].driveMiles||0);
     const earliestArriveMin = prevLeaveMin + driveToThis;
     let targetMin = th * 60 + tm;
-    // Handle next-day: if target < earliest - 720, assume next day
     if (targetMin < earliestArriveMin - 720) targetMin += 1440;
-    const bufferMin = targetMin - earliestArriveMin; // positive = we have spare time before target
-    // Required home departure: walk backwards from target
+    const bufferMin = targetMin - earliestArriveMin;
     let needed = targetMin;
-    for (let j = stopIdx; j >= 0; j--) {
+    for (let j=stopIdx; j>=0; j--) {
       needed -= (liveStops[j].driveMinutes || driveMins(liveStops[j].driveMiles||0));
       if (j > 0) needed -= (stopMins[liveStops[j-1].id] ?? liveStops[j-1].stopMins ?? 20);
     }
-    const departMin = hhmm2min(startTimeStr);
-    const overallBufferMin = needed - departMin; // vs planned departure
     const now = new Date(); const nowMin = now.getHours()*60+now.getMinutes();
     const leaveInMin = timeModeArg === 'now' ? needed - nowMin : null;
-    // mustLeaveByMin = time you must leave the PREVIOUS point (home or last stop) to arrive by target
     const mustLeaveByMin = targetMin - driveToThis;
     const prevName = prevStop ? prevStop.name : 'home';
-    return { requiredDepartMin: needed, bufferMin, overallBufferMin, leaveInMin, targetMin,
-             earliestArriveMin, mustLeaveByMin, prevName, driveToThis };
+    return { bufferMin, leaveInMin, targetMin, earliestArriveMin, mustLeaveByMin, prevName, driveToThis };
   }
 
-
-
   function getNavUrl(stop) {
-    const dest = encodeURIComponent(`${stop.address}, ${stop.city}, NC`);
+    const dest = encodeURIComponent(`${stop.address}, ${stop.city||'Charlotte'}, NC`);
     if (myGps) return `https://www.google.com/maps/dir/${myGps.lat},${myGps.lng}/${dest}`;
     return `https://www.google.com/maps/dir/current+location/${dest}`;
   }
@@ -462,109 +408,46 @@ export default function RoutePlanner({ embedded = false }) {
   function printRoute() {
     const recalc = recalcTimeline(route.stops, routeStopMins, route.startTime, route.startGeo, route.returnHome, arriveAt);
     const today = new Date().toLocaleDateString('en-US', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
-
+    const esc = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     const stopRows = recalc.stops.map((stop, i) => {
-      const prevLabel = i === 0 ? (route.startAddr || 'Start') : recalc.stops[i-1].name;
-      const driveSeg = (stop.driveMiles||0).toFixed(1) + ' mi · ' + fmt(stop.driveMinutes);
-      const esc = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-      const notesText = esc(stop.notes);
-      const workingText = esc(stop.workingNotes);
+      const prevLabel = i===0 ? (route.startAddr||'Start') : recalc.stops[i-1].name;
       return (
         '<div class="stop-block">' +
-          '<div class="drive-seg">🚗 ' + driveSeg + ' from ' + esc(prevLabel) + '</div>' +
+          '<div class="drive-seg">🚗 ' + (stop.driveMiles||0).toFixed(1) + ' mi · ' + fmt(stop.driveMinutes) + ' from ' + esc(prevLabel) + '</div>' +
           '<div class="stop-header">' +
             '<div class="stop-num">' + (i+1) + '</div>' +
-            '<div class="stop-info">' +
-              '<div class="stop-name">' + esc(stop.name) + '</div>' +
-              '<div class="stop-addr">' + esc(stop.address) + (stop.city ? ', ' + esc(stop.city) : '') + ', NC</div>' +
-            '</div>' +
-            '<div class="stop-times">' +
-              '<div class="arrive">▶ ' + stop.arriveTime + '</div>' +
-              '<div class="leave">◀ ' + stop.leaveTime + '</div>' +
-            '</div>' +
+            '<div class="stop-info"><div class="stop-name">' + esc(stop.name) + '</div>' +
+            '<div class="stop-addr">' + esc(stop.address) + (stop.city ? ', '+esc(stop.city) : '') + '</div></div>' +
+            '<div class="stop-times"><div class="arrive">▶ ' + stop.arriveTime + '</div><div class="leave">◀ ' + stop.leaveTime + '</div></div>' +
           '</div>' +
           '<div class="stop-meta">' +
-            '<span class="meta-chip">⏱ ' + stop.stopMins + 'm planned</span>' +
+            '<span class="meta-chip">⏱ ' + stop.stopMins + 'm</span>' +
             (stop.contact ? '<span class="meta-chip">👤 ' + esc(stop.contact) + '</span>' : '') +
             (stop.phone   ? '<span class="meta-chip">📞 ' + esc(stop.phone)   + '</span>' : '') +
           '</div>' +
-          (notesText  ? '<div class="stop-notes"><span class="notes-label">Previous notes: </span>' + notesText + '</div>' : '') +
-          (workingText? '<div class="stop-notes working"><span class="notes-label">Working notes: </span>' + workingText + '</div>' : '') +
-          '<div class="log-line">' +
-            '<span class="log-label">Outcome:</span><span class="log-blank"></span>&emsp;' +
-            '<span class="log-label">Spoke with:</span><span class="log-blank"></span>&emsp;' +
-            '<span class="log-label">Next:</span><span class="log-blank short"></span>' +
-          '</div>' +
+          (stop.notes ? '<div class="stop-notes">' + esc(stop.notes) + '</div>' : '') +
+          '<div class="log-line"><span class="log-label">Outcome:</span><span class="log-blank"></span>&emsp;<span class="log-label">Spoke with:</span><span class="log-blank"></span>&emsp;<span class="log-label">Next:</span><span class="log-blank short"></span></div>' +
         '</div>'
       );
     }).join('');
-
-    const returnRow = route.returnHome ? (
-      '<div class="return-block">' +
-        '<span>🏠 Return to ' + (route.retAddr || route.startAddr).replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</span>' +
-        '<span>' + recalc.retMiles.toFixed(1) + ' mi · ' + fmt(recalc.retMins) + ' · arrive ' + recalc.retArrival + '</span>' +
-      '</div>'
-    ) : '';
-
     const [dh,dm] = route.startTime.split(':').map(Number);
     const depDate = new Date(); depDate.setHours(dh,dm,0,0);
-    const depStr = depDate.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true});
-
     const win = window.open('', '_blank', 'width=860,height=960');
-    win.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>Route Sheet</title><style>' +
-      '* { box-sizing:border-box; margin:0; padding:0; }' +
-      'body { font-family:-apple-system,Arial,sans-serif; font-size:12px; color:#1e293b; padding:24px; background:white; }' +
-      '.page-header { display:flex; justify-content:space-between; align-items:flex-start; border-bottom:2.5px solid #1e3a5f; padding-bottom:12px; margin-bottom:14px; }' +
-      '.logo { font-size:18px; font-weight:900; color:#1e3a5f; }' +
-      '.logo span { color:#f59e0b; }' +
-      '.route-title { font-size:13px; font-weight:800; color:#1e3a5f; text-align:right; }' +
-      '.route-meta { font-size:11px; color:#64748b; margin-top:2px; text-align:right; }' +
-      '.summary-bar { display:flex; gap:0; border:1px solid #e2e8f0; border-radius:8px; overflow:hidden; margin-bottom:14px; }' +
-      '.summary-item { flex:1; text-align:center; padding:9px 4px; border-right:1px solid #e2e8f0; }' +
-      '.summary-item:last-child { border-right:none; }' +
-      '.summary-val { font-size:17px; font-weight:900; color:#1e3a5f; }' +
-      '.summary-lbl { font-size:9px; color:#94a3b8; text-transform:uppercase; letter-spacing:.06em; margin-top:1px; }' +
-      '.drive-seg { padding:3px 8px 3px 38px; font-size:10px; color:#94a3b8; background:#f8fafc; border-top:1px solid #f1f5f9; }' +
-      '.stop-block { border:1.5px solid #e2e8f0; border-radius:8px; margin-bottom:10px; overflow:hidden; page-break-inside:avoid; }' +
-      '.stop-header { display:flex; gap:10px; align-items:flex-start; padding:10px 12px 6px; }' +
-      '.stop-num { width:26px; height:26px; border-radius:50%; background:#f59e0b; color:#1e293b; font-weight:900; font-size:13px; display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-top:1px; }' +
-      '.stop-info { flex:1; }' +
-      '.stop-name { font-size:14px; font-weight:800; color:#1e293b; }' +
-      '.stop-addr { font-size:11px; color:#64748b; margin-top:1px; }' +
-      '.stop-times { text-align:right; flex-shrink:0; }' +
-      '.arrive { font-weight:800; color:#15803d; font-size:12px; }' +
-      '.leave { color:#dc2626; font-size:11px; margin-top:1px; }' +
-      '.stop-meta { display:flex; flex-wrap:wrap; gap:5px; padding:0 12px 8px; }' +
-      '.meta-chip { background:#f1f5f9; border-radius:20px; padding:2px 9px; font-size:10px; color:#475569; }' +
-      '.stop-notes { font-size:11px; color:#475569; background:#fef9ec; border-left:3px solid #f59e0b; padding:5px 9px; margin:0 12px 8px; border-radius:0 5px 5px 0; }' +
-      '.stop-notes.working { background:#eff6ff; border-left-color:#3b82f6; }' +
-      '.notes-label { font-weight:700; color:#92400e; }' +
-      '.stop-notes.working .notes-label { color:#1d4ed8; }' +
-      '.log-line { display:flex; align-items:center; padding:7px 12px 9px; border-top:1px dashed #e2e8f0; font-size:11px; gap:4px; }' +
-      '.log-blank { display:inline-block; border-bottom:1px solid #94a3b8; min-width:100px; height:15px; margin-left:4px; flex:1; }' +
-      '.log-blank.short { flex:none; min-width:60px; }' +
-      '.log-label { font-weight:600; color:#64748b; white-space:nowrap; }' +
-      '.return-block { display:flex; justify-content:space-between; background:#f0fdf4; border:1.5px solid #bbf7d0; border-radius:7px; padding:9px 14px; font-size:12px; font-weight:700; color:#15803d; }' +
-      '.print-btn { display:block; margin:0 auto 18px; padding:8px 26px; background:#1e3a5f; color:white; border:none; border-radius:6px; font-size:13px; font-weight:700; cursor:pointer; }' +
-      '@media print { .no-print { display:none !important; } .stop-block { break-inside:avoid; } }' +
-    '</style></head><body>' +
-    '<button class="print-btn no-print" onclick="window.print()">🖨️ Print / Save as PDF</button>' +
-    '<div class="page-header">' +
-      '<div><div class="logo">🦅 Super<span>Eagle</span> Fleet CRM</div><div style="font-size:11px;color:#94a3b8;margin-top:3px;">' + today + '</div></div>' +
-      '<div><div class="route-title">📍 Route Sheet</div><div class="route-meta">Start: ' + (route.startAddr||'').replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</div><div class="route-meta">Depart: ' + depStr + '</div></div>' +
-    '</div>' +
-    '<div class="summary-bar">' +
-      '<div class="summary-item"><div class="summary-val">' + recalc.stops.length + '</div><div class="summary-lbl">📍 Stops</div></div>' +
-      '<div class="summary-item"><div class="summary-val">' + recalc.totalMiles.toFixed(1) + '</div><div class="summary-lbl">📏 Miles</div></div>' +
-      '<div class="summary-item"><div class="summary-val">' + fmt(recalc.totalDrive) + '</div><div class="summary-lbl">🚗 Drive</div></div>' +
-      '<div class="summary-item"><div class="summary-val">' + fmt(recalc.totalStop) + '</div><div class="summary-lbl">🤝 Stops</div></div>' +
-      '<div class="summary-item"><div class="summary-val">' + fmt(recalc.totalDrive+recalc.totalStop) + '</div><div class="summary-lbl">⏱ Total</div></div>' +
-    '</div>' +
-    stopRows + returnRow +
-    '</body></html>');
+    win.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>Route Sheet</title><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,Arial,sans-serif;font-size:12px;color:#1e293b;padding:24px;background:white}.page-header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2.5px solid #1e3a5f;padding-bottom:12px;margin-bottom:14px}.logo{font-size:18px;font-weight:900;color:#1e3a5f}.logo span{color:#f59e0b}.route-title{font-size:13px;font-weight:800;color:#1e3a5f;text-align:right}.route-meta{font-size:11px;color:#64748b;margin-top:2px;text-align:right}.summary-bar{display:flex;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;margin-bottom:14px}.summary-item{flex:1;text-align:center;padding:9px 4px;border-right:1px solid #e2e8f0}.summary-item:last-child{border-right:none}.summary-val{font-size:17px;font-weight:900;color:#1e3a5f}.summary-lbl{font-size:9px;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;margin-top:1px}.drive-seg{padding:3px 8px 3px 38px;font-size:10px;color:#94a3b8;background:#f8fafc;border-top:1px solid #f1f5f9}.stop-block{border:1.5px solid #e2e8f0;border-radius:8px;margin-bottom:10px;overflow:hidden;page-break-inside:avoid}.stop-header{display:flex;gap:10px;align-items:flex-start;padding:10px 12px 6px}.stop-num{width:26px;height:26px;border-radius:50%;background:#f59e0b;color:#1e293b;font-weight:900;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0}.stop-info{flex:1}.stop-name{font-size:14px;font-weight:800;color:#1e293b}.stop-addr{font-size:11px;color:#64748b;margin-top:1px}.stop-times{text-align:right;flex-shrink:0}.arrive{font-weight:800;color:#15803d;font-size:12px}.leave{color:#dc2626;font-size:11px;margin-top:1px}.stop-meta{display:flex;flex-wrap:wrap;gap:5px;padding:0 12px 8px}.meta-chip{background:#f1f5f9;border-radius:20px;padding:2px 9px;font-size:10px;color:#475569}.stop-notes{font-size:11px;color:#475569;background:#fef9ec;border-left:3px solid #f59e0b;padding:5px 9px;margin:0 12px 8px;border-radius:0 5px 5px 0}.log-line{display:flex;align-items:center;padding:7px 12px 9px;border-top:1px dashed #e2e8f0;font-size:11px;gap:4px}.log-blank{display:inline-block;border-bottom:1px solid #94a3b8;min-width:100px;height:15px;margin-left:4px;flex:1}.log-blank.short{flex:none;min-width:60px}.log-label{font-weight:600;color:#64748b;white-space:nowrap}.return-block{display:flex;justify-content:space-between;background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:7px;padding:9px 14px;font-size:12px;font-weight:700;color:#15803d}.print-btn{display:block;margin:0 auto 18px;padding:8px 26px;background:#1e3a5f;color:white;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer}@media print{.no-print{display:none!important}.stop-block{break-inside:avoid}}</style></head><body>' +
+      '<button class="print-btn no-print" onclick="window.print()">🖨️ Print / Save as PDF</button>' +
+      '<div class="page-header"><div><div class="logo">🦅 Super<span>Eagle</span> Fleet CRM</div><div style="font-size:11px;color:#94a3b8;margin-top:3px;">' + today + '</div></div>' +
+      '<div><div class="route-title">📍 Route Sheet</div><div class="route-meta">Start: ' + esc(route.startAddr||'') + '</div><div class="route-meta">Depart: ' + fmtTime(depDate) + '</div></div></div>' +
+      '<div class="summary-bar">' +
+        '<div class="summary-item"><div class="summary-val">' + recalc.stops.length + '</div><div class="summary-lbl">📍 Stops</div></div>' +
+        '<div class="summary-item"><div class="summary-val">' + recalc.totalMiles.toFixed(1) + '</div><div class="summary-lbl">📏 Miles</div></div>' +
+        '<div class="summary-item"><div class="summary-val">' + fmt(recalc.totalDrive) + '</div><div class="summary-lbl">🚗 Drive</div></div>' +
+        '<div class="summary-item"><div class="summary-val">' + fmt(recalc.totalStop) + '</div><div class="summary-lbl">🤝 Stops</div></div>' +
+        '<div class="summary-item"><div class="summary-val">' + fmt(recalc.totalDrive+recalc.totalStop) + '</div><div class="summary-lbl">⏱ Total</div></div>' +
+      '</div>' + stopRows +
+      (route.returnHome ? '<div class="return-block"><span>🏠 Return to ' + esc(route.retAddr||route.startAddr) + '</span><span>' + recalc.retMiles.toFixed(1) + ' mi · ' + fmt(recalc.retMins) + ' · arrive ' + recalc.retArrival + '</span></div>' : '') +
+      '</body></html>');
     win.document.close();
   }
-
 
   async function addNearbyToRoute(company) {
     try {
@@ -572,77 +455,40 @@ export default function RoutePlanner({ embedded = false }) {
       showToast(`${company.name} added to Visit Queue`);
       const data = await api.visitsAll();
       setVisits(data);
-      const t = {...stopTimes};
-      const o = [...order];
-      data.forEach(v => { if (!t[v.id]) { t[v.id] = 20; } if (!o.includes(v.id)) { o.push(v.id); } });
-      setStopTimes(t);
-      setOrder(o);
+      const t = {...stopTimes}, o = [...order];
+      data.forEach(v => { if (!t[v.id]) t[v.id]=20; if (!o.includes(v.id)) o.push(v.id); });
+      setStopTimes(t); setOrder(o);
       setSelected(prev => new Set([...prev, visit.id]));
-      setTab('planner');
     } catch(e) { showToast(e.message, 'error'); }
   }
 
-  // ── Nearby computed ───────────────────────────────────────────────────────
-  const nearbyFiltered = nearbyMapped.filter(c => {
-    if (!c.geoOk) return false;
-    if (nearbyFilter !== 'all' && c.priority !== nearbyFilter) return false;
-    if (nearbyCenterPos && dist(nearbyCenterPos, c) > nearbyRadius) return false;
-    return true;
-  }).sort((a,b) => {
-    const o={hot:0,warm:1,good:2,none:3};
-    return o[a.priority]!==o[b.priority]?o[a.priority]-o[b.priority]:dist(nearbyCenterPos,a)-dist(nearbyCenterPos,b);
-  });
-
-  const nearbyCounts = {
-    all: nearbyMapped.filter(c=>c.geoOk).length,
-    hot: nearbyMapped.filter(c=>c.geoOk&&c.priority==='hot').length,
-    warm:nearbyMapped.filter(c=>c.geoOk&&c.priority==='warm').length,
-    good:nearbyMapped.filter(c=>c.geoOk&&c.priority==='good').length,
-    none:nearbyMapped.filter(c=>c.geoOk&&c.priority==='none').length,
-  };
-
-  function getNearbyMapUrl() {
-    if (nearbyMapCompany?.lat) {
-      const addr = encodeURIComponent(`${nearbyMapCompany.address}, ${nearbyMapCompany.city||''}, NC`);
-      return `https://www.google.com/maps/embed/v1/place?key=${KEY}&q=${addr}&zoom=15`;
-    }
-    if (nearbyCenterPos) return `https://www.google.com/maps/embed/v1/search?key=${KEY}&q=fleet+services&center=${nearbyCenterPos.lat},${nearbyCenterPos.lng}&zoom=12`;
-    return `https://www.google.com/maps/embed/v1/place?key=${KEY}&q=Charlotte,NC&zoom=12`;
-  }
-
   const today = new Date().toISOString().split('T')[0];
+
   if (loading) return <div className="loading-wrap"><div className="spinner"/></div>;
 
-  // ── NORMAL MODE ─────────────────────────────────────────────────────────────
   return (
     <div style={{display:'flex',flexDirection:'column',height:'calc(100vh - 54px)',minHeight:0,overflow:'hidden'}}>
 
-      {/* ══════════════════════════════════════════════════════════════════════
-          TOP BAR — page title + route settings in one horizontal strip
-      ══════════════════════════════════════════════════════════════════════ */}
+      {/* TOP BAR */}
       <div style={{flexShrink:0,borderBottom:'1px solid var(--gray-200)',background:'white'}}>
-
-        {/* Title row */}
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 20px 0',gap:12}}>
           <div>
             <div className="page-title" style={{fontSize:16}}>🗺️ Route Planner</div>
             <ForecastStrip forecast={forecast} queueKey="visits" />
             {route && (
               <div className="page-subtitle">
-                {`${route.stops.length} stops · ${route.totalMiles.toFixed(1)} mi · ${fmt(route.totalDrive+route.totalStop)} total`}
+                {route.stops.length} stops · {route.totalMiles.toFixed(1)} mi · {fmt(route.totalDrive+route.totalStop)} total
               </div>
             )}
           </div>
           <div style={{display:'flex',gap:8}}>
             {route && <button className="btn btn-ghost btn-sm" onClick={()=>setRoute(null)}>← Edit Stops</button>}
-            {route && <button className="btn btn-ghost btn-sm" onClick={printRoute} title="Print route sheet">🖨️ Print</button>}
+            {route && <button className="btn btn-ghost btn-sm" onClick={printRoute}>🖨️ Print</button>}
           </div>
         </div>
 
-        {/* Settings strip */}
         <div style={{display:'flex',alignItems:'center',gap:16,padding:'10px 20px 12px',flexWrap:'wrap'}}>
-
-          {/* Starting from */}
+          {/* Start address */}
           <div style={{display:'flex',alignItems:'center',gap:6}}>
             <span style={{fontSize:11,fontWeight:700,color:'var(--gray-500)',whiteSpace:'nowrap'}}>FROM</span>
             <div style={{display:'flex',gap:3}}>
@@ -667,7 +513,7 @@ export default function RoutePlanner({ embedded = false }) {
 
           <div style={{width:1,height:24,background:'var(--gray-200)',flexShrink:0}}/>
 
-          {/* Departure time */}
+          {/* Depart time */}
           <div style={{display:'flex',alignItems:'center',gap:6}}>
             <span style={{fontSize:11,fontWeight:700,color:'var(--gray-500)',whiteSpace:'nowrap'}}>DEPART</span>
             <div style={{display:'flex',gap:3}}>
@@ -686,37 +532,28 @@ export default function RoutePlanner({ embedded = false }) {
 
           <div style={{width:1,height:24,background:'var(--gray-200)',flexShrink:0}}/>
 
-          {/* Checkboxes */}
+          {/* Options */}
           <div style={{display:'flex',gap:14,alignItems:'center',flexWrap:'wrap'}}>
             <label style={{display:'flex',alignItems:'center',gap:5,cursor:'pointer',fontSize:12,color:'var(--gray-700)',whiteSpace:'nowrap'}}>
               <input type="checkbox" checked={autoOpt} onChange={e=>setAutoOpt(e.target.checked)} style={{accentColor:'var(--gold-500)'}}/>
               Auto-optimize
             </label>
-            {/* End Destination toggle */}
             <div style={{display:'flex',alignItems:'center',gap:6}}>
               <span style={{fontSize:12,color:'var(--gray-500)',whiteSpace:'nowrap'}}>End at:</span>
               {[{k:'none',l:'✕ None'},{k:'home',l:'🏠 Shop'},{k:'custom',l:'📌 Custom'}].map(o=>(
                 <button key={o.k} onClick={()=>{ setEndMode(o.k); if(o.k!=='custom') setEndAddr(''); }}
                   className={'btn btn-sm '+(endMode===o.k?'btn-navy':'btn-ghost')}
-                  style={{fontSize:11,padding:'3px 9px'}}>
-                  {o.l}
-                </button>
+                  style={{fontSize:11,padding:'3px 9px'}}>{o.l}</button>
               ))}
             </div>
             {endMode==='custom' && (
               <div style={{width:260}}>
-                <AddressAutocomplete
-                  value={endAddr}
-                  onChange={setEndAddr}
-                  onSelect={({display})=>setEndAddr(display)}
-                  placeholder="Custom end address…"
-                  inputClass="form-input"
-                />
+                <AddressAutocomplete value={endAddr} onChange={setEndAddr}
+                  onSelect={({display})=>setEndAddr(display)} placeholder="Custom end address…" inputClass="form-input"/>
               </div>
             )}
           </div>
 
-          {/* Plan button */}
           {!route && (
             <button className="btn btn-primary" style={{marginLeft:'auto',whiteSpace:'nowrap'}}
               onClick={buildRoute} disabled={planning||selected.size===0}>
@@ -733,29 +570,26 @@ export default function RoutePlanner({ embedded = false }) {
 
       {error && <div style={{padding:'8px 20px',background:'#fef2f2',borderBottom:'1px solid #fca5a5',color:'#dc2626',fontSize:13,flexShrink:0}}>❌ {error}</div>}
 
-      {/* ══════════════════════════════════════════════════════════════════════
-          BODY — Left stops panel | Big map (with floating nearby filter)
-      ══════════════════════════════════════════════════════════════════════ */}
+      {/* BODY */}
       <div style={{flex:1,minHeight:0,display:'grid',gridTemplateColumns:'300px 1fr',overflow:'hidden'}}>
 
-        {/* ═══ LEFT: Stop list OR timeline ══════════════════════════════════ */}
+        {/* LEFT: Stop list OR timeline */}
         <div style={{display:'flex',flexDirection:'column',borderRight:'1px solid var(--gray-200)',overflow:'hidden'}}>
 
-          {/* ── STOP SELECTOR ── */}
+          {/* STOP SELECTOR */}
           {!route && (
             <>
-             {/* Filter bar */}
               <div style={{padding:'10px 12px',borderBottom:'1px solid var(--gray-200)',flexShrink:0}}>
                 <QueueFilter value={stopFilter} onChange={setStopFilter} customFrom={customFrom} customTo={customTo} onCustomFrom={setCustomFrom} onCustomTo={setCustomTo} />
               </div>
               <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 14px',borderBottom:'1px solid var(--gray-200)',flexShrink:0}}>
                 {(() => {
-                  const todayStr2 = new Date().toISOString().split('T')[0];
-                  const weekEnd2 = new Date(); weekEnd2.setDate(weekEnd2.getDate()+7);
-                  const weekEndStr2 = weekEnd2.toISOString().split('T')[0];
+                  const todayStr = new Date().toISOString().split('T')[0];
+                  const weekEnd = new Date(); weekEnd.setDate(weekEnd.getDate()+7);
+                  const weekEndStr = weekEnd.toISOString().split('T')[0];
                   const filteredVisits = visits.filter(v => {
-                    if (stopFilter==='today')  return v.scheduled_date <= todayStr2;
-                    if (stopFilter==='week')   return v.scheduled_date <= weekEndStr2;
+                    if (stopFilter==='today')  return v.scheduled_date <= todayStr;
+                    if (stopFilter==='week')   return v.scheduled_date <= weekEndStr;
                     if (stopFilter==='month')  { const me=new Date(new Date().getFullYear(),new Date().getMonth()+1,0).toISOString().split('T')[0]; return v.scheduled_date <= me; }
                     if (stopFilter==='custom') return (!customFrom||v.scheduled_date>=customFrom)&&(!customTo||v.scheduled_date<=customTo);
                     return true;
@@ -775,6 +609,7 @@ export default function RoutePlanner({ embedded = false }) {
                   </>;
                 })()}
               </div>
+
               {visits.length===0 ? (
                 <div className="empty-state" style={{flex:1}}>
                   <div className="icon">📭</div>
@@ -784,13 +619,13 @@ export default function RoutePlanner({ embedded = false }) {
               ) : (
                 <div style={{overflowY:'auto',flex:1}}>
                   {(() => {
-                    const todayStr3 = new Date().toISOString().split('T')[0];
-                    const weekEnd3 = new Date(); weekEnd3.setDate(weekEnd3.getDate()+7);
-                    const weekEndStr3 = weekEnd3.toISOString().split('T')[0];
+                    const todayStr = new Date().toISOString().split('T')[0];
+                    const weekEnd = new Date(); weekEnd.setDate(weekEnd.getDate()+7);
+                    const weekEndStr = weekEnd.toISOString().split('T')[0];
                     const filteredIds = order.filter(id => {
                       const v = visits.find(v=>v.id===id); if(!v) return false;
-                      if (stopFilter==='today')  return v.scheduled_date <= todayStr3;
-                      if (stopFilter==='week')   return v.scheduled_date <= weekEndStr3;
+                      if (stopFilter==='today')  return v.scheduled_date <= todayStr;
+                      if (stopFilter==='week')   return v.scheduled_date <= weekEndStr;
                       if (stopFilter==='month')  { const me=new Date(new Date().getFullYear(),new Date().getMonth()+1,0).toISOString().split('T')[0]; return v.scheduled_date <= me; }
                       if (stopFilter==='custom') return (!customFrom||v.scheduled_date>=customFrom)&&(!customTo||v.scheduled_date<=customTo);
                       return true;
@@ -801,86 +636,74 @@ export default function RoutePlanner({ embedded = false }) {
                         <div style={{marginTop:8}}><button className="btn btn-ghost btn-sm" onClick={()=>setStopFilter('all')}>Show all</button></div>
                       </div>
                     );
-                    return filteredIds.map((id,idx) => {
-                    const v=visits.find(v=>v.id===id); if(!v) return null;
-                    const isOver=v.scheduled_date<todayStr3, isToday=v.scheduled_date===todayStr3, isSel=selected.has(v.id);
-                    return (
-                      <div key={v.id} onClick={()=>toggleStop(v.id)}
-                        style={{display:'flex',gap:10,padding:'10px 14px',borderBottom:'1px solid var(--gray-100)',cursor:'pointer',
-                          background:isSel?'#fffbeb':'white',opacity:isSel?1:.55,
-                          borderLeft:`3px solid ${isSel?'var(--gold-500)':'transparent'}`}}>
-                        <input type="checkbox" checked={isSel} onChange={()=>toggleStop(v.id)}
-                          onClick={e=>e.stopPropagation()}
-                          style={{width:14,height:14,accentColor:'var(--gold-500)',cursor:'pointer',flexShrink:0,marginTop:3}}/>
-                        <div style={{flex:1,minWidth:0}}>
-                          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
-                            <div
-                              style={{fontWeight:600,fontSize:13,color:'var(--navy-700)',cursor:'pointer',textDecoration:'underline',textDecorationStyle:'dotted',textUnderlineOffset:3,display:'inline'}}
-                              onClick={e=>{ e.stopPropagation(); navigate('/companies?company='+v.entity_id); }}
-                              title="Open company profile"
-                            >{v.entity_name}</div>
-                            <div style={{display:'flex',gap:2,flexShrink:0,marginLeft:6}} onClick={e=>e.stopPropagation()}>
-                              <button onClick={()=>moveUp(id)} disabled={idx===0}
-                                style={{padding:'0 5px',border:'1px solid var(--gray-200)',borderRadius:3,background:'white',cursor:'pointer',fontSize:10,opacity:idx===0?.3:1}}>↑</button>
-                              <button onClick={()=>moveDown(id)} disabled={idx===order.filter(id=>visits.find(v=>v.id===id)).length-1}
-                                style={{padding:'0 5px',border:'1px solid var(--gray-200)',borderRadius:3,background:'white',cursor:'pointer',fontSize:10,opacity:idx===order.filter(id=>visits.find(v=>v.id===id)).length-1?.3:1}}>↓</button>
+                    return filteredIds.map((id, idx) => {
+                      const v = visits.find(v=>v.id===id); if(!v) return null;
+                      const isOver = v.scheduled_date < todayStr;
+                      const isToday = v.scheduled_date === todayStr;
+                      const isSel = selected.has(v.id);
+                      return (
+                        <div key={v.id} onClick={()=>toggleStop(v.id)}
+                          style={{display:'flex',gap:10,padding:'10px 14px',borderBottom:'1px solid var(--gray-100)',cursor:'pointer',
+                            background:isSel?'#fffbeb':'white',opacity:isSel?1:.55,
+                            borderLeft:`3px solid ${isSel?'var(--gold-500)':'transparent'}`}}>
+                          <input type="checkbox" checked={isSel} onChange={()=>toggleStop(v.id)}
+                            onClick={e=>e.stopPropagation()}
+                            style={{width:14,height:14,accentColor:'var(--gold-500)',cursor:'pointer',flexShrink:0,marginTop:3}}/>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+                              <div
+                                style={{fontWeight:600,fontSize:13,color:'var(--navy-700)',cursor:'pointer',textDecoration:'underline',textDecorationStyle:'dotted',textUnderlineOffset:3,display:'inline'}}
+                                onClick={e=>{ e.stopPropagation(); navigate('/companies?company='+v.entity_id); }}
+                              >{v.entity_name}</div>
+                              <div style={{display:'flex',gap:2,flexShrink:0,marginLeft:6}} onClick={e=>e.stopPropagation()}>
+                                <button onClick={()=>moveUp(id)} disabled={idx===0}
+                                  style={{padding:'0 5px',border:'1px solid var(--gray-200)',borderRadius:3,background:'white',cursor:'pointer',fontSize:10,opacity:idx===0?.3:1}}>↑</button>
+                                <button onClick={()=>moveDown(id)} disabled={idx===filteredIds.length-1}
+                                  style={{padding:'0 5px',border:'1px solid var(--gray-200)',borderRadius:3,background:'white',cursor:'pointer',fontSize:10,opacity:idx===filteredIds.length-1?.3:1}}>↓</button>
+                              </div>
                             </div>
-                          </div>
-                          <div style={{fontSize:11,color:v.address?'var(--gray-400)':'#dc2626',marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-                            {v.address?`${v.address}${v.city?', '+v.city:''}`:' ⚠️ No address'}
-                          </div>
-                          <div style={{display:'flex',alignItems:'center',gap:6,marginTop:2}}>
-                            <span style={{fontSize:11,color:'var(--gray-500)'}}>
-                              {v.call_count||0} contacts{(!v.call_count||v.call_count===0)&&<span style={{color:'var(--navy-600)',fontWeight:600}}> · First Time</span>}
-                            </span>
-                            {v.company_status && v.company_status !== 'prospect' && (
-                              <span style={{ fontSize:10, fontWeight:700,
-                                color:v.company_status==='interested'?'#92400e':v.company_status==='customer'?'#166534':'#dc2626',
-                                background:v.company_status==='interested'?'#fef9c3':v.company_status==='customer'?'#f0fdf4':'#fef2f2',
-                                padding:'1px 7px', borderRadius:8 }}>
-                                {v.company_status==='interested'?'⭐ Interested':v.company_status==='customer'?'✅ Customer':'💀 Dead'}
-                              </span>
-                            )}
-                          </div>
-                          <div style={{display:'flex',alignItems:'center',gap:6,marginTop:5}} onClick={e=>e.stopPropagation()}>
-                            {isOver&&<span className="badge badge-overdue">Overdue</span>}
-                            {isToday&&<span className="badge badge-today">Today</span>}
-                            {!isOver&&!isToday&&v.scheduled_date&&<span style={{fontSize:11,color:'var(--gray-500)'}}>Due {fmtDate(v.scheduled_date)}</span>}
-                            <div style={{display:'flex',alignItems:'center',gap:3,marginLeft:'auto'}}>
-                              <button onClick={()=>setStopTimes(p=>({...p,[v.id]:Math.max(5,(stopTimes[v.id]||20)-5)}))}
-                                style={{width:18,height:18,border:'1px solid var(--gray-200)',borderRadius:3,background:'white',cursor:'pointer',fontSize:12,lineHeight:1,padding:0,display:'flex',alignItems:'center',justifyContent:'center'}}>−</button>
-                              <span style={{fontWeight:700,fontSize:12,minWidth:28,textAlign:'center'}}>{stopTimes[v.id]||20}m</span>
-                              <button onClick={()=>setStopTimes(p=>({...p,[v.id]:Math.min(240,(stopTimes[v.id]||20)+5)}))}
-                                style={{width:18,height:18,border:'1px solid var(--gray-200)',borderRadius:3,background:'white',cursor:'pointer',fontSize:12,lineHeight:1,padding:0,display:'flex',alignItems:'center',justifyContent:'center'}}>+</button>
+                            <div style={{fontSize:11,color:v.address?'var(--gray-400)':'#dc2626',marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                              {v.address ? `${v.address}${v.city?', '+v.city:''}` : '⚠️ No address'}
                             </div>
-                          </div>
-                          {/* Direct Log + Cancel without building a route */}
-                          <div style={{display:'flex',gap:4,marginTop:6,alignItems:'center'}} onClick={e=>e.stopPropagation()}>
-                            <RowActions companyStatus={v.company_status || 'prospect'} onStatusChange={async status => { await api.updateCompanyStatus(v.entity_id, status); const d = await api.visitsAll(); setVisits(d); }} onMove={() => setMovingId(v.entity_id)} />
-                            <button className="btn btn-sm btn-primary" style={{flex:1,fontSize:10,padding:'3px 0'}}
-                              onClick={()=>{ setLogForm({ contact_type:'', notes:'', contact_name:'', direct_line:'', next_action:'Call', next_action_date_override:'' }); setLoggingStop(v.id); }}>
-                              ✅ Log Visit
-                            </button>
-                            <button className="btn btn-sm btn-ghost" style={{fontSize:10,padding:'3px 8px',color:'#dc2626',border:'1px solid #fca5a5'}}
-                              onClick={async(e)=>{
-                                e.stopPropagation();
-                                if(!confirm('Cancel this scheduled visit?')) return;
-                                try { await api.cancelVisit(v.id); const d=await api.visitsAll(); setVisits(d); await refreshCounts(); showToast('Visit cancelled'); }
-                                catch(err){ showToast(err.message,'error'); }
-                              }}>
-                              ✕ Cancel
-                            </button>
+                            <div style={{display:'flex',alignItems:'center',gap:6,marginTop:5}} onClick={e=>e.stopPropagation()}>
+                              {isOver  && <span className="badge badge-overdue">Overdue</span>}
+                              {isToday && <span className="badge badge-today">Today</span>}
+                              {!isOver && !isToday && v.scheduled_date && <span style={{fontSize:11,color:'var(--gray-500)'}}>Due {fmtDate(v.scheduled_date)}</span>}
+                              <div style={{display:'flex',alignItems:'center',gap:3,marginLeft:'auto'}}>
+                                <button onClick={()=>setStopTimes(p=>({...p,[v.id]:Math.max(5,(stopTimes[v.id]||20)-5)}))}
+                                  style={{width:18,height:18,border:'1px solid var(--gray-200)',borderRadius:3,background:'white',cursor:'pointer',fontSize:12,lineHeight:1,padding:0,display:'flex',alignItems:'center',justifyContent:'center'}}>−</button>
+                                <span style={{fontWeight:700,fontSize:12,minWidth:28,textAlign:'center'}}>{stopTimes[v.id]||20}m</span>
+                                <button onClick={()=>setStopTimes(p=>({...p,[v.id]:Math.min(240,(stopTimes[v.id]||20)+5)}))}
+                                  style={{width:18,height:18,border:'1px solid var(--gray-200)',borderRadius:3,background:'white',cursor:'pointer',fontSize:12,lineHeight:1,padding:0,display:'flex',alignItems:'center',justifyContent:'center'}}>+</button>
+                              </div>
+                            </div>
+                            <div style={{display:'flex',gap:4,marginTop:6,alignItems:'center'}} onClick={e=>e.stopPropagation()}>
+                              <RowActions
+                                companyStatus={v.company_status || 'prospect'}
+                                onStatusChange={async status => { await api.updateCompanyStatus(v.entity_id, status); const d=await api.visitsAll(); setVisits(d); }}
+                                onMove={() => setMovingId(v.entity_id)}
+                              />
+                              <button className="btn btn-sm btn-primary" style={{flex:1,fontSize:10,padding:'3px 0'}}
+                                onClick={()=>{ setLogForm({contact_type:'',notes:'',contact_name:'',direct_line:'',next_action:'Call'}); setLoggingStop(v.id); }}>
+                                ✅ Log Visit
+                              </button>
+                              <button className="btn btn-sm btn-ghost" style={{fontSize:10,padding:'3px 8px',color:'#dc2626',border:'1px solid #fca5a5'}}
+                                onClick={async e=>{ e.stopPropagation(); if(!confirm('Cancel this scheduled visit?')) return;
+                                  try { await api.cancelVisit(v.id); const d=await api.visitsAll(); setVisits(d); await refreshCounts(); showToast('Visit cancelled'); }
+                                  catch(err){ showToast(err.message,'error'); }
+                                }}>✕ Cancel</button>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    );
-                  }); })()}
+                      );
+                    });
+                  })()}
                 </div>
               )}
             </>
           )}
 
-          {/* ── DAY TIMELINE ── */}
+          {/* DAY TIMELINE */}
           {route && (() => {
             const recalc = recalcTimeline(route.stops, routeStopMins, route.startTime, route.startGeo, route.returnHome, arriveAt);
             const liveStops = recalc.stops;
@@ -889,31 +712,23 @@ export default function RoutePlanner({ embedded = false }) {
             const minsUntil = (dh*60+dm) - nowMin;
             return (
               <div style={{display:'flex',flexDirection:'column',flex:1,minHeight:0}}>
-                {/* Stat strip */}
                 <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',borderBottom:'1px solid var(--gray-200)',flexShrink:0}}>
-                  {[
-                    {icon:'📍',val:liveStops.length,lbl:'Stops'},
-                    {icon:'📏',val:recalc.totalMiles.toFixed(1),lbl:'Miles'},
-                    {icon:'🚗',val:fmt(recalc.totalDrive),lbl:'Drive'},
-                    {icon:'⏱️',val:fmt(recalc.totalDrive+recalc.totalStop),lbl:'Total'},
-                  ].map(s=>(
+                  {[{icon:'📍',val:liveStops.length,lbl:'Stops'},{icon:'📏',val:recalc.totalMiles.toFixed(1),lbl:'Miles'},{icon:'🚗',val:fmt(recalc.totalDrive),lbl:'Drive'},{icon:'⏱️',val:fmt(recalc.totalDrive+recalc.totalStop),lbl:'Total'}].map(s=>(
                     <div key={s.lbl} style={{padding:'8px 0',textAlign:'center',borderRight:'1px solid var(--gray-100)'}}>
                       <div style={{fontSize:14,fontWeight:800}}>{s.val}</div>
                       <div style={{fontSize:10,color:'var(--gray-400)',textTransform:'uppercase',letterSpacing:'.04em'}}>{s.icon} {s.lbl}</div>
                     </div>
                   ))}
                 </div>
-                {/* Depart/arrival info */}
-                <div style={{padding:'6px 12px',borderBottom:'1px solid var(--gray-200)',flexShrink:0,background:'var(--gray-50)',display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                <div style={{padding:'6px 12px',borderBottom:'1px solid var(--gray-200)',flexShrink:0,background:'var(--gray-50)',display:'flex',alignItems:'center',gap:8}}>
                   <span style={{fontSize:11,color:'var(--gray-600)'}}>
                     🕐 <b>{fmtTime((() => { const d=new Date(); d.setHours(dh,dm,0,0); return d; })())}</b> depart
                     {route.returnHome && <> · 🏁 <b>{recalc.retArrival}</b></>}
                   </span>
-                  {minsUntil>0&&<span style={{fontSize:10,padding:'2px 7px',borderRadius:8,background:'#eff6ff',color:'#1e40af',fontWeight:700,marginLeft:'auto'}}>{minsUntil>=60?`${Math.floor(minsUntil/60)}h${minsUntil%60}m`:`${minsUntil}m`} to go</span>}
+                  {minsUntil>0 && <span style={{fontSize:10,padding:'2px 7px',borderRadius:8,background:'#eff6ff',color:'#1e40af',fontWeight:700,marginLeft:'auto'}}>{minsUntil>=60?`${Math.floor(minsUntil/60)}h${minsUntil%60}m`:`${minsUntil}m`} to go</span>}
                 </div>
-                {/* Scrollable timeline */}
                 <div style={{overflowY:'auto',flex:1}}>
-                  {/* Depart */}
+                  {/* Depart row */}
                   <div style={{display:'flex',gap:8,padding:'9px 12px',borderBottom:'1px solid var(--gray-100)',background:'var(--navy-950)'}}>
                     <div style={{width:26,height:26,borderRadius:'50%',background:'var(--gold-500)',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:13}}>🏠</div>
                     <div style={{flex:1}}>
@@ -924,72 +739,38 @@ export default function RoutePlanner({ embedded = false }) {
                       <div style={{fontSize:10,color:'rgba(255,255,255,.35)'}}>{route.startAddr}</div>
                     </div>
                   </div>
-                  {liveStops.map((stop,i) => {
+
+                  {liveStops.map((stop, i) => {
                     const stopMins = routeStopMins[stop.id] ?? stop.stopMins ?? 20;
                     const target = arriveAt[stop.id];
                     const info = target ? computeArriveAtInfo(i, target, liveStops, routeStopMins, route.startTime, timeMode) : null;
-                    const bufferOk = info ? info.bufferMin >= 0 : true; // bufferMin = spare time to hit target
-
-                    // Gap between consecutive arrive-at stops (use cascaded minOfDay values)
-                    let gapMin = null;
-                    if (i > 0 && arriveAt[liveStops[i-1].id] && target && liveStops[i-1].leaveMinOfDay != null) {
-                      const driveToThis = liveStops[i].driveMinutes || driveMins(liveStops[i].driveMiles||0);
-                      const earliestArrive = liveStops[i-1].leaveMinOfDay + driveToThis;
-                      gapMin = (liveStops[i].arriveMinOfDay ?? 0) - earliestArrive;
-                    }
-
+                    const bufferOk = info ? info.bufferMin >= 0 : true;
                     return (
                       <div key={stop.id}>
-                        {/* Drive segment */}
                         <div style={{padding:'2px 12px 2px 46px',background:'#f8fafc',fontSize:10,color:'var(--gray-400)',borderBottom:'1px solid var(--gray-100)'}}>
                           🚗 {(stop.driveMiles||0).toFixed(1)} mi · {fmt(stop.driveMinutes)}
                         </div>
-                        {/* Stop card */}
-                        <div style={{padding:'9px 12px',borderBottom:'1px solid var(--gray-100)',
-                          borderLeft:`3px solid ${target ? bufferOk?'#22c55e':'#ef4444' : 'transparent'}`}}>
+                        <div style={{padding:'9px 12px',borderBottom:'1px solid var(--gray-100)',borderLeft:`3px solid ${target?bufferOk?'#22c55e':'#ef4444':'transparent'}`}}>
                           <div style={{display:'flex',gap:8,alignItems:'flex-start'}}>
-                            {/* Badge + reorder */}
                             <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:2,flexShrink:0}}>
-                              <div style={{width:26,height:26,borderRadius:'50%',background:'var(--gold-500)',color:'var(--navy-950)',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:800,fontSize:11}}>
-                                {i+1}
-                              </div>
-                              <><button disabled={i===0} onClick={()=>setRoute(r=>{ const s=[...r.stops]; [s[i-1],s[i]]=[s[i],s[i-1]]; return {...r,stops:s}; })}
-                                style={{width:20,height:16,border:'1px solid var(--gray-200)',borderRadius:3,background:'white',cursor:'pointer',fontSize:9,opacity:i===0?.25:1,padding:0,lineHeight:1}}>↑</button>
+                              <div style={{width:26,height:26,borderRadius:'50%',background:'var(--gold-500)',color:'var(--navy-950)',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:800,fontSize:11}}>{i+1}</div>
+                              <button disabled={i===0} onClick={()=>setRoute(r=>{ const s=[...r.stops]; [s[i-1],s[i]]=[s[i],s[i-1]]; return {...r,stops:s}; })}
+                                style={{width:20,height:16,border:'1px solid var(--gray-200)',borderRadius:3,background:'white',cursor:'pointer',fontSize:9,opacity:i===0?.25:1,padding:0}}>↑</button>
                               <button disabled={i===liveStops.length-1} onClick={()=>setRoute(r=>{ const s=[...r.stops]; [s[i],s[i+1]]=[s[i+1],s[i]]; return {...r,stops:s}; })}
-                                style={{width:20,height:16,border:'1px solid var(--gray-200)',borderRadius:3,background:'white',cursor:'pointer',fontSize:9,opacity:i===liveStops.length-1?.25:1,padding:0,lineHeight:1}}>↓</button></>
+                                style={{width:20,height:16,border:'1px solid var(--gray-200)',borderRadius:3,background:'white',cursor:'pointer',fontSize:9,opacity:i===liveStops.length-1?.25:1,padding:0}}>↓</button>
                             </div>
-
                             <div style={{flex:1,minWidth:0}}>
-                              {/* Name + time display */}
                               <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:6}}>
                                 <div
                                   style={{fontWeight:700,fontSize:12,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:'var(--navy-700)',cursor:'pointer',textDecoration:'underline',textDecorationStyle:'dotted',textUnderlineOffset:2}}
                                   onClick={e=>{ e.stopPropagation(); navigate('/companies?company='+stop.companyId); }}
-                                  title="Open company profile"
                                 >{stop.name}</div>
                                 <div style={{textAlign:'right',fontSize:10,lineHeight:1.7,flexShrink:0}}>
-                                  {target ? (
-                                    <>
-                                      <div style={{color:'#1d4ed8',fontWeight:800,fontSize:11}}>🎯 {stop.arriveTime}</div>
-                                      <div style={{color:'#dc2626',fontSize:10}}>◀ {stop.leaveTime}</div>
-                                      {info && (info.bufferMin > 0
-                                        ? <div style={{color:'#15803d',fontWeight:600,fontSize:10}}>+{info.bufferMin}m buffer</div>
-                                        : info.bufferMin < 0
-                                          ? <div style={{color:'#dc2626',fontWeight:700,fontSize:10}}>⚠ {Math.abs(info.bufferMin)}m late</div>
-                                          : <div style={{color:'#15803d',fontSize:10}}>✓ On time</div>
-                                      )}
-                                    </>
-                                  ) : (
-                                    <>
-                                      <div style={{color:'#15803d',fontWeight:700}}>▶ {stop.arriveTime}</div>
-                                      <div style={{color:'#dc2626'}}>◀ {stop.leaveTime}</div>
-                                    </>
-                                  )}
+                                  <div style={{color:'#15803d',fontWeight:700}}>▶ {stop.arriveTime}</div>
+                                  <div style={{color:'#dc2626'}}>◀ {stop.leaveTime}</div>
                                 </div>
                               </div>
                               <div style={{fontSize:10,color:'var(--gray-400)',marginTop:1}}>{stop.address}{stop.city?', '+stop.city:''}</div>
-
-                              {/* Controls row: duration + arrive-at — hidden during active route */}
                               <div style={{display:'flex',gap:5,marginTop:6,alignItems:'center',flexWrap:'wrap'}}>
                                 <button onClick={()=>setRouteStopMins(p=>({...p,[stop.id]:Math.max(5,stopMins-5)}))} style={{width:18,height:18,border:'1px solid var(--gray-200)',borderRadius:3,background:'white',cursor:'pointer',fontSize:12,padding:0,display:'flex',alignItems:'center',justifyContent:'center'}}>−</button>
                                 <span style={{fontWeight:700,fontSize:11,minWidth:26,textAlign:'center'}}>{stopMins}m</span>
@@ -998,83 +779,14 @@ export default function RoutePlanner({ embedded = false }) {
                                 <span style={{fontSize:10,color:'var(--gray-500)'}}>arrive at:</span>
                                 <input type="time" value={target||''}
                                   onChange={e=>setArriveAt(p=>({...p,[stop.id]:e.target.value||undefined}))}
-                                  style={{fontSize:10,padding:'1px 4px',
-                                    border:`1.5px solid ${target?bufferOk?'#22c55e':'#ef4444':'var(--gray-200)'}`,
-                                    borderRadius:4,color:target?bufferOk?'#15803d':'#dc2626':'var(--gray-500)',
-                                    background:target?bufferOk?'#f0fdf4':'#fef2f2':'white'}}/>
-                                {target && <button onClick={()=>setArriveAt(p=>{ const n={...p}; delete n[stop.id]; return n; })}
-                                  style={{fontSize:11,color:'var(--gray-400)',background:'none',border:'none',cursor:'pointer',padding:'0 2px',lineHeight:1}}>✕</button>}
+                                  style={{fontSize:10,padding:'1px 4px',border:`1.5px solid ${target?bufferOk?'#22c55e':'#ef4444':'var(--gray-200)'}`,borderRadius:4,color:target?bufferOk?'#15803d':'#dc2626':'var(--gray-500)',background:target?bufferOk?'#f0fdf4':'#fef2f2':'white'}}/>
+                                {target && <button onClick={()=>setArriveAt(p=>{ const n={...p}; delete n[stop.id]; return n; })} style={{fontSize:11,color:'var(--gray-400)',background:'none',border:'none',cursor:'pointer',padding:'0 2px'}}>✕</button>}
                               </div>
-
-                              {/* Smart timing message */}
-                              {target && info && (() => {
-                                // bufferMin = spare time between when you'd naturally arrive and the target
-                                const buf = info.bufferMin;
-                                const ok = buf >= 0;
-                                const leaveByTime = fmtMinOfDay(info.mustLeaveByMin);
-                                const fromLabel = info.prevName === 'home' ? 'home' : info.prevName;
-                                const driveLabel = info.driveToThis + 'm drive';
-                                let bufLabel, bufColor;
-                                if (!ok) {
-                                  bufLabel = `⚠ ${Math.abs(buf)}m too late — not enough drive time`;
-                                  bufColor = '#dc2626';
-                                } else if (buf === 0) {
-                                  bufLabel = 'exactly on time';
-                                  bufColor = '#15803d';
-                                } else if (buf < 10) {
-                                  bufLabel = `only ${buf}m to spare — very tight`;
-                                  bufColor = '#d97706';
-                                } else if (buf < 30) {
-                                  bufLabel = `${buf}m to spare`;
-                                  bufColor = '#d97706';
-                                } else {
-                                  bufLabel = `${buf >= 60 ? Math.floor(buf/60)+'h '+buf%60+'m' : buf+'m'} to spare`;
-                                  bufColor = '#15803d';
-                                }
-                                // "now" mode: show leave-in countdown instead
-                                if (info.leaveInMin !== null) {
-                                  const li = info.leaveInMin;
-                                  if (li <= 0) return <div style={{marginTop:5,fontSize:10,padding:'4px 8px',borderRadius:5,background:'#fef2f2',border:'1px solid #fecaca',color:'#dc2626'}}>⚠ Leave {fromLabel} now — already {Math.abs(li)}m behind for this stop</div>;
-                                  return <div style={{marginTop:5,fontSize:10,padding:'4px 8px',borderRadius:5,background:buf<10?'#fffbeb':'#f0fdf4',border:`1px solid ${buf<10?'#fde68a':'#bbf7d0'}`,color:bufColor}}>
-                                    🕐 Leave {fromLabel} in <b>{li < 60 ? li+'m' : Math.floor(li/60)+'h '+li%60+'m'}</b> · {driveLabel} · {bufLabel}
-                                  </div>;
-                                }
-                                return (
-                                  <div style={{marginTop:5,fontSize:10,padding:'4px 8px',borderRadius:5,
-                                    background:ok?(buf<10?'#fffbeb':'#f0fdf4'):'#fef2f2',
-                                    border:`1px solid ${ok?(buf<10?'#fde68a':'#bbf7d0'):'#fecaca'}`}}>
-                                    {ok
-                                      ? <span style={{color:bufColor}}>✓ Leave <b>{fromLabel}</b> by <b>{leaveByTime}</b> · {driveLabel} · {bufLabel}</span>
-                                      : <span style={{color:'#dc2626'}}>⚠ Leave <b>{fromLabel}</b> by <b>{leaveByTime}</b> · {driveLabel} · {bufLabel}</span>
-                                    }
-                                  </div>
-                                );
-                              })()}
-
-                              {/* Gap between consecutive arrive-at stops */}
-                              {gapMin !== null && (
-                                <div style={{marginTop:3,fontSize:10,fontWeight:600,
-                                  color:gapMin<0?'#dc2626':gapMin<10?'#d97706':'#15803d'}}>
-                                  {gapMin < 0
-                                    ? `⚠ These two arrive-at times overlap by ${Math.abs(gapMin)}m — not possible`
-                                    : gapMin < 10
-                                      ? `⚠ Only ${gapMin}m between leaving previous stop and arriving here`
-                                      : `↕ ${gapMin}m window between stops`}
-                                </div>
-                              )}
-
-                              {/* Navigate + Log + Remove on every planned stop */}
-                              {/* Navigate + Log on every planned stop */}
                               <div style={{display:'flex',gap:5,marginTop:8}}>
                                 <button className="btn btn-primary btn-sm" style={{flex:1,fontSize:11,padding:'6px 0',fontWeight:700}}
-                                  onClick={()=>window.open(getNavUrl(stop),'_blank')}>
-                                  🚗 Navigate
-                                </button>
+                                  onClick={()=>window.open(getNavUrl(stop),'_blank')}>🚗 Navigate</button>
                                 <button className="btn btn-ghost btn-sm" style={{flex:1,fontSize:11,padding:'6px 0'}}
-                                  onClick={async()=>{
-                                    setLoggingStop(stop.id);
-                                    try { const qs = await api.visitQueueStatus(stop.companyId || stop.id); setQueueStatus(qs); } catch(_) { setQueueStatus(null); }
-                                  }}>✅ Log</button>
+                                  onClick={async()=>{ setLoggingStop(stop.id); try { const qs=await api.visitQueueStatus(stop.companyId||stop.id); setQueueStatus(qs); } catch(_){ setQueueStatus(null); } }}>✅ Log</button>
                                 <button style={{fontSize:10,padding:'6px 8px',background:'white',border:'1px solid #fca5a5',color:'#dc2626',borderRadius:5,cursor:'pointer'}}
                                   onClick={()=>{ const ns=route.stops.filter(s=>s.id!==stop.id); const nm={...routeStopMins}; delete nm[stop.id]; setRouteStopMins(nm); if(ns.length===0){setRoute(null);return;} setRoute(r=>({...r,stops:ns})); }}>✕</button>
                               </div>
@@ -1084,7 +796,8 @@ export default function RoutePlanner({ embedded = false }) {
                       </div>
                     );
                   })}
-                                    {route.returnHome && (
+
+                  {route.returnHome && (
                     <>
                       <div style={{padding:'2px 12px 2px 46px',background:'#f8fafc',fontSize:10,color:'var(--gray-400)',borderBottom:'1px solid var(--gray-100)'}}>
                         🚗 {recalc.retMiles.toFixed(1)} mi · {fmt(recalc.retMins)} back
@@ -1096,22 +809,19 @@ export default function RoutePlanner({ embedded = false }) {
                             <span style={{fontWeight:700,fontSize:12,color:'#14532d'}}>{route.endMode==='custom'?'End Destination':'Back to Shop'}</span>
                             <span style={{fontWeight:700,fontSize:11,color:'#15803d'}}>{recalc.retArrival}</span>
                           </div>
-                          <div style={{fontSize:10,color:'#4ade80'}}>{route.retAddr || route.startAddr}</div>
+                          <div style={{fontSize:10,color:'#4ade80'}}>{route.retAddr||route.startAddr}</div>
                         </div>
                       </div>
                     </>
                   )}
                 </div>
-
               </div>
             );
           })()}
         </div>
 
-        {/* ═══ CENTER/RIGHT: Map with floating nearby filter ════════════════ */}
+        {/* RIGHT: Map */}
         <div style={{position:'relative',overflow:'hidden',minWidth:0}}>
-
-          {/* Persistent map fills everything */}
           <PersistentMap
             routeStops={route ? (() => { const r=recalcTimeline(route.stops,routeStopMins,route.startTime,route.startGeo,route.returnHome); return r.stops; })() : []}
             startGeo={route?.startGeo || null}
@@ -1123,29 +833,25 @@ export default function RoutePlanner({ embedded = false }) {
             })}
             onAddNearby={async(comp)=>{
               try {
-                const tempId = 'nearby_' + comp.id + '_' + Date.now();
                 if (route) {
+                  const tempId = 'nearby_' + comp.id + '_' + Date.now();
                   showToast('📍 Locating ' + comp.name + '…');
-                  const addr = comp.address ? comp.address + ', ' + (comp.city||'Charlotte') + ', NC' : comp.name + ', Charlotte, NC';
-                  const geo = (comp.lat && comp.lng) ? {lat:comp.lat, lng:comp.lng, ok:true} : await geocode(addr);
-                  const newStop = {
-                    id: tempId, name: comp.name, address: comp.address||'', city: comp.city||'',
-                    lat: geo.lat, lng: geo.lng, geoOk: geo.ok,
-                    driveMiles: 0, driveMinutes: 0,
-                    stopMins: 20, visitId: null, companyId: comp.id,
-                    stopNum: route.stops.length + 1,
-                  };
+                  let lat = comp.lat, lng = comp.lng;
+                  if (!lat || !lng) {
+                    const result = await geocodeViaBackend(comp.id);
+                    if (result) { lat = result.lat; lng = result.lng; }
+                  }
+                  const newStop = { id:tempId, name:comp.name, address:comp.address||'', city:comp.city||'', lat, lng, geoOk:!!(lat&&lng), driveMiles:0, driveMinutes:0, stopMins:20, visitId:null, companyId:comp.id, stopNum:route.stops.length+1 };
                   setRouteStopMins(p=>({...p,[tempId]:20}));
                   setRoute(r => {
                     const allStops = [...r.stops, newStop];
-                    // Re-optimize if autoOpt is on
                     if (autoOpt) {
-                      const reordered = optimize(r.startGeo, allStops, r.endGeo || null);
-                      return { ...r, stops: reordered.map((s,i) => ({ ...s, stopNum: i+1 })) };
+                      const reordered = optimize(r.startGeo, allStops, r.endGeo||null);
+                      return { ...r, stops: reordered.map((s,i) => ({...s, stopNum:i+1})) };
                     }
                     return { ...r, stops: allStops };
                   });
-                  showToast('✅ ' + comp.name + ' added' + (autoOpt ? ' and route re-optimized' : ''));
+                  showToast('✅ ' + comp.name + ' added');
                 } else {
                   await addNearbyToRoute(comp);
                 }
@@ -1153,41 +859,30 @@ export default function RoutePlanner({ embedded = false }) {
             }}
           />
 
-          {/* Floating nearby filter — top-right corner of map */}
-          <div style={{position:'absolute',top:10,right:10,zIndex:1000,display:'flex',flexDirection:'column',gap:6,alignItems:'flex-end'}}>
-            {/* Filter pills */}
-            <div style={{display:'flex',gap:4,background:'rgba(255,255,255,.92)',backdropFilter:'blur(6px)',borderRadius:20,padding:'5px 8px',boxShadow:'0 2px 10px rgba(0,0,0,.15)',border:'1px solid rgba(255,255,255,.8)'}}>
-              {[
-                {k:'all',  l:'All',         bg:'var(--navy-800)',color:'white'},
-                {k:'hot',  l:'🔴 Drop In',  bg:'#ef4444',       color:'white'},
-                {k:'warm', l:'🟡 Due Soon', bg:'#f59e0b',       color:'white'},
-                {k:'good', l:'🟢 Recent',   bg:'#22c55e',       color:'white'},
-                {k:'none', l:'⚪ No Contact',bg:'#64748b',      color:'white'},
-              ].map(f=>(
+          {/* Nearby filter pills */}
+          <div style={{position:'absolute',top:10,right:10,zIndex:1000}}>
+            <div style={{display:'flex',gap:4,background:'rgba(255,255,255,.92)',backdropFilter:'blur(6px)',borderRadius:20,padding:'5px 8px',boxShadow:'0 2px 10px rgba(0,0,0,.15)'}}>
+              {[{k:'all',l:'All'},{k:'hot',l:'🔴 Drop In'},{k:'warm',l:'🟡 Due Soon'},{k:'good',l:'🟢 Recent'},{k:'none',l:'⚪ No Contact'}].map(f=>(
                 <button key={f.k} onClick={()=>setNearbyFilter(f.k)}
                   style={{padding:'3px 10px',borderRadius:14,fontSize:11,fontWeight:700,cursor:'pointer',border:'none',
-                    background:nearbyFilter===f.k?f.bg:'transparent',
-                    color:nearbyFilter===f.k?f.color:'var(--gray-500)',
-                    transition:'all .12s'}}>
+                    background:nearbyFilter===f.k?'var(--navy-800)':'transparent',
+                    color:nearbyFilter===f.k?'white':'var(--gray-500)',transition:'all .12s'}}>
                   {f.l}
                 </button>
               ))}
             </div>
-            {/* Geocoding status */}
-            {nearbyGeocing && (
-              <div style={{background:'rgba(255,255,255,.9)',borderRadius:10,padding:'3px 10px',fontSize:10,color:'var(--gray-500)',boxShadow:'0 1px 6px rgba(0,0,0,.1)'}}>
-                Locating companies… {nearbyGeoCount}/{nearbyCompanies.filter(c=>c.address).length}
-              </div>
-            )}
+            <div style={{marginTop:6,fontSize:10,color:'var(--gray-500)',textAlign:'right',padding:'2px 8px',background:'rgba(255,255,255,.8)',borderRadius:8}}>
+              {nearbyMapped.length} companies on map
+            </div>
           </div>
 
-          {/* Floating Google Maps link — bottom right */}
+          {/* Google Maps link */}
           {route && (() => {
             const recalc = recalcTimeline(route.stops, routeStopMins, route.startTime, route.startGeo, route.returnHome, arriveAt);
-            const openMapsUrl = `https://www.google.com/maps/dir/${encodeURIComponent(route.startAddr)}/${recalc.stops.map(s=>encodeURIComponent((s.address||s.name)+', '+(s.city||'Charlotte')+', NC')).join('/')}${route.returnHome?'/'+encodeURIComponent(route.startAddr):''}`;
+            const url = `https://www.google.com/maps/dir/${encodeURIComponent(route.startAddr)}/${recalc.stops.map(s=>encodeURIComponent((s.address||s.name)+', '+(s.city||'Charlotte')+', NC')).join('/')}${route.returnHome?'/'+encodeURIComponent(route.startAddr):''}`;
             return (
-              <a href={openMapsUrl} target="_blank" rel="noreferrer"
-                style={{position:'absolute',bottom:24,right:10,zIndex:1000,background:'rgba(255,255,255,.92)',backdropFilter:'blur(6px)',borderRadius:10,padding:'5px 12px',fontSize:11,color:'#1d4ed8',fontWeight:700,textDecoration:'none',boxShadow:'0 2px 8px rgba(0,0,0,.15)',border:'1px solid rgba(29,78,216,.2)'}}>
+              <a href={url} target="_blank" rel="noreferrer"
+                style={{position:'absolute',bottom:24,right:10,zIndex:1000,background:'rgba(255,255,255,.92)',backdropFilter:'blur(6px)',borderRadius:10,padding:'5px 12px',fontSize:11,color:'#1d4ed8',fontWeight:700,textDecoration:'none',boxShadow:'0 2px 8px rgba(0,0,0,.15)'}}>
                 Open in Google Maps ↗
               </a>
             );
@@ -1195,46 +890,32 @@ export default function RoutePlanner({ embedded = false }) {
         </div>
       </div>
 
-      {/* ── LOG VISIT MODAL ── */}
+      {/* LOG VISIT MODAL */}
       {loggingStop && (() => {
-        // Source stop data from active route OR from the visit queue list
         const routeStop = route?.stops?.find(s=>s.id===loggingStop);
         const queueVisit = !routeStop ? visits.find(v=>v.id===loggingStop) : null;
-        const stop = routeStop || (queueVisit ? {
-          id: queueVisit.id,
-          name: queueVisit.entity_name,
-          address: queueVisit.address || '',
-          city: queueVisit.city || '',
-          visitId: queueVisit.id,
-          companyId: queueVisit.entity_id,
-        } : null);
+        const stop = routeStop || (queueVisit ? { id:queueVisit.id, name:queueVisit.entity_name, address:queueVisit.address||'', city:queueVisit.city||'', visitId:queueVisit.id, companyId:queueVisit.entity_id } : null);
         if (!stop) return null;
         const ctypes = contactTypes.filter(ct => ct.action_type==='visit' && ct.enabled!==0);
         const typeOptions = ctypes.map(ct=>ct.contact_type);
         return (
           <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:2000,display:'flex',alignItems:'center',justifyContent:'center',padding:20}}
-            onClick={e=>{if(e.target===e.currentTarget){ setLoggingStop(null); setQueueStatus(null); }}}>
+            onClick={e=>{ if(e.target===e.currentTarget){ setLoggingStop(null); setQueueStatus(null); } }}>
             <div style={{background:'white',borderRadius:14,overflow:'hidden',boxShadow:'0 8px 40px rgba(0,0,0,.25)',maxWidth:560,width:'100%',maxHeight:'88vh',display:'flex',flexDirection:'column'}}>
               <div style={{background:'var(--navy-950)',padding:'14px 18px',display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
                 <div>
                   <div style={{fontWeight:800,fontSize:14,color:'white'}}>📍 Log Visit — {stop.name}</div>
                   <div style={{fontSize:11,color:'var(--gold-400)',marginTop:2}}>{stop.address}{stop.city?', '+stop.city:''}</div>
                 </div>
-                <button onClick={()=>{ setLoggingStop(null); setQueueStatus(null); }} style={{background:'none',border:'none',cursor:'pointer',fontSize:18,color:'rgba(255,255,255,.5)',lineHeight:1}}>✕</button>
+                <button onClick={()=>{ setLoggingStop(null); setQueueStatus(null); }} style={{background:'none',border:'none',cursor:'pointer',fontSize:18,color:'rgba(255,255,255,.5)'}}>✕</button>
               </div>
               <div style={{overflowY:'auto',padding:'16px 18px',display:'flex',flexDirection:'column',gap:12}}>
-                {/* Override warning if company is in another queue */}
-                {queueStatus && (queueStatus.inCalling || queueStatus.inMail || queueStatus.inEmail) && (() => {
-                  const where = queueStatus.inCalling ? 'Calling Queue' : queueStatus.inMail ? 'Mail Queue' : 'Email Queue';
-                  const fu = queueStatus.followupDate ? new Date(queueStatus.followupDate+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}) : null;
-                  return (
-                    <div style={{padding:'10px 12px',borderRadius:8,background:'#fffbeb',border:'1px solid #fde68a',fontSize:12}}>
-                      <div style={{fontWeight:700,color:'#92400e',marginBottom:3}}>⚠ This company is currently in the <b>{where}</b></div>
-                      {fu && <div style={{color:'#92400e',fontSize:11}}>Next follow-up scheduled: <b>{fu}</b></div>}
-                      <div style={{color:'#78350f',fontSize:11,marginTop:4}}>Logging this visit will override it and move the company to whichever next action you choose below.</div>
-                    </div>
-                  );
-                })()}
+                {queueStatus && (queueStatus.inCalling||queueStatus.inMail||queueStatus.inEmail) && (
+                  <div style={{padding:'10px 12px',borderRadius:8,background:'#fffbeb',border:'1px solid #fde68a',fontSize:12}}>
+                    <div style={{fontWeight:700,color:'#92400e',marginBottom:3}}>⚠ This company is currently in the <b>{queueStatus.inCalling?'Calling':queueStatus.inMail?'Mail':'Email'} Queue</b></div>
+                    <div style={{color:'#78350f',fontSize:11,marginTop:4}}>Logging this visit will override it and move the company to whichever next action you choose below.</div>
+                  </div>
+                )}
                 <div>
                   <div style={{fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'.07em',color:'var(--gray-500)',marginBottom:7}}>What happened?</div>
                   <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
@@ -1275,48 +956,30 @@ export default function RoutePlanner({ embedded = false }) {
                   onClick={async()=>{
                     setLogging(true);
                     try {
-                      // visitId = visit_queue row id; companyId = companies row id
                       if (stop.visitId) {
-                        await api.completeVisit(stop.visitId, {
-                          contact_type:      logForm.contact_type,
-                          next_action:       logForm.next_action,
-                          notes:             logForm.notes,
-                          contact_name:      logForm.contact_name,
-                          direct_line:       logForm.direct_line || undefined,
-                          counts_as_attempt: contactTypes.find(ct => ct.contact_type === logForm.contact_type)?.counts_as_attempt ?? 1,
-                        });
+                        await api.completeVisit(stop.visitId, { contact_type:logForm.contact_type, next_action:logForm.next_action, notes:logForm.notes, contact_name:logForm.contact_name, direct_line:logForm.direct_line||undefined, counts_as_attempt:contactTypes.find(ct=>ct.contact_type===logForm.contact_type)?.counts_as_attempt??1 });
                       } else if (stop.companyId) {
-                        // Fallback: schedule then complete if visitId missing
                         const vr = await api.scheduleVisit(stop.companyId);
-                        await api.completeVisit(vr.id, {
-                          contact_type:      logForm.contact_type,
-                          next_action:       logForm.next_action,
-                          notes:             logForm.notes,
-                          contact_name:      logForm.contact_name,
-                          counts_as_attempt: contactTypes.find(ct => ct.contact_type === logForm.contact_type)?.counts_as_attempt ?? 1,
-                        });
-                      } else {
-                        throw new Error('No visit ID — cannot log this stop');
+                        await api.completeVisit(vr.id, { contact_type:logForm.contact_type, next_action:logForm.next_action, notes:logForm.notes, contact_name:logForm.contact_name, counts_as_attempt:1 });
                       }
                       showToast(`✅ ${stop.name} logged`);
-                      if (routeStop) {
-                        // Remove stop from route after logging
-                        setRoute(r => r ? ({...r, stops: r.stops.filter(s => s.id !== stop.id)}) : null);
-                      }
+                      if (routeStop) setRoute(r => r ? ({...r, stops:r.stops.filter(s=>s.id!==stop.id)}) : null);
                       setLoggingStop(null);
-                      setLogForm(f => ({...f, contact_type:'', notes:'', contact_name:'', direct_line:''}));
+                      setLogForm(f=>({...f,contact_type:'',notes:'',contact_name:'',direct_line:''}));
                       const fresh = await api.visitsAll(); setVisits(fresh);
                       await refreshCounts();
-                    } catch(e){ showToast(e.message || 'Log failed', 'error'); } finally { setLogging(false); }
+                    } catch(e){ showToast(e.message||'Log failed','error'); }
+                    finally { setLogging(false); }
                   }}>
-                  {logging?'Saving…': (routeStop ? '✅ Log & Remove from Route' : '✅ Log Visit')}
+                  {logging?'Saving…':(routeStop?'✅ Log & Remove from Route':'✅ Log Visit')}
                 </button>
               </div>
             </div>
           </div>
         );
       })()}
-    {movingId && (
+
+      {movingId && (
         <MoveModal
           companyId={movingId}
           onClose={() => setMovingId(null)}
@@ -1327,15 +990,14 @@ export default function RoutePlanner({ embedded = false }) {
   );
 }
 
+// ── Persistent Leaflet Map ────────────────────────────────────────────────────
+function PersistentMap({ routeStops=[], startGeo=null, returnHome=false, nearbyCompanies=[], onAddNearby }) {
+  const mapRef          = useRef(null);
+  const mapInstanceRef  = useRef(null);
+  const routeLayerRef   = useRef(null);
+  const nearbyLayerRef  = useRef(null);
+  const LRef            = useRef(null);
 
-function PersistentMap({ routeStops = [], startGeo = null, returnHome = false, nearbyCompanies = [], onAddNearby }) {
-  const mapRef = useRef(null);
-  const mapInstanceRef = useRef(null);
-  const routeLayerRef = useRef(null);
-  const nearbyLayerRef = useRef(null);
-  const LRef = useRef(null);
-
-  // ── Init map ONCE ──────────────────────────────────────────────────────────
   useEffect(() => {
     if (!mapRef.current) return;
     if (!document.getElementById('leaflet-css')) {
@@ -1347,18 +1009,14 @@ function PersistentMap({ routeStops = [], startGeo = null, returnHome = false, n
       const L = Lmod.default || Lmod;
       LRef.current = L;
       if (mapInstanceRef.current) return;
-      const map = L.map(mapRef.current, { zoomControl: true }).setView([35.2271, -80.8431], 10);
+      const map = L.map(mapRef.current, { zoomControl:true }).setView([35.2271, -80.8431], 10);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution:'© OpenStreetMap', maxZoom:19 }).addTo(map);
       mapInstanceRef.current = map;
-      routeLayerRef.current = L.layerGroup().addTo(map);
+      routeLayerRef.current  = L.layerGroup().addTo(map);
       nearbyLayerRef.current = L.layerGroup().addTo(map);
-      // Fire invalidateSize at multiple checkpoints to handle flex/tab layout settling
-      [50, 150, 300, 600, 1200].forEach(ms =>
-        setTimeout(() => { try { map.invalidateSize(); } catch(_) {} }, ms)
-      );
-      // ResizeObserver catches any future container resizes (tab switch, panel changes)
+      [50,150,300,600,1200].forEach(ms => setTimeout(() => { try { map.invalidateSize(); } catch(_){} }, ms));
       if (typeof ResizeObserver !== 'undefined' && mapRef.current) {
-        ro = new ResizeObserver(() => { try { map.invalidateSize(); } catch(_) {} });
+        ro = new ResizeObserver(() => { try { map.invalidateSize(); } catch(_){} });
         ro.observe(mapRef.current);
       }
     });
@@ -1368,128 +1026,69 @@ function PersistentMap({ routeStops = [], startGeo = null, returnHome = false, n
     };
   }, []);
 
-  // ── Update ROUTE layer when stops/startGeo change ─────────────────────────
+  // Update route layer
   useEffect(() => {
     const map = mapInstanceRef.current; const L = LRef.current;
     if (!map || !L || !routeLayerRef.current) return;
     routeLayerRef.current.clearLayers();
-
     const validStops = routeStops.filter(s => s.lat && s.lng);
-
-    // Numbered stop markers
     validStops.forEach((s, i) => {
-      L.marker([s.lat, s.lng], {
-        icon: L.divIcon({
-          html: `<div style="width:30px;height:30px;border-radius:50%;background:#f59e0b;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;font-weight:900;font-size:13px;color:#1e293b">${i+1}</div>`,
-          className:'', iconAnchor:[15,15],
-        })
-      }).addTo(routeLayerRef.current).bindPopup(`<b>${s.name}</b><br><span style="font-size:11px;color:#64748b">${s.address||''}</span>`);
+      L.marker([s.lat, s.lng], { icon: L.divIcon({ html:`<div style="width:30px;height:30px;border-radius:50%;background:#f59e0b;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;font-weight:900;font-size:13px;color:#1e293b">${i+1}</div>`, className:'', iconAnchor:[15,15] }) })
+        .addTo(routeLayerRef.current).bindPopup(`<b>${s.name}</b><br><span style="font-size:11px;color:#64748b">${s.address||''}</span>`);
     });
-
-    // Home marker
     if (startGeo?.lat) {
-      L.marker([startGeo.lat, startGeo.lng], {
-        icon: L.divIcon({
-          html: `<div style="width:22px;height:22px;border-radius:50%;background:#1e3a5f;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;font-size:11px">🏠</div>`,
-          className:'', iconAnchor:[11,11],
-        })
-      }).addTo(routeLayerRef.current).bindPopup('<b>🏠 Start / Shop</b>');
+      L.marker([startGeo.lat, startGeo.lng], { icon: L.divIcon({ html:`<div style="width:22px;height:22px;border-radius:50%;background:#1e3a5f;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;font-size:11px">🏠</div>`, className:'', iconAnchor:[11,11] }) })
+        .addTo(routeLayerRef.current).bindPopup('<b>🏠 Start / Shop</b>');
     }
-
-    // Draw route line
     if (validStops.length >= 1 && startGeo?.lat) {
-      const waypoints = [
-        [startGeo.lat, startGeo.lng],
-        ...validStops.map(s => [s.lat, s.lng]),
-        ...(returnHome ? [[startGeo.lat, startGeo.lng]] : []),
-      ];
-      const coords = waypoints.map(p => `${p[1]},${p[0]}`).join(';');
-      fetch(`https://router.project-osrm.org/route/v1/driving/${coords}?geometries=geojson&overview=full`, { headers:{'User-Agent':'FleetCRM/1.0'} })
-        .then(r => r.json())
+      const waypoints = [[startGeo.lat,startGeo.lng], ...validStops.map(s=>[s.lat,s.lng]), ...(returnHome?[[startGeo.lat,startGeo.lng]]:[])];
+      const coords = waypoints.map(p=>`${p[1]},${p[0]}`).join(';');
+      fetch(`https://router.project-osrm.org/route/v1/driving/${coords}?geometries=geojson&overview=full`, {headers:{'User-Agent':'FleetCRM/1.0'}})
+        .then(r=>r.json())
         .then(d => {
           if (d.routes?.[0] && routeLayerRef.current) {
-            const line = L.polyline(d.routes[0].geometry.coordinates.map(c=>[c[1],c[0]]), { color:'#1e40af', weight:4, opacity:0.85 });
-            line.addTo(routeLayerRef.current);
-            map.fitBounds(line.getBounds().pad(0.12));
+            const line = L.polyline(d.routes[0].geometry.coordinates.map(c=>[c[1],c[0]]), {color:'#1e40af',weight:4,opacity:0.85});
+            line.addTo(routeLayerRef.current); map.fitBounds(line.getBounds().pad(0.12));
           }
         })
         .catch(() => {
-          const line = L.polyline(waypoints, { color:'#1e40af', weight:3, dashArray:'8 5', opacity:0.7 });
-          line.addTo(routeLayerRef.current);
-          map.fitBounds(line.getBounds().pad(0.12));
+          const line = L.polyline(waypoints, {color:'#1e40af',weight:3,dashArray:'8 5',opacity:0.7});
+          line.addTo(routeLayerRef.current); map.fitBounds(line.getBounds().pad(0.12));
         });
     } else if (validStops.length > 0) {
-      const bounds = L.latLngBounds(validStops.map(s=>[s.lat,s.lng]));
-      map.fitBounds(bounds.pad(0.2));
+      map.fitBounds(L.latLngBounds(validStops.map(s=>[s.lat,s.lng])).pad(0.2));
     }
   }, [routeStops.map(s=>s.id+','+s.lat).join('|'), startGeo?.lat, returnHome]);
 
-  // ── Update NEARBY layer when companies geocoded ────────────────────────────
+  // Update nearby layer
   useEffect(() => {
     const map = mapInstanceRef.current; const L = LRef.current;
     if (!map || !L || !nearbyLayerRef.current) return;
     nearbyLayerRef.current.clearLayers();
     Object.keys(window).filter(k=>k.startsWith('_addNearby_')).forEach(k=>delete window[k]);
-
     const PCOLOR = { hot:'#ef4444', warm:'#f59e0b', good:'#22c55e', none:'#94a3b8' };
-    const PLBL = { hot:'🔴 Drop In', warm:'🟡 Due Soon', good:'🟢 Recent', none:'⚪ No Contact' };
-    // companyId = companies.id; s.id = visit_queue row id — must match on companyId
+    const PLBL   = { hot:'🔴 Drop In', warm:'🟡 Due Soon', good:'🟢 Recent', none:'⚪ No Contact' };
     const routeIds = new Set(routeStops.map(s => s.companyId ?? s.id));
-
     nearbyCompanies.filter(c => c.geoOk && c.lat && c.lng).forEach(c => {
       const col = PCOLOR[c.priority] || '#94a3b8';
       const isInRoute = routeIds.has(c.id);
-      const lastContact = c.last_contacted ? new Date(c.last_contacted).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : null;
-      const followup = c.followup_due ? new Date(c.followup_due+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}) : null;
       const lastContactDate = c.last_contacted ? new Date(c.last_contacted).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : null;
-      const popup = `
-        <div style="min-width:210px;max-width:260px;font-family:system-ui,sans-serif">
-          <div style="font-weight:800;font-size:13px;color:#0f172a;margin-bottom:2px">${c.name}</div>
-          ${c.main_phone?`<div style="font-size:11px;color:#3b82f6;font-family:monospace;margin-bottom:3px">${c.main_phone}</div>`:''}
-          ${c.address?`<div style="font-size:11px;color:#64748b;margin-bottom:4px">📍 ${c.address}${c.city?', '+c.city:''}</div>`:''}
-          <span style="display:inline-block;padding:2px 8px;border-radius:10px;background:${col}22;border:1px solid ${col}55;font-size:10px;font-weight:700;color:${col};margin-bottom:5px">${PLBL[c.priority]}</span>
-          ${lastContactDate
-            ? `<div style="font-size:11px;color:#475569;margin-bottom:3px">📞 <b>${c.last_contact_type||'Contacted'}</b> · ${lastContactDate}</div>`
-            : `<div style="font-size:11px;color:#94a3b8;margin-bottom:3px">No contact yet</div>`}
-          ${followup?`<div style="font-size:11px;color:#d97706;margin-bottom:3px">📅 Follow-up: <b>${followup}</b></div>`:''}
-          ${c.last_notes?`<div style="font-size:11px;color:#475569;padding:4px 6px;background:#f8fafc;border-radius:4px;border-left:2px solid #e2e8f0;margin-bottom:5px;font-style:italic">"${c.last_notes.slice(0,80)}${c.last_notes.length>80?'…':''}"</div>`:''}
-          ${!isInRoute&&onAddNearby
-            ? `<button onclick="window._addNearby_${c.id}&&window._addNearby_${c.id}()" style="margin-top:4px;width:100%;padding:6px 0;background:#f59e0b;border:none;border-radius:6px;cursor:pointer;font-weight:800;font-size:12px;color:#1e293b">+ Add to Route</button>`
-            : `<div style="margin-top:4px;font-size:11px;color:#15803d;font-weight:700;text-align:center;padding:4px;background:#f0fdf4;border-radius:5px">✓ Already in route</div>`}
-        </div>`;
-      const marker = L.marker([c.lat, c.lng], {
-        icon: L.divIcon({
-          html: `<div style="width:${isInRoute?18:12}px;height:${isInRoute?18:12}px;border-radius:50%;background:${isInRoute?'#1e40af':col};border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,.3);cursor:pointer"></div>`,
-          className:'', iconAnchor:[isInRoute?9:6, isInRoute?9:6],
-        })
-      }).addTo(nearbyLayerRef.current).bindPopup(popup, { maxWidth:270 });
+      const followup = c.followup_due ? new Date(c.followup_due+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}) : null;
+      const popup = `<div style="min-width:210px;max-width:260px;font-family:system-ui,sans-serif">
+        <div style="font-weight:800;font-size:13px;color:#0f172a;margin-bottom:2px">${c.name}</div>
+        ${c.main_phone?`<div style="font-size:11px;color:#3b82f6;font-family:monospace;margin-bottom:3px">${c.main_phone}</div>`:''}
+        ${c.address?`<div style="font-size:11px;color:#64748b;margin-bottom:4px">📍 ${c.address}${c.city?', '+c.city:''}</div>`:''}
+        <span style="display:inline-block;padding:2px 8px;border-radius:10px;background:${col}22;border:1px solid ${col}55;font-size:10px;font-weight:700;color:${col};margin-bottom:5px">${PLBL[c.priority]}</span>
+        ${lastContactDate?`<div style="font-size:11px;color:#475569;margin-bottom:3px">📞 <b>${c.last_contact_type||'Contacted'}</b> · ${lastContactDate}</div>`:`<div style="font-size:11px;color:#94a3b8;margin-bottom:3px">No contact yet</div>`}
+        ${followup?`<div style="font-size:11px;color:#d97706;margin-bottom:3px">📅 Follow-up: <b>${followup}</b></div>`:''}
+        ${c.last_notes?`<div style="font-size:11px;color:#475569;padding:4px 6px;background:#f8fafc;border-radius:4px;border-left:2px solid #e2e8f0;margin-bottom:5px;font-style:italic">"${c.last_notes.slice(0,80)}${c.last_notes.length>80?'…':''}"</div>`:''}
+        ${!isInRoute&&onAddNearby?`<button onclick="window._addNearby_${c.id}&&window._addNearby_${c.id}()" style="margin-top:4px;width:100%;padding:6px 0;background:#f59e0b;border:none;border-radius:6px;cursor:pointer;font-weight:800;font-size:12px;color:#1e293b">+ Add to Route</button>`:`<div style="margin-top:4px;font-size:11px;color:#15803d;font-weight:700;text-align:center;padding:4px;background:#f0fdf4;border-radius:5px">✓ Already in route</div>`}
+      </div>`;
+      const marker = L.marker([c.lat, c.lng], { icon: L.divIcon({ html:`<div style="width:${isInRoute?18:12}px;height:${isInRoute?18:12}px;border-radius:50%;background:${isInRoute?'#1e40af':col};border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,.3);cursor:pointer"></div>`, className:'', iconAnchor:[isInRoute?9:6,isInRoute?9:6] }) })
+        .addTo(nearbyLayerRef.current).bindPopup(popup, {maxWidth:270});
       if (!isInRoute && onAddNearby) window[`_addNearby_${c.id}`] = () => { onAddNearby(c); map.closePopup(); };
     });
   }, [nearbyCompanies.map(c=>c.id+'@'+(c.geoOk?1:0)).join('|'), routeStops.map(s=>(s.companyId??s.id)+':'+s.id).join(',')]);
 
-  return <div ref={mapRef} style={{ position:'absolute', inset:0 }} />;
-}
-
-
-function TimelineRow({ dot, dotBg, dotColor, title, sub, time, arrive, leave, duration, geoOk }) {
-  return (
-    <div style={{display:'flex',gap:10,padding:'11px 16px',borderBottom:'1px solid var(--gray-100)'}}>
-      <div style={{width:32,height:32,borderRadius:'50%',flexShrink:0,background:dotBg,color:dotColor,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:800,fontSize:typeof dot==='number'?13:16}}>{dot}</div>
-      <div style={{flex:1,minWidth:0}}>
-        <div style={{display:'flex',justifyContent:'space-between',gap:8}}>
-          <div style={{fontWeight:700,fontSize:13,color:'var(--gray-900)'}}>{title}</div>
-          <div style={{textAlign:'right',flexShrink:0,fontSize:12}}>
-            {time&&<div style={{fontWeight:600}}>{time}</div>}
-            {arrive&&<div style={{color:'var(--green-500)',fontWeight:700}}>▶ {arrive}</div>}
-            {leave&&<div style={{color:'var(--red-500)'}}>◀ {leave}</div>}
-          </div>
-        </div>
-        <div style={{fontSize:11,color:'var(--gray-400)',marginTop:1}}>{sub}</div>
-        {duration&&<div style={{display:'flex',gap:6,marginTop:4,flexWrap:'wrap'}}>
-          <span className="badge badge-gray">🤝 {duration}m visit</span>
-          {geoOk===false&&<span className="badge badge-overdue">⚠️ Approx location</span>}
-        </div>}
-      </div>
-    </div>
-  );
+  return <div ref={mapRef} style={{position:'absolute',inset:0}} />;
 }
