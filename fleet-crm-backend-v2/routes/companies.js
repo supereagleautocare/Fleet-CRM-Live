@@ -18,28 +18,38 @@ const router = express.Router();
 router.use(requireAuth);
 
 // ── Auto-geocode helper ───────────────────────────────────────────────────────
-function geocodeAndSave(db, companyId, address, city) {
-  if (!address) return; // nothing to geocode
+// ── Geocode queue — processes one per second, safe for bulk imports ───────────
+const geocodeQueue = [];
+let geocodeWorkerRunning = false;
+
+function geocodeWorker() {
+  if (geocodeQueue.length === 0) { geocodeWorkerRunning = false; return; }
+  geocodeWorkerRunning = true;
+  const { companyId, address, city } = geocodeQueue.shift();
   const full = encodeURIComponent(`${address}, ${city || 'Charlotte'}, NC`);
-  const options = {
-    hostname: 'nominatim.openstreetmap.org',
-    path: `/search?q=${full}&format=json&limit=1&countrycodes=us`,
-    headers: { 'User-Agent': 'SuperEagleFleetCRM/1.0', 'Accept-Language': 'en' }
-  };
-  require('https').get(options, res => {
-    let raw = '';
-    res.on('data', chunk => raw += chunk);
-    res.on('end', () => {
-      try {
-        const results = JSON.parse(raw);
-        if (results.length > 0) {
-          const lat = parseFloat(results[0].lat);
-          const lng = parseFloat(results[0].lon);
-          db.prepare('UPDATE companies SET lat = ?, lng = ? WHERE id = ?').run(lat, lng, companyId);
-        }
-      } catch(_) {}
-    });
-  }).on('error', () => {});
+  require('https').get(
+    { hostname:'nominatim.openstreetmap.org', path:`/search?q=${full}&format=json&limit=1&countrycodes=us`, headers:{'User-Agent':'SuperEagleFleetCRM/1.0','Accept-Language':'en'} },
+    res => {
+      let raw = '';
+      res.on('data', chunk => raw += chunk);
+      res.on('end', () => {
+        try {
+          const results = JSON.parse(raw);
+          if (results.length > 0) {
+            db.prepare('UPDATE companies SET lat = ?, lng = ? WHERE id = ?')
+              .run(parseFloat(results[0].lat), parseFloat(results[0].lon), companyId);
+          }
+        } catch(_) {}
+        setTimeout(geocodeWorker, 1100); // next one after 1.1 seconds
+      });
+    }
+  ).on('error', () => setTimeout(geocodeWorker, 1100));
+}
+
+function geocodeAndSave(db, companyId, address, city) {
+  if (!address) return;
+  geocodeQueue.push({ companyId, address, city });
+  if (!geocodeWorkerRunning) geocodeWorker();
 }
 
 function normalizePhone(val) {
