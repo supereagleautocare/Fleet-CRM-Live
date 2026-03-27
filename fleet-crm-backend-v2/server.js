@@ -139,5 +139,6 @@ function geocodeMissing() {
   }, 1100);
 }
 
-setTimeout(geocodeMissing, 5000); // wait 5s for server to fully boot first
+setTimeout(geocodeMissing, 5000);
+setInterval(geocodeMissing, 24*60*60*1000);// wait 5s for server to fully boot first
 module.exports = app;
