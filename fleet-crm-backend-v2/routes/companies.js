@@ -1165,37 +1165,42 @@ router.get('/:id/geocode-lookup', async (req, res) => {
   const company = db.prepare('SELECT * FROM companies WHERE id = ?').get(req.params.id);
   if (!company) return res.status(404).json({ error: 'Not found' });
 
-  // Already has coords — return immediately
   if (company.lat && company.lng) {
     return res.json({ lat: company.lat, lng: company.lng, cached: true });
   }
 
   if (!company.address) return res.status(400).json({ error: 'No address' });
 
-  try {
-    const query = encodeURIComponent(`${company.address}, ${company.city || 'Charlotte'}, ${company.state || 'NC'}`);
-    const url = `https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1&countrycodes=us`;
-    
-    const response = await fetch(url, {
+  const https = require('https');
+  const query = encodeURIComponent(
+    `${company.address}, ${company.city || 'Charlotte'}, ${company.state || 'NC'}`
+  );
+  const url = `https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1&countrycodes=us`;
+
+  const data = await new Promise((resolve, reject) => {
+    const options = {
       headers: {
-        'User-Agent': 'SuperEagleFleetCRM/1.0 (fleet management software)',
+        'User-Agent': 'SuperEagleFleetCRM/1.0',
         'Accept-Language': 'en',
       }
-    });
-    
-    const data = await response.json();
-    
-    if (data.length > 0) {
-      const lat = parseFloat(data[0].lat);
-      const lng = parseFloat(data[0].lon);
-      // Save to DB immediately
-      db.prepare('UPDATE companies SET lat = ?, lng = ? WHERE id = ?').run(lat, lng, company.id);
-      return res.json({ lat, lng, cached: false });
-    }
-    
-    return res.status(404).json({ error: 'Address not found' });
-  } catch (e) {
-    return res.status(500).json({ error: e.message });
+    };
+    https.get(url, options, (response) => {
+      let body = '';
+      response.on('data', chunk => body += chunk);
+      response.on('end', () => {
+        try { resolve(JSON.parse(body)); }
+        catch(e) { reject(new Error('Parse failed')); }
+      });
+    }).on('error', reject);
+  });
+
+  if (data.length > 0) {
+    const lat = parseFloat(data[0].lat);
+    const lng = parseFloat(data[0].lon);
+    db.prepare('UPDATE companies SET lat = ?, lng = ? WHERE id = ?').run(lat, lng, company.id);
+    return res.json({ lat, lng, cached: false });
   }
+
+  return res.status(404).json({ error: 'Address not found' });
 });
 module.exports = router;
