@@ -17,6 +17,31 @@ const { getNextCompanyId, appendCallLog, cancelOldFollowUps, clearAllCompanyQueu
 const router = express.Router();
 router.use(requireAuth);
 
+// ── Auto-geocode helper ───────────────────────────────────────────────────────
+function geocodeAndSave(db, companyId, address, city) {
+  if (!address) return; // nothing to geocode
+  const full = encodeURIComponent(`${address}, ${city || 'Charlotte'}, NC`);
+  const options = {
+    hostname: 'nominatim.openstreetmap.org',
+    path: `/search?q=${full}&format=json&limit=1&countrycodes=us`,
+    headers: { 'User-Agent': 'SuperEagleFleetCRM/1.0', 'Accept-Language': 'en' }
+  };
+  require('https').get(options, res => {
+    let raw = '';
+    res.on('data', chunk => raw += chunk);
+    res.on('end', () => {
+      try {
+        const results = JSON.parse(raw);
+        if (results.length > 0) {
+          const lat = parseFloat(results[0].lat);
+          const lng = parseFloat(results[0].lon);
+          db.prepare('UPDATE companies SET lat = ?, lng = ? WHERE id = ?').run(lat, lng, companyId);
+        }
+      } catch(_) {}
+    });
+  }).on('error', () => {});
+}
+
 function normalizePhone(val) {
   return String(val || '').replace(/\D/g, '');
 }
