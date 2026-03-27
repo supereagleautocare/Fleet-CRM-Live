@@ -94,5 +94,50 @@ app.listen(PORT, () => {
   }
   console.log('');
 });
+// ─── Background geocode job ───────────────────────────────────────────────────
+const https = require('https');
+const db    = require('./db/schema');
 
+function geocodeMissing() {
+  const companies = db.prepare(`
+    SELECT id, address, city, state FROM companies
+    WHERE status = 'active'
+      AND address IS NOT NULL AND address != ''
+      AND (lat IS NULL OR lng IS NULL)
+  `).all();
+
+  if (companies.length === 0) return;
+  console.log(`[geocode] ${companies.length} companies missing coordinates — starting background job`);
+
+  let i = 0;
+  const interval = setInterval(() => {
+    if (i >= companies.length) {
+      clearInterval(interval);
+      console.log('[geocode] all done');
+      return;
+    }
+    const co = companies[i++];
+    const q = encodeURIComponent(`${co.address}, ${co.city || 'Charlotte'}, ${co.state || 'NC'}`);
+    https.get(
+      `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1&countrycodes=us`,
+      { headers: { 'User-Agent': 'SuperEagleFleetCRM/1.0', 'Accept-Language': 'en' } },
+      res => {
+        let raw = '';
+        res.on('data', chunk => raw += chunk);
+        res.on('end', () => {
+          try {
+            const results = JSON.parse(raw);
+            if (results.length > 0) {
+              db.prepare('UPDATE companies SET lat = ?, lng = ? WHERE id = ?')
+                .run(parseFloat(results[0].lat), parseFloat(results[0].lon), co.id);
+              console.log(`[geocode] ✓ ${co.id}`);
+            }
+          } catch(_) {}
+        });
+      }
+    ).on('error', () => {});
+  }, 1100);
+}
+
+setTimeout(geocodeMissing, 5000); // wait 5s for server to fully boot first
 module.exports = app;
