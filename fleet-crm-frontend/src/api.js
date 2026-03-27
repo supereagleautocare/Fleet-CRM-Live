@@ -7,6 +7,8 @@ export function getToken()  { return token; }
 export function clearToken(){ token = null; }
 export function isLoggedIn(){ return !!token; } 
 
+geocodeLookup: (id) => req('GET', `/companies/${id}/geocode-lookup`),
+  
 async function req(method, path, body) {
   const headers = { 'Content-Type': 'application/json' };
   if (token) headers['Authorization'] = `Bearer ${token}`;
