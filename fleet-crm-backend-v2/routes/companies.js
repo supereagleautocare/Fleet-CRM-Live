@@ -249,7 +249,7 @@ router.post('/', (req, res) => {
          address || null, city || null, state || null, zip || null,
          website || null, notes || null,
          is_multi_location ? 1 : 0, location_name || null, location_group || name.trim());
-
+  geocodeAndSave(db, result.lastInsertRowid, address, city);
   res.status(201).json(db.prepare('SELECT * FROM companies WHERE id = ?').get(result.lastInsertRowid));
 });
 
@@ -274,6 +274,10 @@ router.put('/:id', (req, res) => {
   values.push(req.params.id);
 
   db.prepare(`UPDATE companies SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+  if (req.body.address !== undefined) {
+    const updated = db.prepare('SELECT address, city FROM companies WHERE id = ?').get(req.params.id);
+    geocodeAndSave(db, req.params.id, updated.address, updated.city);
+  }
   res.json(db.prepare('SELECT * FROM companies WHERE id = ?').get(req.params.id));
 });
 
