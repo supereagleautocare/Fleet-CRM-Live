@@ -258,30 +258,7 @@ export default function RoutePlanner({ embedded = false }) {
 
   return () => { cancelled = true; };
 }, [nearbyCompanies]);
-    let cancelled = false;
-    (async () => {
-      setNearbyGeocoding(true);
-      const results = []; let count = 0;
-      for (const c of nearbyCompanies) {
-        if (cancelled) break;
-        // Use pre-stored lat/lng if available
-        if (c.lat && c.lng) {
-          results.push({...c, geoOk:true, priority:getPriority(c)});
-          count++; if(!cancelled) setNearbyGeoCount(count);
-          continue;
-        }
-        if (!c.address) { results.push({...c,lat:null,lng:null,geoOk:false,priority:getPriority(c)}); continue; }
-        await new Promise(r=>setTimeout(r,320));
-        const geo = await geocode(`${c.address}, ${c.city||'Charlotte'}, ${c.state||'NC'}`);
-        if (geo.ok) try { await fetch(`/api/companies/${c.id}/geocode`, {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({lat:geo.lat,lng:geo.lng})}); } catch(_) {}
-        results.push({...c,lat:geo.lat,lng:geo.lng,geoOk:geo.ok,priority:getPriority(c)});
-        count++; if(!cancelled) setNearbyGeoCount(count);
-      }
-      if (!cancelled) { setNearbyMapped(results); setNearbyGeocoding(false); }
-    })();
-    return () => { cancelled = true; };
-  }, [nearbyCompanies]);
-
+  
   // Update nearby center when mode/stop changes
   useEffect(() => {
     if (nearbyCenterMode === 'gps') { setNearbyCenterPos(myGps); return; }
