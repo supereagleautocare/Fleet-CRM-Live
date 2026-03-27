@@ -203,7 +203,7 @@ export default function RoutePlanner({ embedded = false }) {
    if (nearbyCompanies.length === 0) return;
    let cancelled = false;
 
-  (async () => {
+  const startDelay = setTimeout(async () => {
     setNearbyGeocoding(true);
 
     // ── Step 1: Render everything with stored coords IMMEDIATELY ──
