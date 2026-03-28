@@ -4,7 +4,7 @@ import { api } from '../api.js';
 import { useApp } from '../App.jsx';
 import ScriptEditor from '../components/ScriptEditor.jsx';
 import ScoreCardSettings from '../components/ScoreCardSettings.jsx';
-import ScoreCardModal from '../components/ScoreCardModal.jsx';
+import ScoreCardModal from '../components/ScoreCardModal.jsx'; 
 
 export default function Settings() {
   const [rules, setRules]     = useState([]);
