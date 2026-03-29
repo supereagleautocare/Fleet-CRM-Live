@@ -26,7 +26,8 @@ function geocodeWorker() {
   if (geocodeQueue.length === 0) { geocodeWorkerRunning = false; return; }
   geocodeWorkerRunning = true;
   const { companyId, address, city } = geocodeQueue.shift();
-  const full = encodeURIComponent(`${address}, ${city || 'Charlotte'}, NC`);
+  const cleanAddr = address.replace(/\s*(suite|ste\.?|unit|apt\.?|floor|fl\.?|#)\s*\S+/gi, '').trim();
+      const full = encodeURIComponent(`${cleanAddr}, ${city || 'Charlotte'}, NC`);
   require('https').get(
     { hostname:'nominatim.openstreetmap.org', path:`/search?q=${full}&format=json&limit=1&countrycodes=us`, headers:{'User-Agent':'SuperEagleFleetCRM/1.0','Accept-Language':'en'} },
     res => {
