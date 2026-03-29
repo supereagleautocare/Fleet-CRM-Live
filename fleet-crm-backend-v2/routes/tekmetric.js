@@ -84,6 +84,9 @@ router.post('/settings', (req, res) => {
   if (oilInterval  != null) upsert.run('tekmetric_oil_interval',  String(oilInterval),   'Tekmetric Oil Interval (days)');
   if (carfaxKey    != null) upsert.run('carfax_api_key',          carfaxKey || '',       'Carfax API Key');
   if (carfaxEnabled != null) upsert.run('carfax_enabled',         carfaxEnabled ? '1' : '0', 'Carfax Enabled');
+  if (req.body.bizHoursStart != null) upsert.run('biz_hours_start', String(req.body.bizHoursStart), 'Business Hours Start (24h)');
+  if (req.body.bizHoursEnd   != null) upsert.run('biz_hours_end',   String(req.body.bizHoursEnd),   'Business Hours End (24h)');
+  if (req.body.floorPollSeconds != null) upsert.run('floor_poll_seconds', String(req.body.floorPollSeconds), 'Shop Floor Refresh (seconds)');
 
   res.json({ ok: true });
 });
@@ -92,19 +95,25 @@ router.post('/settings', (req, res) => {
 router.get('/settings', (req, res) => {
   const db  = require('../db/schema');
   const cfg = getTekConfig(db);
-  const poll       = db.prepare("SELECT value FROM config_settings WHERE key = 'tekmetric_poll_interval'").get()?.value || '5';
-  const oil        = db.prepare("SELECT value FROM config_settings WHERE key = 'tekmetric_oil_interval'").get()?.value  || '90';
-  const cfxKey     = db.prepare("SELECT value FROM config_settings WHERE key = 'carfax_api_key'").get()?.value           || '';
-  const cfxEnabled = db.prepare("SELECT value FROM config_settings WHERE key = 'carfax_enabled'").get()?.value           || '0';
+  const poll        = db.prepare("SELECT value FROM config_settings WHERE key = 'tekmetric_poll_interval'").get()?.value || '5';
+  const oil         = db.prepare("SELECT value FROM config_settings WHERE key = 'tekmetric_oil_interval'").get()?.value  || '90';
+  const cfxKey      = db.prepare("SELECT value FROM config_settings WHERE key = 'carfax_api_key'").get()?.value           || '';
+  const cfxEnabled  = db.prepare("SELECT value FROM config_settings WHERE key = 'carfax_enabled'").get()?.value           || '0';
+  const bizStart    = db.prepare("SELECT value FROM config_settings WHERE key = 'biz_hours_start'").get()?.value          || '7';
+  const bizEnd      = db.prepare("SELECT value FROM config_settings WHERE key = 'biz_hours_end'").get()?.value            || '19';
+  const floorPoll   = db.prepare("SELECT value FROM config_settings WHERE key = 'floor_poll_seconds'").get()?.value       || '60';
 
   res.json({
-    connected:     !!cfg.token,
-    shopId:        cfg.shopId,
-    env:           cfg.env,
-    pollInterval:  parseInt(poll),
-    oilInterval:   parseInt(oil),
-    carfaxKey:     cfxKey,
-    carfaxEnabled: cfxEnabled === '1',
+    connected:      !!cfg.token,
+    shopId:         cfg.shopId,
+    env:            cfg.env,
+    pollInterval:   parseInt(poll),
+    oilInterval:    parseInt(oil),
+    carfaxKey:      cfxKey,
+    carfaxEnabled:  cfxEnabled === '1',
+    bizHoursStart:  parseInt(bizStart),
+    bizHoursEnd:    parseInt(bizEnd),
+    floorPollSeconds: parseInt(floorPoll),
   });
 });
 
