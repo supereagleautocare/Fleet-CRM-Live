@@ -1214,7 +1214,7 @@ function PersistentMap({ routeStops=[], startGeo=null, returnHome=false, nearbyC
       const lastContactDate = c.last_contacted ? new Date(c.last_contacted).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : null;
       const followup = c.followup_due ? new Date(c.followup_due+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}) : null;
       const popup = `<div style="min-width:210px;max-width:260px;font-family:system-ui,sans-serif">
-        <div style="font-weight:800;font-size:13px;color:#0f172a;margin-bottom:2px">${c.name}</div>
+        <div style="font-weight:800;font-size:13px;margin-bottom:2px"><button onclick="window._navTo_${c.id}&&window._navTo_${c.id}()" style="background:none;border:none;cursor:pointer;font-weight:800;font-size:13px;color:#1e40af;text-decoration:underline;text-decoration-style:dotted;padding:0;font-family:system-ui">${c.name}</button></div>
         ${c.main_phone?`<div style="font-size:11px;color:#3b82f6;font-family:monospace;margin-bottom:3px">${c.main_phone}</div>`:''}
         ${c.address?`<div style="font-size:11px;color:#64748b;margin-bottom:4px">📍 ${c.address}${c.city?', '+c.city:''}</div>`:''}
         <span style="display:inline-block;padding:2px 8px;border-radius:10px;background:${col}22;border:1px solid ${col}55;font-size:10px;font-weight:700;color:${col};margin-bottom:5px">${PLBL[c.priority]}</span>
@@ -1226,6 +1226,7 @@ function PersistentMap({ routeStops=[], startGeo=null, returnHome=false, nearbyC
       const marker = L.marker([c.lat, c.lng], { icon: L.divIcon({ html:`<div style="width:${isInRoute?18:12}px;height:${isInRoute?18:12}px;border-radius:50%;background:${isInRoute?'#1e40af':col};border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,.3);cursor:pointer"></div>`, className:'', iconAnchor:[isInRoute?9:6,isInRoute?9:6] }) })
         .addTo(nearbyLayerRef.current).bindPopup(popup, {maxWidth:270});
       if (!isInRoute && onAddNearby) window[`_addNearby_${c.id}`] = () => { onAddNearby(c); map.closePopup(); };
+            window[`_navTo_${c.id}`] = () => { map.closePopup(); navigate('/companies?company=' + c.id); };
     });
   }, [nearbyCompanies.map(c=>c.id+'@'+(c.geoOk?1:0)).join('|'), routeStops.map(s=>(s.companyId??s.id)+':'+s.id).join(','), mapReady]);
 
