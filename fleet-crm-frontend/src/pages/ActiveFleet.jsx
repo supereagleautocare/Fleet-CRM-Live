@@ -111,10 +111,10 @@ function IdleTag({ updated }) {
 
 // ── SHOP FLOOR ────────────────────────────────────────────────────────────────
 function ShopFloor({ ros, companies, vehicles, employees, statuses, onRefresh, pollSeconds = 60 }) {
-  const [countdown, setCountdown] = React.useState(pollSeconds);
+  const [countdown, setCountdown] = useState(pollSeconds);
 
   // Fast auto-refresh while this tab is visible
-  React.useEffect(() => {
+  useEffect(() => {
     setCountdown(pollSeconds);
     const tick = setInterval(() => {
       setCountdown(prev => {
