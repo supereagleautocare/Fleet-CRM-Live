@@ -1,25 +1,11 @@
 /**
- * FLEET CRM — PIPELINE ROUTES
- *
- * GET  /api/pipeline/board          — counts per stage for dashboard
- * GET  /api/pipeline/stage/:stage   — companies in a stage
- * GET  /api/pipeline/calling        — calling queue (new + follow-up combined)
- * GET  /api/pipeline/mail           — mail queue
- * GET  /api/pipeline/email          — email queue
- * POST /api/pipeline/move/:id       — move company to stage (logs to history, no call counted)
- * POST /api/pipeline/star/:id       — toggle star on company
- * POST /api/pipeline/log-mail/:id   — log a physical mail action
- * POST /api/pipeline/log-email/:id  — log an email action
- *
- * Mail pieces / email templates
- * GET/POST/PUT/DELETE /api/pipeline/mail-pieces
- * GET/POST/PUT/DELETE /api/pipeline/email-templates
+ * FLEET CRM — PIPELINE ROUTES (PostgreSQL)
  */
 
 const express = require('express');
-const db      = require('../db/schema');
+const { pool } = require('../db/schema');
 const { requireAuth } = require('../middleware/auth');
-const { appendCallLog, cancelOldFollowUps, calcFollowUpDate, clearAllCompanyQueues, scheduleNextAction } = require('./shared');
+const { appendCallLog, calcFollowUpDate, clearAllCompanyQueues, scheduleNextAction } = require('./shared');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -27,20 +13,20 @@ router.use(requireAuth);
 const STAGES = ['new', 'call', 'mail', 'email', 'visit', 'dead'];
 
 // ── Helper: set company stage and log the move ────────────────────────────────
-function moveCompany(companyId, newStage, userId, userName, notes) {
-  const company = db.prepare('SELECT * FROM companies WHERE id = ?').get(companyId);
+async function moveCompany(companyId, newStage, userId, userName, notes) {
+  const { rows } = await pool.query('SELECT * FROM companies WHERE id = $1', [companyId]);
+  const company = rows[0];
   if (!company) return null;
 
   const oldStage = company.pipeline_stage || 'new';
   if (oldStage === newStage) return company;
 
-  db.prepare(`
-    UPDATE companies SET pipeline_stage = ?, stage_updated_at = datetime('now'), updated_at = datetime('now')
-    WHERE id = ?
-  `).run(newStage, companyId);
+  await pool.query(
+    `UPDATE companies SET pipeline_stage=$1, stage_updated_at=to_char(now(),'YYYY-MM-DD"T"HH24:MI:SS"Z"'), updated_at=to_char(now(),'YYYY-MM-DD"T"HH24:MI:SS"Z"') WHERE id=$2`,
+    [newStage, companyId]
+  );
 
-  const moveNote = notes || `Moved from ${oldStage} → ${newStage}`;
-  appendCallLog({
+  await appendCallLog({
     log_type: 'company',
     entity_id: company.id,
     company_id_str: company.company_id,
@@ -49,7 +35,7 @@ function moveCompany(companyId, newStage, userId, userName, notes) {
     industry: company.industry,
     action_type: 'Move',
     contact_type: 'Moved',
-    notes: moveNote,
+    notes: notes || `Moved from ${oldStage} → ${newStage}`,
     next_action: null,
     attempt_number: 0,
     logged_by: userId,
@@ -58,445 +44,484 @@ function moveCompany(companyId, newStage, userId, userName, notes) {
     counts_as_attempt: 0,
   });
 
-  return db.prepare('SELECT * FROM companies WHERE id = ?').get(companyId);
+  const { rows: updated } = await pool.query('SELECT * FROM companies WHERE id = $1', [companyId]);
+  return updated[0];
 }
 
 // ── Pipeline board counts ─────────────────────────────────────────────────────
-router.get('/board', (req, res) => {
-  const counts = {};
-  for (const stage of STAGES) {
-    const row = db.prepare("SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage = ? AND status = 'active'").get(stage);
-    counts[stage] = row.cnt;
-  }
-  const starred = db.prepare("SELECT COUNT(*) as cnt FROM companies WHERE is_starred = 1 AND status = 'active'").get();
-  counts.starred = starred.cnt;
+router.get('/board', async (req, res) => {
+  try {
+    const counts = {};
+    await Promise.all(STAGES.map(async stage => {
+      const { rows } = await pool.query(
+        "SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage=$1 AND status='active'", [stage]
+      );
+      counts[stage] = parseInt(rows[0].cnt);
+    }));
 
-  const recentCalls = db.prepare(`
-    SELECT COUNT(*) as cnt FROM call_log
-    WHERE log_type = 'company' AND action_type = 'Call'
-    AND logged_at >= datetime('now', '-7 days')
-  `).get();
-  const recentContacts = db.prepare(`
-    SELECT COUNT(*) as cnt FROM call_log
-    WHERE log_type = 'company' AND action_type != 'Move'
-    AND logged_at >= datetime('now', '-7 days')
-  `).get();
-  const totalContacts = db.prepare(`
-    SELECT COUNT(*) as cnt FROM call_log
-    WHERE log_type = 'company' AND action_type != 'Move'
-  `).get();
+    const [starredRes, recentCallsRes, recentContactsRes, totalContactsRes] = await Promise.all([
+      pool.query("SELECT COUNT(*) as cnt FROM companies WHERE is_starred=1 AND status='active'"),
+      pool.query("SELECT COUNT(*) as cnt FROM call_log WHERE log_type='company' AND action_type='Call' AND logged_at >= now() - interval '7 days'"),
+      pool.query("SELECT COUNT(*) as cnt FROM call_log WHERE log_type='company' AND action_type!='Move' AND logged_at >= now() - interval '7 days'"),
+      pool.query("SELECT COUNT(*) as cnt FROM call_log WHERE log_type='company' AND action_type!='Move'"),
+    ]);
 
-  res.json({ counts, recentCalls: recentCalls.cnt, recentContacts: recentContacts.cnt, totalContacts: totalContacts.cnt });
+    counts.starred = parseInt(starredRes.rows[0].cnt);
+    res.json({
+      counts,
+      recentCalls:    parseInt(recentCallsRes.rows[0].cnt),
+      recentContacts: parseInt(recentContactsRes.rows[0].cnt),
+      totalContacts:  parseInt(totalContactsRes.rows[0].cnt),
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// ── Sidebar badge counts (single cheap query) ─────────────────────────────────
-// Used by App.jsx refreshCounts. Returns just 4 numbers, no row data.
-router.get('/counts', (req, res) => {
-  const calling = db.prepare(`
-    SELECT COUNT(DISTINCT c.id) as cnt
-    FROM companies c
-    WHERE c.status = 'active'
-      AND c.pipeline_stage IN ('new','call')
-      AND (
-        EXISTS (
-          SELECT 1 FROM follow_ups fu
-          WHERE fu.entity_id = c.id AND fu.source_type = 'company'
-            AND fu.due_date <= date('now')
-        )
-        OR EXISTS (
-          SELECT 1 FROM calling_queue cq
-          WHERE cq.entity_id = c.id AND cq.queue_type = 'company'
-        )
-        OR (SELECT COUNT(*) FROM call_log WHERE entity_id=c.id AND log_type='company' AND log_category='call') = 0
-      )
-  `).get().cnt;
-
-const mail  = db.prepare("SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='mail'  AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND is_locked=0 AND due_date <= date('now'))").get().cnt;
-  const email = db.prepare("SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='email' AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND is_locked=0 AND due_date <= date('now'))").get().cnt;
-
-  const visits = db.prepare("SELECT COUNT(*) as cnt FROM visit_queue WHERE scheduled_date <= date('now')").get().cnt;   res.json({ calling, mail, email, visits });
+// ── Sidebar badge counts ──────────────────────────────────────────────────────
+router.get('/counts', async (req, res) => {
+  try {
+    const [callingRes, mailRes, emailRes, visitsRes] = await Promise.all([
+      pool.query(`
+        SELECT COUNT(DISTINCT c.id) as cnt FROM companies c
+        WHERE c.status='active' AND c.pipeline_stage IN ('new','call')
+          AND (
+            EXISTS (SELECT 1 FROM follow_ups fu WHERE fu.entity_id=c.id AND fu.source_type='company' AND fu.due_date <= current_date)
+            OR EXISTS (SELECT 1 FROM calling_queue cq WHERE cq.entity_id=c.id AND cq.queue_type='company')
+            OR (SELECT COUNT(*) FROM call_log WHERE entity_id=c.id AND log_type='company' AND log_category='call') = 0
+          )
+      `),
+      pool.query(`SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='mail' AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND is_locked=0 AND due_date <= current_date)`),
+      pool.query(`SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='email' AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND is_locked=0 AND due_date <= current_date)`),
+      pool.query(`SELECT COUNT(*) as cnt FROM visit_queue WHERE scheduled_date <= current_date`),
+    ]);
+    res.json({
+      calling: parseInt(callingRes.rows[0].cnt),
+      mail:    parseInt(mailRes.rows[0].cnt),
+      email:   parseInt(emailRes.rows[0].cnt),
+      visits:  parseInt(visitsRes.rows[0].cnt),
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// ── 7-day forecast — due counts per day per queue type ──────────────────────
-router.get('/forecast', (req, res) => {
-  const today = new Date().toISOString().split('T')[0];
-  const overdue = {
-    label: 'Overdue',
-    isOverdue: true,
-    calling: db.prepare("SELECT COUNT(*) as cnt FROM follow_ups WHERE source_type='company' AND due_date < ?").get(today).cnt,
-    mail:    db.prepare("SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='mail'  AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND due_date < ?)").get(today).cnt,
-    email:   db.prepare("SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='email' AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND due_date < ?)").get(today).cnt,
-    visits:  db.prepare("SELECT COUNT(*) as cnt FROM visit_queue WHERE scheduled_date < ?").get(today).cnt,
-  };
-  const days = [overdue];
-  for (let i = 0; i < 7; i++) {
-    const d = new Date();
-    d.setDate(d.getDate() + i);
-    const ds = d.toISOString().split('T')[0];
-    const label = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+// ── 7-day forecast ────────────────────────────────────────────────────────────
+router.get('/forecast', async (req, res) => {
+  try {
+    const today = new Date().toISOString().split('T')[0];
 
-    const calling = db.prepare(
-      "SELECT COUNT(*) as cnt FROM follow_ups WHERE source_type='company' AND due_date=?"
-    ).get(ds).cnt;
-    const mail  = db.prepare(
-      "SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='mail' AND status='active' AND (SELECT COUNT(*) FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND due_date=?) > 0"
-    ).get(ds).cnt;
-    const email = db.prepare(
-      "SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='email' AND status='active' AND (SELECT COUNT(*) FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND due_date=?) > 0"
-    ).get(ds).cnt;
-    const visits = db.prepare(
-      "SELECT COUNT(*) as cnt FROM visit_queue WHERE scheduled_date=?"
-    ).get(ds).cnt;
+    const [oc, om, oe, ov] = await Promise.all([
+      pool.query("SELECT COUNT(*) as cnt FROM follow_ups WHERE source_type='company' AND due_date < $1", [today]),
+      pool.query(`SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='mail' AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND due_date < $1)`, [today]),
+      pool.query(`SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='email' AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND due_date < $1)`, [today]),
+      pool.query("SELECT COUNT(*) as cnt FROM visit_queue WHERE scheduled_date < $1", [today]),
+    ]);
 
-    days.push({ date: ds, label, calling, mail, email, visits, total: calling + mail + email + visits, isToday: i === 0 });
-  }
-  res.json(days);
+    const days = [{
+      label: 'Overdue', isOverdue: true,
+      calling: parseInt(oc.rows[0].cnt), mail: parseInt(om.rows[0].cnt),
+      email:   parseInt(oe.rows[0].cnt), visits: parseInt(ov.rows[0].cnt),
+    }];
+
+    for (let i = 0; i < 7; i++) {
+      const d = new Date();
+      d.setDate(d.getDate() + i);
+      const ds = d.toISOString().split('T')[0];
+      const label = i === 0 ? 'Today' : i === 1 ? 'Tomorrow'
+        : d.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
+
+      const [dc, dm, de, dv] = await Promise.all([
+        pool.query("SELECT COUNT(*) as cnt FROM follow_ups WHERE source_type='company' AND due_date=$1", [ds]),
+        pool.query(`SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='mail' AND status='active' AND (SELECT COUNT(*) FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND due_date=$1) > 0`, [ds]),
+        pool.query(`SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='email' AND status='active' AND (SELECT COUNT(*) FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND due_date=$1) > 0`, [ds]),
+        pool.query("SELECT COUNT(*) as cnt FROM visit_queue WHERE scheduled_date=$1", [ds]),
+      ]);
+
+      const calling = parseInt(dc.rows[0].cnt), mail = parseInt(dm.rows[0].cnt),
+            email   = parseInt(de.rows[0].cnt), visits = parseInt(dv.rows[0].cnt);
+      days.push({ date: ds, label, calling, mail, email, visits, total: calling+mail+email+visits, isToday: i===0 });
+    }
+    res.json(days);
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ── Companies in a stage ──────────────────────────────────────────────────────
-router.get('/stage/:stage', (req, res) => {
-  const { stage } = req.params;
-  const { starred } = req.query;
+router.get('/stage/:stage', async (req, res) => {
+  try {
+    const { stage } = req.params;
+    const { starred } = req.query;
+    const params = [];
+    let where = `WHERE c.status = 'active'`;
 
-  let sql = `
-    SELECT c.*,
-      cc.name  as preferred_contact_name,
-      cc.role_title as preferred_role,
-      cc.direct_line as preferred_direct_line,
-      cc.email as preferred_email,
-      cl.contact_type as last_contact_type,
-      cl.logged_at    as last_contacted,
-      cl.next_action  as last_next_action,
-      (SELECT COUNT(*) FROM call_log WHERE entity_id = c.id AND log_type='company' AND action_type != 'Move') as total_contacts
-    FROM companies c
-    LEFT JOIN company_contacts cc ON cc.company_id = c.company_id AND cc.is_preferred = 1
-    LEFT JOIN (
-      SELECT entity_id, contact_type, logged_at, next_action
-      FROM call_log WHERE log_type = 'company' AND log_category = 'call'
-      AND id IN (SELECT MAX(id) FROM call_log WHERE log_type='company' AND log_category='call' GROUP BY entity_id)
-    ) cl ON cl.entity_id = c.id
-    WHERE c.status = 'active'
-  `;
-  const params = [];
+    if (starred === '1') {
+      where += ` AND c.is_starred = 1`;
+    } else if (stage !== 'all') {
+      params.push(stage);
+      where += ` AND c.pipeline_stage = $${params.length}`;
+    }
 
-  if (starred === '1') {
-    sql += ` AND c.is_starred = 1`;
-  } else if (stage !== 'all') {
-    sql += ` AND c.pipeline_stage = ?`;
-    params.push(stage);
-  }
-
-  sql += ` ORDER BY c.is_starred DESC, cl.logged_at ASC, c.name ASC`;
-
-  res.json(db.prepare(sql).all(...params));
+    const { rows } = await pool.query(`
+      SELECT c.*,
+        cc.name           as preferred_contact_name,
+        cc.role_title     as preferred_role,
+        cc.direct_line    as preferred_direct_line,
+        cc.email          as preferred_email,
+        cl.contact_type   as last_contact_type,
+        cl.logged_at      as last_contacted,
+        cl.next_action    as last_next_action,
+        (SELECT COUNT(*) FROM call_log WHERE entity_id=c.id AND log_type='company' AND action_type!='Move') as total_contacts
+      FROM companies c
+      LEFT JOIN company_contacts cc ON cc.company_id=c.company_id AND cc.is_preferred=1
+      LEFT JOIN (
+        SELECT DISTINCT ON (entity_id) entity_id, contact_type, logged_at, next_action
+        FROM call_log WHERE log_type='company' AND log_category='call'
+        ORDER BY entity_id, id DESC
+      ) cl ON cl.entity_id=c.id
+      ${where}
+      ORDER BY c.is_starred DESC, cl.logged_at ASC, c.name ASC
+    `, params);
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// ── Calling queue — new + call stage companies due today ──────────────────────
-// Returns calling_queue_id (for first-call companies in the manual queue) AND
-// followup_id (for follow-up companies). The frontend uses these to route the
-// complete call to the correct endpoint.
-router.get('/calling', (req, res) => {
-  const { filter, industry, search, upcoming } = req.query;
+// ── Calling queue ─────────────────────────────────────────────────────────────
+router.get('/calling', async (req, res) => {
+  try {
+    const { filter, industry, search, upcoming } = req.query;
+    const params = [];
+    let sql = `
+      SELECT c.*,
+        cc.name        as preferred_contact_name,
+        cc.role_title  as preferred_role,
+        cc.direct_line as preferred_direct_line,
+        cc.email       as preferred_email,
+        fu.id          as followup_id,
+        fu.due_date,
+        fu.source_type,
+        cq.id          as calling_queue_id,
+        cl_last.contact_type as last_contact_type,
+        cl_last.logged_at    as last_contacted,
+        cl_last.contact_name as last_contact_name,
+        cl_last.notes        as last_notes,
+        (SELECT COUNT(*) FROM call_log WHERE entity_id=c.id AND log_type='company' AND action_type!='Move') as call_count
+      FROM companies c
+      LEFT JOIN company_contacts cc ON cc.company_id=c.company_id AND cc.is_preferred=1
+      LEFT JOIN (
+        SELECT DISTINCT ON (entity_id) id, entity_id, due_date, source_type
+        FROM follow_ups WHERE source_type='company' AND is_locked=0
+        ORDER BY entity_id, id DESC
+      ) fu ON fu.entity_id=c.id
+      LEFT JOIN calling_queue cq ON cq.entity_id=c.id AND cq.queue_type='company'
+      LEFT JOIN (
+        SELECT DISTINCT ON (entity_id) entity_id, contact_type, logged_at, contact_name, notes
+        FROM call_log WHERE log_type='company' AND log_category='call'
+        ORDER BY entity_id, id DESC
+      ) cl_last ON cl_last.entity_id=c.id
+      WHERE c.status='active' AND c.pipeline_stage IN ('new','call')
+    `;
 
-  // JOIN always fetches most recent follow-up (no date filter) so DUE column populates correctly.
-  // WHERE clause controls "due today" vs "all" view.
-  let sql = `
-    SELECT c.*,
-      cc.name        as preferred_contact_name,
-      cc.role_title  as preferred_role,
-      cc.direct_line as preferred_direct_line,
-      cc.email       as preferred_email,
-      fu.id          as followup_id,
-      fu.due_date,
-      fu.source_type,
-      cq.id          as calling_queue_id,
-      cl_last.contact_type as last_contact_type,
-      cl_last.logged_at    as last_contacted,
-      cl_last.contact_name as last_contact_name,
-      cl_last.notes        as last_notes,
-      (SELECT COUNT(*) FROM call_log WHERE entity_id = c.id AND log_type='company' AND action_type != 'Move') as call_count
-    FROM companies c
-    LEFT JOIN company_contacts cc ON cc.company_id = c.company_id AND cc.is_preferred = 1
-    LEFT JOIN follow_ups fu
-           ON fu.entity_id = c.id AND fu.source_type = 'company' AND fu.is_locked = 0
-          AND fu.id = (SELECT MAX(id) FROM follow_ups WHERE entity_id = c.id AND source_type = 'company' AND is_locked = 0)
-    LEFT JOIN calling_queue cq ON cq.entity_id = c.id AND cq.queue_type = 'company'
-    LEFT JOIN (
-      SELECT entity_id, contact_type, logged_at, contact_name, notes
-      FROM call_log WHERE log_type='company' AND log_category='call'
-      AND id IN (SELECT MAX(id) FROM call_log WHERE log_type='company' AND log_category='call' GROUP BY entity_id)
-    ) cl_last ON cl_last.entity_id = c.id
-    WHERE c.status = 'active'
-      AND (c.pipeline_stage IN ('new','call'))
-  `;
+    if (upcoming === '1') {
+      sql += ` AND (fu.id IS NOT NULL OR cq.id IS NOT NULL OR c.pipeline_stage='new'
+                OR (SELECT COUNT(*) FROM call_log WHERE entity_id=c.id AND log_type='company' AND log_category='call')=0)`;
+    } else {
+      sql += ` AND (
+        (fu.id IS NOT NULL AND fu.due_date <= current_date)
+        OR cq.id IS NOT NULL
+        OR c.pipeline_stage='new'
+        OR (SELECT COUNT(*) FROM call_log WHERE entity_id=c.id AND log_type='company' AND log_category='call')=0
+      )`;
+    }
 
-  const params = [];
+    if (filter === 'first')    { sql += ` AND (SELECT COUNT(*) FROM call_log WHERE entity_id=c.id AND log_type='company' AND log_category='call' AND counts_as_attempt=1)=0`; }
+    if (filter === 'followup') { sql += ` AND (SELECT COUNT(*) FROM call_log WHERE entity_id=c.id AND log_type='company' AND log_category='call' AND counts_as_attempt=1)>0`; }
+    if (filter === 'overdue')  { sql += ` AND fu.due_date < current_date`; }
+    if (industry) { params.push(industry); sql += ` AND c.industry=$${params.length}`; }
+    if (search)   { params.push(`%${search}%`); sql += ` AND (c.name ILIKE $${params.length} OR c.industry ILIKE $${params.length})`; }
 
-  if (upcoming === '1') {
-    // "All" toggle — show everything in new/call stage that has any relevance
-    sql += ` AND (fu.id IS NOT NULL OR cq.id IS NOT NULL OR c.pipeline_stage = 'new'
-              OR (SELECT COUNT(*) FROM call_log WHERE entity_id=c.id AND log_type='company' AND log_category='call') = 0)`;
-  } else {
-    // Default "All Due" — only companies due today/overdue, in queue, or brand new
-    sql += ` AND (
-      (fu.id IS NOT NULL AND fu.due_date <= date('now'))
-      OR cq.id IS NOT NULL
-      OR c.pipeline_stage = 'new'
-      OR (SELECT COUNT(*) FROM call_log WHERE entity_id=c.id AND log_type='company' AND log_category='call') = 0
-    )`;
-  }
-
-  if (filter === 'first')    { sql += ` AND (SELECT COUNT(*) FROM call_log WHERE entity_id=c.id AND log_type='company' AND log_category='call' AND counts_as_attempt=1) = 0`; }
-  if (filter === 'followup') { sql += ` AND (SELECT COUNT(*) FROM call_log WHERE entity_id=c.id AND log_type='company' AND log_category='call' AND counts_as_attempt=1) > 0`; }
-  if (filter === 'overdue')  { sql += ` AND fu.due_date < date('now')`; }
-  if (industry) { sql += ` AND c.industry = ?`; params.push(industry); }
-  if (search)   { sql += ` AND (c.name LIKE ? OR c.industry LIKE ?)`; params.push(`%${search}%`, `%${search}%`); }
-
-  sql += ` ORDER BY fu.due_date ASC, c.name ASC`;
-
-  const rows = db.prepare(sql).all(...params);
-  res.json(rows);
+    sql += ` ORDER BY fu.due_date ASC, c.name ASC`;
+    const { rows } = await pool.query(sql, params);
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ── Mail queue ────────────────────────────────────────────────────────────────
-router.get('/mail', (req, res) => {
-  const { upcoming } = req.query;
-  const rows = db.prepare(`
-    SELECT c.*,
-      cc.name as preferred_contact_name,
-      cc.role_title as preferred_role,
-      fu.due_date,
-      cl.contact_type as last_contact_type,
-      cl.logged_at    as last_contacted,
-      (SELECT COUNT(*) FROM call_log WHERE entity_id = c.id AND log_type='company' AND action_type != 'Move') as call_count
-    FROM companies c
-    LEFT JOIN company_contacts cc ON cc.company_id = c.company_id AND cc.is_preferred = 1
-    LEFT JOIN follow_ups fu ON fu.entity_id = c.id AND fu.source_type = 'company' AND fu.is_locked = 0
-    LEFT JOIN (
-      SELECT entity_id, contact_type, logged_at FROM call_log
-      WHERE log_type='company' AND id IN (SELECT MAX(id) FROM call_log WHERE log_type='company' GROUP BY entity_id)
-    ) cl ON cl.entity_id = c.id
-    WHERE c.status = 'active' AND c.pipeline_stage = 'mail'
-    ORDER BY fu.due_date ASC, c.name ASC
-  `).all();
-  res.json(rows);
+router.get('/mail', async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT c.*,
+        cc.name           as preferred_contact_name,
+        cc.role_title     as preferred_role,
+        fu.due_date,
+        cl.contact_type   as last_contact_type,
+        cl.logged_at      as last_contacted,
+        (SELECT COUNT(*) FROM call_log WHERE entity_id=c.id AND log_type='company' AND action_type!='Move') as call_count
+      FROM companies c
+      LEFT JOIN company_contacts cc ON cc.company_id=c.company_id AND cc.is_preferred=1
+      LEFT JOIN (
+        SELECT DISTINCT ON (entity_id) entity_id, due_date
+        FROM follow_ups WHERE source_type='company' AND is_locked=0
+        ORDER BY entity_id, id DESC
+      ) fu ON fu.entity_id=c.id
+      LEFT JOIN (
+        SELECT DISTINCT ON (entity_id) entity_id, contact_type, logged_at
+        FROM call_log WHERE log_type='company'
+        ORDER BY entity_id, id DESC
+      ) cl ON cl.entity_id=c.id
+      WHERE c.status='active' AND c.pipeline_stage='mail'
+      ORDER BY fu.due_date ASC, c.name ASC
+    `);
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ── Email queue ───────────────────────────────────────────────────────────────
-router.get('/email', (req, res) => {
-  const rows = db.prepare(`
-   SELECT c.*,
-      cc.name as preferred_contact_name,
-      cc.role_title as preferred_role,
-      cc.email as preferred_email,
-      fu.due_date,
-      cl.contact_type as last_contact_type,
-      cl.logged_at    as last_contacted,
-      (SELECT COUNT(*) FROM call_log WHERE entity_id = c.id AND log_type='company' AND action_type != 'Move') as call_count
-    FROM companies c
-    LEFT JOIN company_contacts cc ON cc.company_id = c.company_id AND cc.is_preferred = 1
-    LEFT JOIN follow_ups fu ON fu.entity_id = c.id AND fu.source_type = 'company' AND fu.is_locked = 0
-    LEFT JOIN (
-      SELECT entity_id, contact_type, logged_at FROM call_log
-      WHERE log_type='company' AND id IN (SELECT MAX(id) FROM call_log WHERE log_type='company' GROUP BY entity_id)
-    ) cl ON cl.entity_id = c.id
-    WHERE c.status = 'active' AND c.pipeline_stage = 'email'
-    ORDER BY fu.due_date ASC, c.name ASC
-  `).all();
-  res.json(rows);
+router.get('/email', async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT c.*,
+        cc.name           as preferred_contact_name,
+        cc.role_title     as preferred_role,
+        cc.email          as preferred_email,
+        fu.due_date,
+        cl.contact_type   as last_contact_type,
+        cl.logged_at      as last_contacted,
+        (SELECT COUNT(*) FROM call_log WHERE entity_id=c.id AND log_type='company' AND action_type!='Move') as call_count
+      FROM companies c
+      LEFT JOIN company_contacts cc ON cc.company_id=c.company_id AND cc.is_preferred=1
+      LEFT JOIN (
+        SELECT DISTINCT ON (entity_id) entity_id, due_date
+        FROM follow_ups WHERE source_type='company' AND is_locked=0
+        ORDER BY entity_id, id DESC
+      ) fu ON fu.entity_id=c.id
+      LEFT JOIN (
+        SELECT DISTINCT ON (entity_id) entity_id, contact_type, logged_at
+        FROM call_log WHERE log_type='company'
+        ORDER BY entity_id, id DESC
+      ) cl ON cl.entity_id=c.id
+      WHERE c.status='active' AND c.pipeline_stage='email'
+      ORDER BY fu.due_date ASC, c.name ASC
+    `);
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ── Move company to stage ─────────────────────────────────────────────────────
-router.post('/move/:id', (req, res) => {
-  const { stage, notes, due_date } = req.body;
-  if (!STAGES.includes(stage)) return res.status(400).json({ error: 'Invalid stage.' });
-
-const company = moveCompany(req.params.id, stage, req.user.id, req.user.name, notes);
-  if (!company) return res.status(404).json({ error: 'Company not found.' });
-
- clearAllCompanyQueues(company.id);
+router.post('/move/:id', async (req, res) => {
   try {
+    const { stage, notes, due_date } = req.body;
+    if (!STAGES.includes(stage)) return res.status(400).json({ error: 'Invalid stage.' });
+
+    const company = await moveCompany(req.params.id, stage, req.user.id, req.user.name, notes);
+    if (!company) return res.status(404).json({ error: 'Company not found.' });
+
+    await clearAllCompanyQueues(company.id);
+
     if (['call','mail','email','visit'].includes(stage)) {
-      const autoDate = due_date || (() => {
-        try { return calcFollowUpDate('company', stage === 'call' ? 'Call Back' : stage === 'mail' ? 'Mail' : stage === 'email' ? 'Email' : 'Visit'); } catch(_) { return null; }
-      })() || new Date(Date.now() + 30*24*60*60*1000).toISOString().split('T')[0];
-      db.prepare(`
-        INSERT OR REPLACE INTO follow_ups (source_type, entity_id, entity_name, phone, industry, due_date, next_action)
-        VALUES ('company', ?, ?, ?, ?, ?, ?)
-      `).run(company.id, company.name, company.main_phone, company.industry, autoDate,
-        stage === 'call' ? 'Call' : stage === 'mail' ? 'Mail' : stage === 'email' ? 'Email' : 'Visit');
+      let autoDate = due_date;
+      if (!autoDate) {
+        try {
+          autoDate = await calcFollowUpDate('company',
+            stage==='call' ? 'Call Back' : stage==='mail' ? 'Mail' : stage==='email' ? 'Email' : 'Visit');
+        } catch(_) {}
+      }
+      if (!autoDate) autoDate = new Date(Date.now() + 30*24*60*60*1000).toISOString().split('T')[0];
+
+      const nextAction = stage==='call' ? 'Call' : stage==='mail' ? 'Mail' : stage==='email' ? 'Email' : 'Visit';
+      await pool.query(`
+        INSERT INTO follow_ups (source_type, entity_id, entity_name, phone, industry, due_date, next_action)
+        VALUES ('company',$1,$2,$3,$4,$5,$6)
+        ON CONFLICT DO NOTHING
+      `, [company.id, company.name, company.main_phone, company.industry, autoDate, nextAction]);
 
       if (stage === 'visit') {
-        const preferred = db.prepare('SELECT * FROM company_contacts WHERE company_id=? AND is_preferred=1').get(company.company_id);
-        db.prepare(`INSERT OR IGNORE INTO visit_queue (company_id, entity_id, entity_name, scheduled_date, address, city, contact_name, direct_line, email)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-          .run(company.company_id, company.id, company.name, autoDate, company.address||'', company.city||'',
-               preferred?.name||null, preferred?.direct_line||null, preferred?.email||null);
+        const { rows: prefRows } = await pool.query(
+          'SELECT * FROM company_contacts WHERE company_id=$1 AND is_preferred=1', [company.company_id]
+        );
+        const preferred = prefRows[0];
+        await pool.query(`
+          INSERT INTO visit_queue (company_id, entity_id, entity_name, scheduled_date, address, city, contact_name, direct_line, email)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+          ON CONFLICT DO NOTHING
+        `, [company.company_id, company.id, company.name, autoDate,
+            company.address||'', company.city||'',
+            preferred?.name||null, preferred?.direct_line||null, preferred?.email||null]);
       }
     }
-  } catch(e) {
-    return res.status(500).json({ error: 'Move failed: ' + e.message });
-  }
 
-  res.json(company);
+    res.json(company);
+  } catch (err) { res.status(500).json({ error: 'Move failed: ' + err.message }); }
 });
 
 // ── Update company status ─────────────────────────────────────────────────────
-router.put('/status/:id', (req, res) => {
-  const { status } = req.body;
-  const valid = ['prospect','interested','customer','dead'];
-  if (!valid.includes(status)) return res.status(400).json({ error: 'Invalid status.' });
-  db.prepare("UPDATE companies SET company_status = ?, updated_at = datetime('now') WHERE id = ?").run(status, req.params.id);
-  res.json({ company_status: status });
+router.put('/status/:id', async (req, res) => {
+  try {
+    const { status } = req.body;
+    const valid = ['prospect','interested','customer','dead'];
+    if (!valid.includes(status)) return res.status(400).json({ error: 'Invalid status.' });
+    await pool.query(
+      `UPDATE companies SET company_status=$1, updated_at=to_char(now(),'YYYY-MM-DD"T"HH24:MI:SS"Z"') WHERE id=$2`,
+      [status, req.params.id]
+    );
+    res.json({ company_status: status });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ── Toggle star ───────────────────────────────────────────────────────────────
-router.post('/star/:id', (req, res) => {
-  const company = db.prepare('SELECT * FROM companies WHERE id = ?').get(req.params.id);
-  if (!company) return res.status(404).json({ error: 'Company not found.' });
-
-  const newVal = company.is_starred ? 0 : 1;
-  db.prepare("UPDATE companies SET is_starred = ?, updated_at = datetime('now') WHERE id = ?").run(newVal, req.params.id);
-  res.json({ is_starred: newVal });
+router.post('/star/:id', async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT is_starred FROM companies WHERE id=$1', [req.params.id]);
+    if (!rows[0]) return res.status(404).json({ error: 'Company not found.' });
+    const newVal = rows[0].is_starred ? 0 : 1;
+    await pool.query(
+      `UPDATE companies SET is_starred=$1, updated_at=to_char(now(),'YYYY-MM-DD"T"HH24:MI:SS"Z"') WHERE id=$2`,
+      [newVal, req.params.id]
+    );
+    res.json({ is_starred: newVal });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ── Log mail action ───────────────────────────────────────────────────────────
-router.post('/log-mail/:id', (req, res) => {
-  const company = db.prepare('SELECT * FROM companies WHERE id = ?').get(req.params.id);
-  if (!company) return res.status(404).json({ error: 'Company not found.' });
-
-  const { mail_piece, contact_type, notes, next_action, next_action_date_override } = req.body;
-
-  const priorAttempts = db.prepare(
-    "SELECT COUNT(*) as cnt FROM call_log WHERE entity_id = ? AND log_type = 'company' AND log_category = 'mail'"
-  ).get(company.id).cnt;
-
-  // date calculated inside scheduleNextAction
-
-  db.exec('BEGIN TRANSACTION');
+router.post('/log-mail/:id', async (req, res) => {
+  const client = await pool.connect();
   try {
-    const logEntry = appendCallLog({
-      log_type: 'company',
-      entity_id: company.id,
-      company_id_str: company.company_id,
-      entity_name: company.name,
-      phone: company.main_phone,
-      industry: company.industry,
-      action_type: 'Mail',
-      contact_type: contact_type || 'Mail Sent',
-      notes: notes || null,
-      next_action: next_action || 'Call',
-      next_action_date: null,
-      attempt_number: priorAttempts + 1,
-      logged_by: req.user.id,
-      logged_by_name: req.user.name,
-      log_category: 'mail',
-      mail_piece: mail_piece || null,
-      counts_as_attempt: 0,
+    const { rows: coRows } = await client.query('SELECT * FROM companies WHERE id=$1', [req.params.id]);
+    const company = coRows[0];
+    if (!company) return res.status(404).json({ error: 'Company not found.' });
+
+    const { mail_piece, contact_type, notes, next_action, next_action_date_override } = req.body;
+    const { rows: priorRows } = await client.query(
+      "SELECT COUNT(*) as cnt FROM call_log WHERE entity_id=$1 AND log_type='company' AND log_category='mail'",
+      [company.id]
+    );
+
+    await client.query('BEGIN');
+    const logEntry = await appendCallLog({
+      log_type: 'company', entity_id: company.id, company_id_str: company.company_id,
+      entity_name: company.name, phone: company.main_phone, industry: company.industry,
+      action_type: 'Mail', contact_type: contact_type || 'Mail Sent',
+      notes: notes || null, next_action: next_action || 'Call', next_action_date: null,
+      attempt_number: parseInt(priorRows[0].cnt) + 1,
+      logged_by: req.user.id, logged_by_name: req.user.name,
+      log_category: 'mail', mail_piece: mail_piece || null, counts_as_attempt: 0,
     });
 
-    scheduleNextAction(db, {
+    await scheduleNextAction(pool, {
       company, contact_type: contact_type||'Mail Sent', next_action: next_action||'Call',
-      next_action_date_override,
-      contact_name: null, direct_line: null, email: null, log_id: logEntry.id,
+      next_action_date_override, contact_name: null, direct_line: null, email: null, log_id: logEntry.id,
     });
 
-    db.exec('COMMIT');
+    await client.query('COMMIT');
+    res.json({ ok: true });
   } catch (e) {
-    db.exec('ROLLBACK');
-    return res.status(500).json({ error: 'Failed to log mail: ' + e.message });
-  }
-
-  res.json({ ok: true });
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: 'Failed to log mail: ' + e.message });
+  } finally { client.release(); }
 });
 
 // ── Log email action ──────────────────────────────────────────────────────────
-router.post('/log-email/:id', (req, res) => {
-  const company = db.prepare('SELECT * FROM companies WHERE id = ?').get(req.params.id);
-  if (!company) return res.status(404).json({ error: 'Company not found.' });
-
-  const { email_template, email_to, contact_type, notes, next_action, next_action_date_override } = req.body;
-
-  const priorAttempts = db.prepare(
-    "SELECT COUNT(*) as cnt FROM call_log WHERE entity_id = ? AND log_type = 'company' AND log_category = 'email'"
-  ).get(company.id).cnt;
-
-  // date calculated inside scheduleNextAction
-
-  db.exec('BEGIN TRANSACTION');
+router.post('/log-email/:id', async (req, res) => {
+  const client = await pool.connect();
   try {
-    const logEntry = appendCallLog({
-      log_type: 'company',
-      entity_id: company.id,
-      company_id_str: company.company_id,
-      entity_name: company.name,
-      phone: company.main_phone,
-      industry: company.industry,
-      action_type: 'Email',
-      contact_type: contact_type || 'Email Sent',
-      notes: notes || null,
-      next_action: next_action || 'Call',
-      next_action_date: null,
-      attempt_number: priorAttempts + 1,
-      logged_by: req.user.id,
-      logged_by_name: req.user.name,
-      log_category: 'email',
-      email_template: email_template || null,
-      email_to: email_to || null,
-      counts_as_attempt: 0,
+    const { rows: coRows } = await client.query('SELECT * FROM companies WHERE id=$1', [req.params.id]);
+    const company = coRows[0];
+    if (!company) return res.status(404).json({ error: 'Company not found.' });
+
+    const { email_template, email_to, contact_type, notes, next_action, next_action_date_override } = req.body;
+    const { rows: priorRows } = await client.query(
+      "SELECT COUNT(*) as cnt FROM call_log WHERE entity_id=$1 AND log_type='company' AND log_category='email'",
+      [company.id]
+    );
+
+    await client.query('BEGIN');
+    const logEntry = await appendCallLog({
+      log_type: 'company', entity_id: company.id, company_id_str: company.company_id,
+      entity_name: company.name, phone: company.main_phone, industry: company.industry,
+      action_type: 'Email', contact_type: contact_type || 'Email Sent',
+      notes: notes || null, next_action: next_action || 'Call', next_action_date: null,
+      attempt_number: parseInt(priorRows[0].cnt) + 1,
+      logged_by: req.user.id, logged_by_name: req.user.name,
+      log_category: 'email', email_template: email_template || null,
+      email_to: email_to || null, counts_as_attempt: 0,
     });
 
-    scheduleNextAction(db, {
+    await scheduleNextAction(pool, {
       company, contact_type: contact_type||'Email Sent', next_action: next_action||'Call',
-      next_action_date_override,
-      contact_name: null, direct_line: null, email: null, log_id: logEntry.id,
+      next_action_date_override, contact_name: null, direct_line: null, email: null, log_id: logEntry.id,
     });
 
-    db.exec('COMMIT');
+    await client.query('COMMIT');
+    res.json({ ok: true });
   } catch (e) {
-    db.exec('ROLLBACK');
-    return res.status(500).json({ error: 'Failed to log email: ' + e.message });
-  }
-
-  res.json({ ok: true });
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: 'Failed to log email: ' + e.message });
+  } finally { client.release(); }
 });
 
 // ── Mail pieces ───────────────────────────────────────────────────────────────
-router.get('/mail-pieces', (req, res) => res.json(db.prepare('SELECT * FROM mail_pieces ORDER BY sort_order, name').all()));
-router.post('/mail-pieces', (req, res) => {
-  const { name, type = 'postcard', notes } = req.body;
-  if (!name?.trim()) return res.status(400).json({ error: 'Name required.' });
-  const r = db.prepare("INSERT INTO mail_pieces (name, type, notes) VALUES (?,?,?)").run(name.trim(), type, notes||null);
-  res.status(201).json(db.prepare('SELECT * FROM mail_pieces WHERE id = ?').get(r.lastInsertRowid));
+router.get('/mail-pieces', async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT * FROM mail_pieces ORDER BY sort_order, name');
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
-router.put('/mail-pieces/:id', (req, res) => {
-  const { name, type, notes } = req.body;
-  db.prepare("UPDATE mail_pieces SET name=COALESCE(?,name), type=COALESCE(?,type), notes=COALESCE(?,notes) WHERE id=?")
-    .run(name||null, type||null, notes||null, req.params.id);
-  res.json(db.prepare('SELECT * FROM mail_pieces WHERE id = ?').get(req.params.id));
+router.post('/mail-pieces', async (req, res) => {
+  try {
+    const { name, type = 'postcard', notes } = req.body;
+    if (!name?.trim()) return res.status(400).json({ error: 'Name required.' });
+    const { rows } = await pool.query(
+      'INSERT INTO mail_pieces (name, type, notes) VALUES ($1,$2,$3) RETURNING *',
+      [name.trim(), type, notes||null]
+    );
+    res.status(201).json(rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
-router.delete('/mail-pieces/:id', (req, res) => {
-  db.prepare('DELETE FROM mail_pieces WHERE id = ?').run(req.params.id);
-  res.json({ ok: true });
+router.put('/mail-pieces/:id', async (req, res) => {
+  try {
+    const { name, type, notes } = req.body;
+    const { rows } = await pool.query(
+      'UPDATE mail_pieces SET name=COALESCE($1,name), type=COALESCE($2,type), notes=COALESCE($3,notes) WHERE id=$4 RETURNING *',
+      [name||null, type||null, notes||null, req.params.id]
+    );
+    res.json(rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+router.delete('/mail-pieces/:id', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM mail_pieces WHERE id=$1', [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ── Email templates ───────────────────────────────────────────────────────────
-router.get('/email-templates', (req, res) => res.json(db.prepare('SELECT * FROM email_templates ORDER BY sort_order, name').all()));
-router.post('/email-templates', (req, res) => {
-  const { name, subject, body } = req.body;
-  if (!name?.trim()) return res.status(400).json({ error: 'Name required.' });
-  const r = db.prepare("INSERT INTO email_templates (name, subject, body) VALUES (?,?,?)").run(name.trim(), subject||null, body||null);
-  res.status(201).json(db.prepare('SELECT * FROM email_templates WHERE id = ?').get(r.lastInsertRowid));
+router.get('/email-templates', async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT * FROM email_templates ORDER BY sort_order, name');
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
-router.put('/email-templates/:id', (req, res) => {
-  const { name, subject, body } = req.body;
-  db.prepare("UPDATE email_templates SET name=COALESCE(?,name), subject=COALESCE(?,subject), body=COALESCE(?,body), updated_at=datetime('now') WHERE id=?")
-    .run(name||null, subject||null, body||null, req.params.id);
-  res.json(db.prepare('SELECT * FROM email_templates WHERE id = ?').get(req.params.id));
+router.post('/email-templates', async (req, res) => {
+  try {
+    const { name, subject, body } = req.body;
+    if (!name?.trim()) return res.status(400).json({ error: 'Name required.' });
+    const { rows } = await pool.query(
+      'INSERT INTO email_templates (name, subject, body) VALUES ($1,$2,$3) RETURNING *',
+      [name.trim(), subject||null, body||null]
+    );
+    res.status(201).json(rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
-router.delete('/email-templates/:id', (req, res) => {
-  db.prepare('DELETE FROM email_templates WHERE id = ?').run(req.params.id);
-  res.json({ ok: true });
+router.put('/email-templates/:id', async (req, res) => {
+  try {
+    const { name, subject, body } = req.body;
+    const { rows } = await pool.query(
+      `UPDATE email_templates SET name=COALESCE($1,name), subject=COALESCE($2,subject), body=COALESCE($3,body), updated_at=to_char(now(),'YYYY-MM-DD"T"HH24:MI:SS"Z"') WHERE id=$4 RETURNING *`,
+      [name||null, subject||null, body||null, req.params.id]
+    );
+    res.json(rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+router.delete('/email-templates/:id', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM email_templates WHERE id=$1', [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 module.exports = router;
