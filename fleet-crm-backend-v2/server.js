@@ -14,7 +14,13 @@ const fs        = require('fs');
 const rateLimit = require('express-rate-limit');
 
 // ─── Initialize database (runs schema + seeds) ────────────────────────────────
-require('./db/schema');
+const db = require('./db/schema');
+db.initDb().then(() => {
+  console.log('✅ Database initialized');
+}).catch(err => {
+  console.error('❌ Failed to initialize database:', err.message);
+  process.exit(1);
+});
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
