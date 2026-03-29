@@ -674,7 +674,7 @@ async function handleImport(e) {
                     {[
                       ['📱 Main Phone', fmtPhone(selected.main_phone)],
                       ['🏭 Industry',   selected.industry||'—'],
-                      ['📍 Address',    selected.address?`${selected.address}${selected.city?', '+selected.city:''}` : '—'],
+                      ['📍 Address',    [selected.address, selected.city, selected.state, selected.zip].filter(Boolean).join(', ') || '—'],
                       ['🌐 Website',    selected.website||'—'],
                       ['📊 Total Calls', selected.stats?.total_calls||0],
                       ['🤝 Total Contacts', selected.stats?.total_contacts||0],
