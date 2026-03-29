@@ -87,7 +87,7 @@ export default function AddressAutocomplete({
     if (isNamedPlace && streetAddr) display = `${streetAddr}, ${city}, ${state}`;
     else display = [streetAddr || item.name, city, state].filter(Boolean).join(', ');
     onChange(display || item.display_name.split(',').slice(0, 3).join(',').trim());
-    onSelect?.({ display, address: streetAddr || item.name, city, state, zip: a.postcode || '', name: item.name });
+    onSelect?.({ display, address: streetAddr || item.name, city, state, zip: a.postcode || a.postal_code || '', state: a.state || a.state_abbreviation || 'NC', name: item.name });
     setOpen(false); setResults([]);
   }
 
