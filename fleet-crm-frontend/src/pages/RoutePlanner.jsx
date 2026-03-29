@@ -1048,7 +1048,7 @@ function PersistentMap({ routeStops=[], startGeo=null, returnHome=false, nearbyC
   const nearbyLayerRef  = useRef(null);
   const LRef            = useRef(null);
   const [mapReady, setMapReady] = useState(false);
-      d
+
   useEffect(() => {
     if (!mapRef.current) return;
     if (!document.getElementById('leaflet-css')) {
