@@ -117,7 +117,8 @@ function geocodeMissing() {
       return;
     }
     const co = companies[i++];
-    const q = encodeURIComponent(`${co.address}, ${co.city || 'Charlotte'}, ${co.state || 'NC'}`);
+    const cleanAddr = co.address.replace(/\s*(suite|ste\.?|unit|apt\.?|floor|fl\.?|#)\s*\S+/gi, '').trim();
+        const q = encodeURIComponent(`${cleanAddr}, ${co.city || 'Charlotte'}, ${co.state || 'NC'}`);
     https.get(
       `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1&countrycodes=us`,
       { headers: { 'User-Agent': 'SuperEagleFleetCRM/1.0', 'Accept-Language': 'en' } },
