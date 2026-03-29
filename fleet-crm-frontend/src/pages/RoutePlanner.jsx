@@ -1047,7 +1047,8 @@ function PersistentMap({ routeStops=[], startGeo=null, returnHome=false, nearbyC
   const routeLayerRef   = useRef(null);
   const nearbyLayerRef  = useRef(null);
   const LRef            = useRef(null);
-
+  const [mapReady, setMapReady] = useState(false);
+      d
   useEffect(() => {
     if (!mapRef.current) return;
     if (!document.getElementById('leaflet-css')) {
@@ -1063,7 +1064,8 @@ function PersistentMap({ routeStops=[], startGeo=null, returnHome=false, nearbyC
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution:'© OpenStreetMap', maxZoom:19 }).addTo(map);
       mapInstanceRef.current = map;
       routeLayerRef.current  = L.layerGroup().addTo(map);
-      nearbyLayerRef.current = L.layerGroup().addTo(map);
+           nearbyLayerRef.current = L.layerGroup().addTo(map);
+           setMapReady(true);
       [50,150,300,600,1200].forEach(ms => setTimeout(() => { try { map.invalidateSize(); } catch(_){} }, ms));
       if (typeof ResizeObserver !== 'undefined' && mapRef.current) {
         ro = new ResizeObserver(() => { try { map.invalidateSize(); } catch(_){} });
@@ -1108,7 +1110,7 @@ function PersistentMap({ routeStops=[], startGeo=null, returnHome=false, nearbyC
     } else if (validStops.length > 0) {
       map.fitBounds(L.latLngBounds(validStops.map(s=>[s.lat,s.lng])).pad(0.2));
     }
-  }, [routeStops.map(s=>s.id+','+s.lat).join('|'), startGeo?.lat, returnHome]);
+  }, [routeStops.map(s=>s.id+','+s.lat).join('|'), startGeo?.lat, returnHome, mapReady]);
 
   // Update nearby layer
   useEffect(() => {
@@ -1138,7 +1140,7 @@ function PersistentMap({ routeStops=[], startGeo=null, returnHome=false, nearbyC
         .addTo(nearbyLayerRef.current).bindPopup(popup, {maxWidth:270});
       if (!isInRoute && onAddNearby) window[`_addNearby_${c.id}`] = () => { onAddNearby(c); map.closePopup(); };
     });
-  }, [nearbyCompanies.map(c=>c.id+'@'+(c.geoOk?1:0)).join('|'), routeStops.map(s=>(s.companyId??s.id)+':'+s.id).join(',')]);
+  }, [nearbyCompanies.map(c=>c.id+'@'+(c.geoOk?1:0)).join('|'), routeStops.map(s=>(s.companyId??s.id)+':'+s.id).join(','), mapReady]);
 
   return <div ref={mapRef} style={{position:'absolute',inset:0}} />;
 }
