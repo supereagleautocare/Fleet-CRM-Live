@@ -7,10 +7,11 @@
  */
 
 require('dotenv').config();
-const express = require('express');
-const cors    = require('cors');
-const path    = require('path');
-const fs      = require('fs');
+const express   = require('express');
+const cors      = require('cors');
+const path      = require('path');
+const fs        = require('fs');
+const rateLimit = require('express-rate-limit');
 
 // ─── Initialize database (runs schema + seeds) ────────────────────────────────
 require('./db/schema');
@@ -21,6 +22,17 @@ const PORT = process.env.PORT || 3001;
 // ─── Middleware ───────────────────────────────────────────────────────────────
 app.use(cors({ origin: '*', credentials: true }));
 app.use(express.json({ limit: '10mb' }));
+
+// ─── Rate limiting ────────────────────────────────────────────────────────────
+const limiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 300,                 // 300 requests per minute per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please slow down.' },
+  skip: (req) => req.path === '/api/health', // never limit health checks
+});
+app.use('/api', limiter);
 
 // ─── Request logger (development) ────────────────────────────────────────────
 if (process.env.NODE_ENV !== 'production') {
