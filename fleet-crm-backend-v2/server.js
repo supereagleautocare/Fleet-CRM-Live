@@ -14,8 +14,8 @@ const fs        = require('fs');
 const rateLimit = require('express-rate-limit');
 
 // ─── Initialize database (runs schema + seeds) ────────────────────────────────
-const db = require('./db/schema');
-db.initDb().then(() => {
+const schema = require('./db/schema');
+schema.initDb().then(() => {
   console.log('✅ Database initialized');
 }).catch(err => {
   console.error('❌ Failed to initialize database:', err.message);
@@ -114,7 +114,7 @@ app.listen(PORT, () => {
 });
 // ─── Background geocode job ───────────────────────────────────────────────────
 const https = require('https');
-const db    = require('./db/schema');
+const db    = require('./db/schema').pool;
 
 function geocodeMissing() {
   const companies = db.prepare(`
