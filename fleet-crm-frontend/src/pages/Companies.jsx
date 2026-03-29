@@ -600,7 +600,7 @@ async function handleImport(e) {
               {companies.map(c => (
                 <div key={c.id} onClick={()=>selectCompany(c)} style={{
                   display: selected ? 'block' : 'grid',
-                  gridTemplateColumns: selected ? undefined : '2fr 1fr 1fr 1.5fr 1.5fr 0.7fr',
+                  gridTemplateColumns: selected ? undefined : '1.8fr 0.9fr 1fr 1.4fr 1.3fr 1fr 0.6fr',
                   padding:'10px 14px', cursor:'pointer', borderBottom:'1px solid var(--gray-100)',
                   background: selected?.id===c.id ? '#fef3c7' : 'white',
                   borderLeft: selected?.id===c.id ? '3px solid var(--gold-500)' : '3px solid transparent',
@@ -616,7 +616,7 @@ async function handleImport(e) {
                   {!selected && <div style={{ fontSize:12, color:'var(--gray-500)' }}>{c.industry||'—'}</div>}
                   {!selected && <div style={{ fontSize:12, color:'var(--gray-500)' }}>{fmtPhone(c.main_phone)}</div>}
                   {!selected && <div style={{ fontSize:12, color:'var(--gray-500)' }}>{c.preferred_contact_name ? `${c.preferred_contact_name}${c.preferred_contact_role ? ' · '+c.preferred_contact_role : ''}` : '—'}</div>}
-                  {!selected && <div style={{ fontSize:12, color:'var(--gray-500)' }}>{c.last_contact_type ? `${c.last_contact_type} · ${fmtDate(c.last_contacted)}` : '—'}</div>}
+                  {!selected && <div style={{ fontSize:12, color:'var(--gray-500)' }}>{c.last_contact_type ? `${c.last_contact_type} · ${c.last_contacted ? fmtDate(c.last_contacted.slice(0,10)) : '—'}` : '—'}</div>}
                   {!selected && <div style={{ fontSize:12 }}>
                     {c.followup_due ? (
                       <span style={{
