@@ -576,7 +576,7 @@ async function handleImport(e) {
           ) : (
             <div style={{ overflowY:'auto', flex:1 }}>
               {!selected && (
-                <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr 1.5fr 1.5fr 0.7fr', gap:0, padding:'6px 14px', borderBottom:'2px solid var(--gray-200)', background:'var(--gray-50)' }}>
+                <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr 1.5fr 1.5fr 1fr 0.7fr', gap:0, padding:'6px 14px', borderBottom:'2px solid var(--gray-200)', background:'var(--gray-50)' }}>
                   {['Company','Industry','Phone','Contact','Last Call','Follow-Up','Stage'].map(h => (
                     <div key={h} style={{ fontSize:10, fontWeight:700, color:'var(--gray-400)', textTransform:'uppercase', letterSpacing:'.06em' }}>{h}</div>
                   ))}
