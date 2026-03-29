@@ -344,11 +344,18 @@ export default function Companies() {
   async function load() {
     setLoading(true);
     try {
-      const params = { search };
+     const params = { search };
       if (filterStatus) params.company_status = filterStatus;
-      if (filterStage) params.pipeline_stage = filterStage;
+      if (filterStage && !filterStage.startsWith('followup_')) params.pipeline_stage = filterStage;
       if (filterContacted) params.last_contacted = filterContacted;
-      setCompanies(await api.companies(params));
+      let results = await api.companies(params);
+      const today = new Date().toISOString().split('T')[0];
+      const weekEnd = new Date(); weekEnd.setDate(weekEnd.getDate() + 7);
+      const weekEndStr = weekEnd.toISOString().split('T')[0];
+      if (filterStage === 'followup_overdue') results = results.filter(c => c.followup_due && c.followup_due < today);
+      if (filterStage === 'followup_today')   results = results.filter(c => c.followup_due && c.followup_due === today);
+      if (filterStage === 'followup_week')    results = results.filter(c => c.followup_due && c.followup_due >= today && c.followup_due <= weekEndStr);
+      setCompanies(results);
     }
     finally { setLoading(false); }
   }
@@ -533,6 +540,14 @@ async function handleImport(e) {
           <option value="this_month">Contacted This Month</option>
           <option value="stale">Stale (30+ days)</option>
         </select>
+        <select className="form-input" style={{ width:'auto', fontSize:12, padding:'5px 10px' }}
+          value={filterStage === 'followup_overdue' ? 'followup_overdue' : filterStage === 'followup_today' ? 'followup_today' : filterStage === 'followup_week' ? 'followup_week' : ''}
+          onChange={e=>{ setFilterStage(e.target.value); setSelected(null); }}>
+          <option value="">Any Follow-Up</option>
+          <option value="followup_overdue">🔴 Follow-Up Overdue</option>
+          <option value="followup_today">🟡 Follow-Up Today</option>
+          <option value="followup_week">📅 Follow-Up This Week</option>
+        </select>
         {(filterStatus || filterStage || filterContacted) && (
           <button className="btn btn-ghost btn-sm" onClick={()=>{ setFilterStatus(''); setFilterStage(''); setFilterContacted(''); }}>
             ✕ Clear filters
@@ -576,8 +591,8 @@ async function handleImport(e) {
           ) : (
             <div style={{ overflowY:'auto', flex:1 }}>
               {!selected && (
-                <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr 1.5fr 1.5fr 1fr 0.7fr', gap:0, padding:'6px 14px', borderBottom:'2px solid var(--gray-200)', background:'var(--gray-50)' }}>
-                  {['Company','Industry','Phone','Contact','Last Call','Follow-Up','Stage'].map(h => (
+                <div style={{ display:'grid', gridTemplateColumns:'1.8fr 0.9fr 1fr 1.4fr 1.3fr 1fr 0.6fr', gap:0, padding:'6px 14px', borderBottom:'2px solid var(--gray-200)', background:'var(--gray-50)' }}>
+                  {['Company','Industry','Phone','Contact','Last Contact','Follow-Up','Stage'].map(h => (
                     <div key={h} style={{ fontSize:10, fontWeight:700, color:'var(--gray-400)', textTransform:'uppercase', letterSpacing:'.06em' }}>{h}</div>
                   ))}
                 </div>
