@@ -23,6 +23,7 @@ schema.initDb().then(() => {
 });
 
 const app  = express();
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3001;
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
@@ -114,15 +115,19 @@ app.listen(PORT, () => {
 });
 // ─── Background geocode job ───────────────────────────────────────────────────
 const https = require('https');
-const db    = require('./db/schema').pool;
+const { pool } = require('./db/schema');
 
-function geocodeMissing() {
-  const companies = db.prepare(`
-    SELECT id, address, city, state FROM companies
-    WHERE status = 'active'
-      AND address IS NOT NULL AND address != ''
-      AND (lat IS NULL OR lng IS NULL)
-  `).all();
+async function geocodeMissing() {
+  let companies = [];
+  try {
+    const result = await pool.query(`
+      SELECT id, address, city, state FROM companies
+      WHERE status = 'active'
+        AND address IS NOT NULL AND address != ''
+        AND (lat IS NULL OR lng IS NULL)
+    `);
+    companies = result.rows;
+  } catch(e) { return; }
 
   if (companies.length === 0) return;
   console.log(`[geocode] ${companies.length} companies missing coordinates — starting background job`);
@@ -136,7 +141,7 @@ function geocodeMissing() {
     }
     const co = companies[i++];
     const cleanAddr = co.address.replace(/\s*(suite|ste\.?|unit|apt\.?|floor|fl\.?|#)\s*\S+/gi, '').trim();
-        const q = encodeURIComponent(`${cleanAddr}, ${co.city || 'Charlotte'}, ${co.state || 'NC'}`);
+    const q = encodeURIComponent(`${cleanAddr}, ${co.city || 'Charlotte'}, ${co.state || 'NC'}`);
     https.get(
       `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1&countrycodes=us`,
       { headers: { 'User-Agent': 'SuperEagleFleetCRM/1.0', 'Accept-Language': 'en' } },
@@ -147,8 +152,8 @@ function geocodeMissing() {
           try {
             const results = JSON.parse(raw);
             if (results.length > 0) {
-              db.prepare('UPDATE companies SET lat = ?, lng = ? WHERE id = ?')
-                .run(parseFloat(results[0].lat), parseFloat(results[0].lon), co.id);
+              pool.query('UPDATE companies SET lat = $1, lng = $2 WHERE id = $3',
+                [parseFloat(results[0].lat), parseFloat(results[0].lon), co.id]);
               console.log(`[geocode] ✓ ${co.id}`);
             }
           } catch(_) {}
@@ -159,5 +164,5 @@ function geocodeMissing() {
 }
 
 setTimeout(geocodeMissing, 5000);
-setInterval(geocodeMissing, 24*60*60*1000);// wait 5s for server to fully boot first
+setInterval(geocodeMissing, 24*60*60*1000);
 module.exports = app;
