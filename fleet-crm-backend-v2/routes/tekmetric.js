@@ -1,9 +1,12 @@
 /**
- * TEKMETRIC PROXY ROUTE
- * Drop this file into: fleet-crm-backend-v2/routes/tekmetric.js
+ * TEKMETRIC PROXY ROUTE  —  fleet-crm-backend-v2/routes/tekmetric.js
  *
- * This proxies all Tekmetric API calls through your server so your
- * token stays safe and CORS is never an issue.
+ * What changed from the original:
+ *  1. tekFetchWithRetry  — retries on 429 (rate-limit) with exponential backoff
+ *  2. sleep helper       — 100ms pause between every per-customer loop to be polite
+ *  3. Removed .slice(0, 50) cap so all 35-40 businesses are fetched
+ *  4. syncedStats added to the response so the frontend can show counts
+ *  5. Partial failures   — if one customer's RO/vehicle fetch fails we skip and keep going
  */
 
 const express = require('express');
@@ -12,7 +15,7 @@ const router = express.Router();
 
 router.use(requireAuth);
 
-// ── Read config from your existing config table ───────────────────────────────
+// ── Config helpers ────────────────────────────────────────────────────────────
 function getTekConfig(db) {
   try {
     const token  = db.prepare("SELECT value FROM config_settings WHERE key = 'tekmetric_token'").get()?.value;
@@ -30,11 +33,37 @@ function baseUrl(env) {
     : 'https://shop.tekmetric.com/api/v1';
 }
 
-async function tekFetch(url, token) {
+// ── Small delay — keeps us polite between loop iterations ─────────────────────
+// 100ms means 35 customers × 2 loops = 70 calls spread over 7 seconds.
+// The rate limit is 600 calls/minute, so we have massive headroom.
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// ── Fetch with automatic retry on 429 (rate-limited) responses ───────────────
+// Tekmetric says to use exponential backoff, so we do:
+//   attempt 1 fail → wait 2s, attempt 2 fail → wait 4s, attempt 3 fail → give up
+async function tekFetchWithRetry(url, token, attempt = 1) {
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` }
   });
-  if (!res.ok) throw new Error(`Tekmetric API error: ${res.status}`);
+
+  // 429 = too many requests — wait and retry
+  if (res.status === 429) {
+    if (attempt >= 3) {
+      throw new Error(`Tekmetric rate limit hit after 3 attempts for ${url}`);
+    }
+    const waitMs = Math.pow(2, attempt) * 1000; // 2s, then 4s
+    console.warn(`[Tekmetric] 429 rate limit — waiting ${waitMs}ms before retry ${attempt + 1}`);
+    await sleep(waitMs);
+    return tekFetchWithRetry(url, token, attempt + 1);
+  }
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`Tekmetric API ${res.status} for ${url}: ${body.slice(0, 200)}`);
+  }
+
   return res.json();
 }
 
@@ -45,166 +74,220 @@ router.post('/settings', (req, res) => {
 
   const upsert = db.prepare(`
     INSERT INTO config_settings (key, value, label) VALUES (?, ?, ?)
-ON CONFLICT(key) DO UPDATE SET value = excluded.value
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value
   `);
 
-  if (token)        upsert.run('tekmetric_token',        token,               'Tekmetric API Token');
-  if (shopId)       upsert.run('tekmetric_shop_id',      shopId,              'Tekmetric Shop ID');
-  if (env)          upsert.run('tekmetric_env',          env,                 'Tekmetric Environment');
-  if (pollInterval) upsert.run('tekmetric_poll_interval',String(pollInterval),'Tekmetric Poll Interval');
-  if (oilInterval)  upsert.run('tekmetric_oil_interval', String(oilInterval), 'Tekmetric Oil Interval');
-  if (carfaxKey !== undefined)     upsert.run('carfax_api_key', carfaxKey || '',          'Carfax API Key');
-  if (carfaxEnabled !== undefined) upsert.run('carfax_enabled', carfaxEnabled ? '1' : '0','Carfax Enabled');
+  if (token        != null) upsert.run('tekmetric_token',         token,                'Tekmetric API Token');
+  if (shopId       != null) upsert.run('tekmetric_shop_id',       shopId,               'Tekmetric Shop ID');
+  if (env          != null) upsert.run('tekmetric_env',           env,                  'Tekmetric Environment');
+  if (pollInterval != null) upsert.run('tekmetric_poll_interval', String(pollInterval),  'Tekmetric Poll Interval (minutes)');
+  if (oilInterval  != null) upsert.run('tekmetric_oil_interval',  String(oilInterval),   'Tekmetric Oil Interval (days)');
+  if (carfaxKey    != null) upsert.run('carfax_api_key',          carfaxKey || '',       'Carfax API Key');
+  if (carfaxEnabled != null) upsert.run('carfax_enabled',         carfaxEnabled ? '1' : '0', 'Carfax Enabled');
 
   res.json({ ok: true });
 });
 
 // ── Get Tekmetric settings ────────────────────────────────────────────────────
 router.get('/settings', (req, res) => {
-  const db = require('../db/schema');
+  const db  = require('../db/schema');
   const cfg = getTekConfig(db);
-  const poll = db.prepare("SELECT value FROM config_settings WHERE key = 'tekmetric_poll_interval'").get()?.value || '5';
-  const oil  = db.prepare("SELECT value FROM config_settings WHERE key = 'tekmetric_oil_interval'").get()?.value  || '90';
-  const cfxKey     = db.prepare("SELECT value FROM config_settings WHERE key = 'carfax_api_key'").get()?.value  || '';
-  const cfxEnabled = db.prepare("SELECT value FROM config_settings WHERE key = 'carfax_enabled'").get()?.value   || '0';
+  const poll       = db.prepare("SELECT value FROM config_settings WHERE key = 'tekmetric_poll_interval'").get()?.value || '5';
+  const oil        = db.prepare("SELECT value FROM config_settings WHERE key = 'tekmetric_oil_interval'").get()?.value  || '90';
+  const cfxKey     = db.prepare("SELECT value FROM config_settings WHERE key = 'carfax_api_key'").get()?.value           || '';
+  const cfxEnabled = db.prepare("SELECT value FROM config_settings WHERE key = 'carfax_enabled'").get()?.value           || '0';
+
   res.json({
-    connected:    !!cfg.token,
-    shopId:       cfg.shopId,
-    env:          cfg.env,
-    pollInterval: parseInt(poll),
-    oilInterval:  parseInt(oil),
-    carfaxKey:    cfxKey,
+    connected:     !!cfg.token,
+    shopId:        cfg.shopId,
+    env:           cfg.env,
+    pollInterval:  parseInt(poll),
+    oilInterval:   parseInt(oil),
+    carfaxKey:     cfxKey,
     carfaxEnabled: cfxEnabled === '1',
   });
 });
 
-// ── Main fleet data endpoint — pulls everything in one shot ───────────────────
-// Called by the frontend every N minutes. Filters to Business customers only.
+// ── Main fleet-data endpoint ──────────────────────────────────────────────────
+// Called by the frontend on manual sync and every N minutes (business hours only).
+// Returns all data PLUS a syncedStats object so the UI can show "35 businesses · 680 ROs".
 router.get('/fleet-data', async (req, res) => {
   const db = require('../db/schema');
   const { token, shopId, env } = getTekConfig(db);
 
   if (!token || !shopId) {
-    return res.status(400).json({ error: 'Tekmetric not configured. Add your token in Fleet Settings.' });
+    return res.status(400).json({
+      error: 'Tekmetric not configured. Go to Active Fleet → Settings and add your token.'
+    });
   }
 
   const base = baseUrl(env);
 
   try {
-    // 1. Pull statuses (auto-detects custom ones)
-    const shopData  = await tekFetch(`${base}/shops/${shopId}`, token);
+    // ── Step 1: shop info ─────────────────────────────────────────────────────
+    console.log('[Tekmetric] Fetching shop info...');
+    const shopData = await tekFetchWithRetry(`${base}/shops/${shopId}`, token);
 
-    // 2. Pull business customers only (customerTypeId=2)
-    let customers = [], page = 0, totalPages = 1;
+    // ── Step 2: business customers (customerTypeId=2 = Business only) ─────────
+    // Regular customers (type 1) are never fetched here.
+    console.log('[Tekmetric] Fetching business customers...');
+    let customers = [];
+    let page = 0;
+    let totalPages = 1;
+
     while (page < totalPages) {
-      const data = await tekFetch(`${base}/customers?shop=${shopId}&customerTypeId=2&size=100&page=${page}`, token);
+      const data = await tekFetchWithRetry(
+        `${base}/customers?shop=${shopId}&customerTypeId=2&size=100&page=${page}`,
+        token
+      );
       customers = [...customers, ...(data.content || [])];
       totalPages = data.totalPages || 1;
       page++;
-      if (page >= totalPages) break;
+      if (page < totalPages) await sleep(100); // polite pause between pages
     }
 
-    // 3. Pull repair orders for those customers
-    const customerIds = customers.map(c=>c.id);
+    console.log(`[Tekmetric] Found ${customers.length} business customers.`);
+
+    // ── Step 3: repair orders for each business customer ──────────────────────
+    // No artificial cap — fetches all of your businesses.
+    // Each call is separated by 100ms to stay polite.
+    console.log('[Tekmetric] Fetching repair orders...');
     let allRos = [];
-    for (const cid of customerIds.slice(0, 50)) { // safety limit
+    let roFailures = 0;
+
+    for (const customer of customers) {
       try {
-        const roData = await tekFetch(`${base}/repair-orders?shop=${shopId}&customerId=${cid}&size=100`, token);
+        const roData = await tekFetchWithRetry(
+          `${base}/repair-orders?shop=${shopId}&customerId=${customer.id}&size=100`,
+          token
+        );
         allRos = [...allRos, ...(roData.content || [])];
-      } catch { /* skip if one customer fails */ }
+      } catch (err) {
+        roFailures++;
+        console.warn(`[Tekmetric] RO fetch failed for customer ${customer.id}: ${err.message}`);
+        // We keep going — one customer failing doesn't break the whole sync.
+      }
+      await sleep(100);
     }
 
-    // 4. Pull vehicles for those customers
+    // ── Step 4: vehicles for each business customer ───────────────────────────
+    console.log('[Tekmetric] Fetching vehicles...');
     let allVehicles = [];
-    for (const cid of customerIds.slice(0, 50)) {
+    let vehicleFailures = 0;
+
+    for (const customer of customers) {
       try {
-        const vData = await tekFetch(`${base}/vehicles?shop=${shopId}&customerId=${cid}&size=100`, token);
+        const vData = await tekFetchWithRetry(
+          `${base}/vehicles?shop=${shopId}&customerId=${customer.id}&size=100`,
+          token
+        );
         allVehicles = [...allVehicles, ...(vData.content || [])];
-      } catch { /* skip */ }
+      } catch (err) {
+        vehicleFailures++;
+        console.warn(`[Tekmetric] Vehicle fetch failed for customer ${customer.id}: ${err.message}`);
+      }
+      await sleep(100);
     }
 
-    // 5. Pull employees
-    const empData = await tekFetch(`${base}/employees?shop=${shopId}&size=100`, token);
+    // ── Step 5: employees ─────────────────────────────────────────────────────
+    console.log('[Tekmetric] Fetching employees...');
+    const empData = await tekFetchWithRetry(`${base}/employees?shop=${shopId}&size=100`, token);
     const employees = empData.content || [];
 
-    // 6. Build statuses from RO data (auto-detects all including custom)
+    // ── Step 6: build status map from RO data ─────────────────────────────────
     const statusMap = {};
     allRos.forEach(ro => {
       if (ro.repairOrderStatus) {
         const s = ro.repairOrderStatus;
-        if (!statusMap[s.id]) {
-          statusMap[s.id] = { id:s.id, name:s.name, code:s.code };
-        }
+        if (!statusMap[s.id]) statusMap[s.id] = { id: s.id, name: s.name, code: s.code };
       }
     });
     const STATUS_COLORS = ['#6366f1','#d97706','#16a34a','#7c3aed','#1d4ed8','#dc2626','#0891b2','#059669','#7c2d12'];
     const STATUS_BGS    = ['#eef2ff','#fffbeb','#f0fdf4','#faf5ff','#eff6ff','#fef2f2','#ecfeff','#d1fae5','#fff7ed'];
-    const statuses = Object.values(statusMap).map((s,i)=>({
+    const statuses = Object.values(statusMap).map((s, i) => ({
       ...s,
       color: STATUS_COLORS[i % STATUS_COLORS.length],
       bg:    STATUS_BGS[i % STATUS_BGS.length],
     }));
 
-    // 7. Normalize data shape to match what the frontend expects
-    const normalizedCompanies = customers.map(c=>({
-      id:       c.id,
-      name:     c.firstName && c.lastName ? `${c.firstName} ${c.lastName}` : c.firstName || c.lastName || `Customer ${c.id}`,
-      contact:  c.contactFirstName ? `${c.contactFirstName} ${c.contactLastName||''}`.trim() : null,
-      phone:    c.phone?.[0]?.number || null,
-      email:    Array.isArray(c.email) ? c.email[0] : c.email || null,
+    // ── Step 7: normalize for frontend ────────────────────────────────────────
+    const normalizedCompanies = customers.map(c => ({
+      id:      c.id,
+      name:    c.firstName && c.lastName
+                 ? `${c.firstName} ${c.lastName}`
+                 : c.firstName || c.lastName || `Customer ${c.id}`,
+      contact: c.contactFirstName
+                 ? `${c.contactFirstName} ${c.contactLastName || ''}`.trim()
+                 : null,
+      phone:   c.phone?.[0]?.number || null,
+      email:   Array.isArray(c.email) ? c.email[0] : c.email || null,
     }));
 
-    const normalizedVehicles = allVehicles.map(v=>({
-      id:    v.id,
-      cid:   v.customerId,
-      year:  v.year,
-      make:  v.make,
-      model: v.model,
-      plate: v.licensePlate,
-      vin:   v.vin,
-      color: v.color,
+    const normalizedVehicles = allVehicles.map(v => ({
+      id:           v.id,
+      cid:          v.customerId,
+      year:         v.year,
+      make:         v.make,
+      model:        v.model,
+      plate:        v.licensePlate,
+      vin:          v.vin,
+      color:        v.color,
       oilElsewhere: false,
-      sold:  false,
+      sold:         false,
     }));
 
-    const normalizedRos = allRos.map(ro=>({
-      id:            ro.id,
-      rn:            ro.repairOrderNumber,
-      cid:           ro.customerId,
-      vid:           ro.vehicleId,
-      sid:           ro.repairOrderStatus?.id,
-      techId:        ro.technicianId,
-      saId:          ro.serviceWriterId,
-      labor:         ro.laborSales || 0,
-      parts:         ro.partsSales || 0,
-      disc:          ro.discountTotal || 0,
-      total:         ro.totalSales || 0,
-      paid:          ro.amountPaid || 0,
-      created:       ro.createdDate,
-      updated:       ro.updatedDate,
-      lastContact:   null, // Tekmetric doesn't have this — tracked in your CRM
+    const normalizedRos = allRos.map(ro => ({
+      id:          ro.id,
+      rn:          ro.repairOrderNumber,
+      cid:         ro.customerId,
+      vid:         ro.vehicleId,
+      sid:         ro.repairOrderStatus?.id,
+      techId:      ro.technicianId,
+      saId:        ro.serviceWriterId,
+      labor:       ro.laborSales   || 0,
+      parts:       ro.partsSales   || 0,
+      disc:        ro.discountTotal || 0,
+      total:       ro.totalSales   || 0,
+      paid:        ro.amountPaid   || 0,
+      created:     ro.createdDate,
+      updated:     ro.updatedDate,
+      lastContact: null,
       contactMethod: null,
-      jobs: (ro.jobs||[]).map(j=>({
-        name:   j.name,
-        auth:   j.authorized,
-        labor:  j.laborTotal || 0,
-        parts:  j.partsTotal || 0,
+      jobs: (ro.jobs || []).map(j => ({
+        name:  j.name,
+        auth:  j.authorized,
+        labor: j.laborTotal || 0,
+        parts: j.partsTotal || 0,
       })),
     }));
 
-    const normalizedEmployees = employees.map(e=>({
+    const normalizedEmployees = employees.map(e => ({
       id:   e.id,
       name: `${e.firstName} ${e.lastName}`.trim(),
       role: e.employeeRole?.name || 'Employee',
     }));
 
+    console.log(`[Tekmetric] Sync complete. ${customers.length} businesses, ${allRos.length} ROs, ${allVehicles.length} vehicles.`);
+
     res.json({
       statuses,
-      companies: normalizedCompanies,
-      vehicles:  normalizedVehicles,
-      ros:       normalizedRos,
-      employees: normalizedEmployees,
-      syncedAt:  new Date().toISOString(),
+      companies:  normalizedCompanies,
+      vehicles:   normalizedVehicles,
+      ros:        normalizedRos,
+      employees:  normalizedEmployees,
+      syncedAt:   new Date().toISOString(),
+
+      // NEW: stats so the UI can show counts and any failures
+      syncedStats: {
+        customers:       customers.length,
+        ros:             allRos.length,
+        vehicles:        allVehicles.length,
+        employees:       employees.length,
+        statuses:        statuses.length,
+        roFailures:      roFailures,
+        vehicleFailures: vehicleFailures,
+        apiCallsUsed:    1 + page + customers.length * 2 + 1, // rough count
+      },
     });
 
   } catch (err) {
