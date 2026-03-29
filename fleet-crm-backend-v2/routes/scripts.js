@@ -1,30 +1,11 @@
 /**
- * FLEET CRM — SCRIPTS ROUTES (v2 — phase-based)
- *
- * Scripts store a phase array in the `blocks` JSON field.
- * Each phase has sections; each section has content + scorecard config.
- * Section-level custom questions live in section_questions table.
- *
- * GET    /api/scripts                          — list all
- * GET    /api/scripts/:id                      — single with phases
- * POST   /api/scripts                          — create
- * PUT    /api/scripts/:id                      — update name/phases
- * DELETE /api/scripts/:id                      — delete
- *
- * GET    /api/scripts/:id/section-questions             — all section questions
- * POST   /api/scripts/:id/section-questions             — add question
- * PUT    /api/scripts/:id/section-questions/:qid        — update question
- * DELETE /api/scripts/:id/section-questions/:qid        — delete question
- * POST   /api/scripts/:id/section-questions/reorder     — reorder
- *
- * POST   /api/scripts/voicemail-log            — log a VM left
- * GET    /api/scripts/voicemail-log/:entityId  — last VM for a company
+ * FLEET CRM — SCRIPTS ROUTES (PostgreSQL)
  */
 
 const express = require('express');
-const db      = require('../db/schema');
+const { pool } = require('../db/schema');
 const { requireAuth } = require('../middleware/auth');
-const router  = express.Router();
+const router = express.Router();
 
 function parseScript(s) {
   if (!s) return null;
@@ -32,100 +13,157 @@ function parseScript(s) {
   return s;
 }
 
-function qCount(scriptId) {
-  const r = db.prepare('SELECT COUNT(*) as c FROM section_questions WHERE script_id=? AND enabled=1').get(scriptId);
-  return r?.c || 0;
-}
-
-// ── Public (popup window) ─────────────────────────────────────────────────────
-router.get('/', (req, res) => {
-  const rows = db.prepare('SELECT id,name,sort_order,updated_at FROM scripts ORDER BY sort_order,id').all();
-  res.json(rows.map(s => ({ ...s, _qCount: qCount(s.id) })));
+// ── Public routes (no auth) ───────────────────────────────────────────────────
+router.get('/', async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT id,name,sort_order,updated_at FROM scripts ORDER BY sort_order,id');
+    const withCounts = await Promise.all(rows.map(async s => {
+      const { rows: c } = await pool.query(
+        'SELECT COUNT(*) as c FROM section_questions WHERE script_id=$1 AND enabled=1', [s.id]
+      );
+      return { ...s, _qCount: parseInt(c[0].c) || 0 };
+    }));
+    res.json(withCounts);
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.get('/voicemail-log/:entityId', requireAuth, (req, res) => {
-  const row = db.prepare('SELECT * FROM voicemail_log WHERE entity_id=? ORDER BY logged_at DESC LIMIT 1').get(req.params.entityId);
-  res.json(row || null);
+router.get('/voicemail-log/:entityId', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT * FROM voicemail_log WHERE entity_id=$1 ORDER BY logged_at DESC LIMIT 1',
+      [req.params.entityId]
+    );
+    res.json(rows[0] || null);
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.get('/:id', (req, res) => {
-  const s = db.prepare('SELECT * FROM scripts WHERE id=?').get(req.params.id);
-  if (!s) return res.status(404).json({ error: 'Not found.' });
-  res.json(parseScript(s));
+router.get('/:id', async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT * FROM scripts WHERE id=$1', [req.params.id]);
+    if (!rows[0]) return res.status(404).json({ error: 'Not found.' });
+    res.json(parseScript(rows[0]));
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ── Auth required ─────────────────────────────────────────────────────────────
 router.use(requireAuth);
 
-router.post('/voicemail-log', (req, res) => {
-  const { entity_id, entity_name, vm_index, vm_label } = req.body;
-  const r = db.prepare('INSERT INTO voicemail_log (entity_id,entity_name,vm_index,vm_label) VALUES (?,?,?,?)')
-    .run(entity_id||null, entity_name||null, vm_index, vm_label||null);
-  res.json(db.prepare('SELECT * FROM voicemail_log WHERE id=?').get(r.lastInsertRowid));
+router.post('/voicemail-log', async (req, res) => {
+  try {
+    const { entity_id, entity_name, vm_index, vm_label } = req.body;
+    const { rows } = await pool.query(
+      'INSERT INTO voicemail_log (entity_id,entity_name,vm_index,vm_label) VALUES ($1,$2,$3,$4) RETURNING *',
+      [entity_id||null, entity_name||null, vm_index, vm_label||null]
+    );
+    res.json(rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.post('/', (req, res) => {
-  const { name, blocks = [] } = req.body;
-  if (!name?.trim()) return res.status(400).json({ error: 'Name required.' });
-  const maxOrder = db.prepare('SELECT MAX(sort_order) as m FROM scripts').get().m || 0;
-  const r = db.prepare("INSERT INTO scripts (name,blocks,sort_order) VALUES (?,?,?)").run(name.trim(), JSON.stringify(blocks), maxOrder+1);
-  res.status(201).json(parseScript(db.prepare('SELECT * FROM scripts WHERE id=?').get(r.lastInsertRowid)));
+router.post('/', async (req, res) => {
+  try {
+    const { name, blocks = [] } = req.body;
+    if (!name?.trim()) return res.status(400).json({ error: 'Name required.' });
+    const { rows: m } = await pool.query('SELECT MAX(sort_order) as m FROM scripts');
+    const maxOrder = m[0].m || 0;
+    const { rows } = await pool.query(
+      'INSERT INTO scripts (name,blocks,sort_order) VALUES ($1,$2,$3) RETURNING *',
+      [name.trim(), JSON.stringify(blocks), maxOrder + 1]
+    );
+    res.status(201).json(parseScript(rows[0]));
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.put('/:id', (req, res) => {
-  const s = db.prepare('SELECT * FROM scripts WHERE id=?').get(req.params.id);
-  if (!s) return res.status(404).json({ error: 'Not found.' });
-  const { name, blocks, sort_order } = req.body;
-  db.prepare(`UPDATE scripts SET name=COALESCE(?,name), blocks=COALESCE(?,blocks), sort_order=COALESCE(?,sort_order), updated_at=datetime('now') WHERE id=?`)
-    .run(name?.trim()||null, blocks!==undefined?JSON.stringify(blocks):null, sort_order??null, req.params.id);
-  res.json(parseScript(db.prepare('SELECT * FROM scripts WHERE id=?').get(req.params.id)));
+router.put('/:id', async (req, res) => {
+  try {
+    const { rows: existing } = await pool.query('SELECT * FROM scripts WHERE id=$1', [req.params.id]);
+    if (!existing[0]) return res.status(404).json({ error: 'Not found.' });
+    const { name, blocks, sort_order } = req.body;
+    const { rows } = await pool.query(`
+      UPDATE scripts SET
+        name       = COALESCE($1, name),
+        blocks     = COALESCE($2, blocks),
+        sort_order = COALESCE($3, sort_order),
+        updated_at = to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+      WHERE id=$4 RETURNING *
+    `, [name?.trim()||null, blocks !== undefined ? JSON.stringify(blocks) : null, sort_order ?? null, req.params.id]);
+    res.json(parseScript(rows[0]));
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.delete('/:id', (req, res) => {
-  const r = db.prepare('DELETE FROM scripts WHERE id=?').run(req.params.id);
-  if (!r.changes) return res.status(404).json({ error: 'Not found.' });
-  res.json({ ok: true });
+router.delete('/:id', async (req, res) => {
+  try {
+    const result = await pool.query('DELETE FROM scripts WHERE id=$1', [req.params.id]);
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Not found.' });
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ── Section questions ─────────────────────────────────────────────────────────
-router.get('/:id/section-questions', (req, res) => {
-  const rows = db.prepare('SELECT * FROM section_questions WHERE script_id=? ORDER BY phase_id,section_id,sort_order,id').all(req.params.id);
-  res.json(rows);
+router.get('/:id/section-questions', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT * FROM section_questions WHERE script_id=$1 ORDER BY phase_id,section_id,sort_order,id',
+      [req.params.id]
+    );
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.post('/:id/section-questions', (req, res) => {
-  const { phase_id, section_id, question, yes_points=1, no_points=0 } = req.body;
-  if (!question?.trim()) return res.status(400).json({ error: 'Question text required.' });
-  const maxOrder = db.prepare('SELECT MAX(sort_order) as m FROM section_questions WHERE script_id=? AND phase_id=? AND section_id=?').get(req.params.id, phase_id, section_id);
-  const r = db.prepare('INSERT INTO section_questions (script_id,phase_id,section_id,question,yes_points,no_points,sort_order) VALUES (?,?,?,?,?,?,?)')
-    .run(req.params.id, phase_id, section_id, question.trim(), yes_points, no_points, (maxOrder?.m??-1)+1);
-  res.json(db.prepare('SELECT * FROM section_questions WHERE id=?').get(r.lastInsertRowid));
+router.post('/:id/section-questions', async (req, res) => {
+  try {
+    const { phase_id, section_id, question, yes_points=1, no_points=0 } = req.body;
+    if (!question?.trim()) return res.status(400).json({ error: 'Question text required.' });
+    const { rows: m } = await pool.query(
+      'SELECT MAX(sort_order) as m FROM section_questions WHERE script_id=$1 AND phase_id=$2 AND section_id=$3',
+      [req.params.id, phase_id, section_id]
+    );
+    const maxOrder = m[0].m ?? -1;
+    const { rows } = await pool.query(
+      'INSERT INTO section_questions (script_id,phase_id,section_id,question,yes_points,no_points,sort_order) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *',
+      [req.params.id, phase_id, section_id, question.trim(), yes_points, no_points, maxOrder + 1]
+    );
+    res.json(rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.put('/:id/section-questions/:qid', (req, res) => {
-  const q = db.prepare('SELECT * FROM section_questions WHERE id=? AND script_id=?').get(req.params.qid, req.params.id);
-  if (!q) return res.status(404).json({ error: 'Not found.' });
-  const { question, yes_points, no_points, enabled } = req.body;
-  const sets=[]; const vals=[];
-  if (question!==undefined)   { sets.push('question=?');    vals.push(question.trim()); }
-  if (yes_points!==undefined) { sets.push('yes_points=?');  vals.push(yes_points); }
-  if (no_points!==undefined)  { sets.push('no_points=?');   vals.push(no_points); }
-  if (enabled!==undefined)    { sets.push('enabled=?');     vals.push(enabled?1:0); }
-  if (sets.length) db.prepare(`UPDATE section_questions SET ${sets.join(',')} WHERE id=?`).run(...vals, req.params.qid);
-  res.json(db.prepare('SELECT * FROM section_questions WHERE id=?').get(req.params.qid));
+router.put('/:id/section-questions/:qid', async (req, res) => {
+  try {
+    const { rows: existing } = await pool.query(
+      'SELECT * FROM section_questions WHERE id=$1 AND script_id=$2',
+      [req.params.qid, req.params.id]
+    );
+    if (!existing[0]) return res.status(404).json({ error: 'Not found.' });
+    const { question, yes_points, no_points, enabled } = req.body;
+    const sets = [], vals = [];
+    let i = 1;
+    if (question    !== undefined) { sets.push(`question=$${i++}`);    vals.push(question.trim()); }
+    if (yes_points  !== undefined) { sets.push(`yes_points=$${i++}`);  vals.push(yes_points); }
+    if (no_points   !== undefined) { sets.push(`no_points=$${i++}`);   vals.push(no_points); }
+    if (enabled     !== undefined) { sets.push(`enabled=$${i++}`);     vals.push(enabled ? 1 : 0); }
+    if (sets.length) {
+      await pool.query(`UPDATE section_questions SET ${sets.join(',')} WHERE id=$${i}`, [...vals, req.params.qid]);
+    }
+    const { rows } = await pool.query('SELECT * FROM section_questions WHERE id=$1', [req.params.qid]);
+    res.json(rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.delete('/:id/section-questions/:qid', (req, res) => {
-  db.prepare('DELETE FROM section_questions WHERE id=? AND script_id=?').run(req.params.qid, req.params.id);
-  res.json({ ok: true });
+router.delete('/:id/section-questions/:qid', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM section_questions WHERE id=$1 AND script_id=$2', [req.params.qid, req.params.id]);
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.post('/:id/section-questions/reorder', (req, res) => {
-  const { phase_id, section_id, ids } = req.body;
-  if (!Array.isArray(ids)) return res.status(400).json({ error: 'ids required.' });
-  const stmt = db.prepare('UPDATE section_questions SET sort_order=? WHERE id=? AND script_id=?');
-  db.transaction(() => ids.forEach((id,i) => stmt.run(i, id, req.params.id)))();
-  res.json({ ok: true });
+router.post('/:id/section-questions/reorder', async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids)) return res.status(400).json({ error: 'ids required.' });
+    await Promise.all(ids.map((id, i) =>
+      pool.query('UPDATE section_questions SET sort_order=$1 WHERE id=$2 AND script_id=$3', [i, id, req.params.id])
+    ));
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 module.exports = router;
