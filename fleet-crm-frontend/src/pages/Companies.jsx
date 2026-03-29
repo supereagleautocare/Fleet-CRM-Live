@@ -1006,7 +1006,7 @@ async function handleImport(e) {
                 </div>
                 <div className="form-group">
                   <label className="form-label">Address</label>
-                  <AddressAutocomplete value={addForm.address} onChange={val=>setAddForm(f=>({...f,address:val}))} onSelect={({address,city})=>setAddForm(f=>({...f,address,city:city||f.city}))} placeholder="Start typing address…"/>
+                  <AddressAutocomplete value={addForm.address} onChange={val=>setAddForm(f=>({...f,address:val}))} onSelect={({address,city,state,zip})=>setAddForm(f=>({...f,address,city:city||f.city,state:state||f.state,zip:zip||f.zip}))} placeholder="Start typing address…"/>
                 </div>
                 <div className="form-group">
                   <label className="form-label">City</label>
