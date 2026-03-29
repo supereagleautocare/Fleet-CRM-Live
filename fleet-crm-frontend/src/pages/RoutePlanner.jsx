@@ -923,6 +923,13 @@ useEffect(() => {
                  ⏳ locating {stillGeocoding} more…
                </div>
              )}
+              {(() => {
+                const missing = nearbyCompanies.filter(c => !c.lat || !c.lng);
+                if (missing.length === 0) return null;
+                return (
+                  <MissingAddressesPopup missing={missing} navigate={navigate} />
+                );
+              })()}
             </div>
           </div>
 
@@ -1039,7 +1046,76 @@ useEffect(() => {
     </div>
   );
 }
-
+function MissingAddressesPopup({ missing, navigate }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{position:'relative',display:'inline-block',marginTop:4}}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          display:'flex',alignItems:'center',gap:4,
+          fontSize:10,fontWeight:700,color:'#dc2626',
+          background:'#fef2f2',border:'1px solid #fca5a5',
+          borderRadius:6,padding:'2px 8px',cursor:'pointer',
+        }}
+      >
+        ⚠ {missing.length} address{missing.length !== 1 ? 'es' : ''} not found ···
+      </button>
+      {open && (
+        <>
+          <div
+            onClick={() => setOpen(false)}
+            style={{position:'fixed',inset:0,zIndex:9998}}
+          />
+          <div style={{
+            position:'absolute',right:0,top:'100%',marginTop:4,
+            background:'white',border:'1px solid var(--gray-200)',
+            borderRadius:10,boxShadow:'0 4px 20px rgba(0,0,0,.15)',
+            minWidth:280,maxWidth:340,zIndex:9999,overflow:'hidden',
+          }}>
+            <div style={{
+              padding:'8px 12px',background:'#fef2f2',
+              borderBottom:'1px solid #fca5a5',
+              fontSize:11,fontWeight:700,color:'#dc2626',
+            }}>
+              ⚠ These addresses couldn't be geocoded
+            </div>
+            <div style={{maxHeight:260,overflowY:'auto'}}>
+              {missing.map(c => (
+                <div key={c.id} style={{
+                  padding:'9px 12px',borderBottom:'1px solid var(--gray-100)',
+                  display:'flex',flexDirection:'column',gap:2,
+                }}>
+                  <button
+                    onClick={() => { setOpen(false); navigate('/companies?company=' + c.id); }}
+                    style={{
+                      textAlign:'left',background:'none',border:'none',
+                      cursor:'pointer',fontWeight:700,fontSize:12,
+                      color:'var(--navy-700)',textDecoration:'underline',
+                      textDecorationStyle:'dotted',padding:0,
+                    }}
+                  >
+                    {c.name}
+                  </button>
+                  <div style={{fontSize:10,color:'var(--gray-400)'}}>
+                    {c.address}{c.city ? ', ' + c.city : ''}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{
+              padding:'7px 12px',background:'var(--gray-50)',
+              fontSize:10,color:'var(--gray-400)',
+              borderTop:'1px solid var(--gray-200)',
+            }}>
+              Click a company to open its profile and fix the address
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 // ── Persistent Leaflet Map ────────────────────────────────────────────────────
 function PersistentMap({ routeStops=[], startGeo=null, returnHome=false, nearbyCompanies=[], onAddNearby }) {
   const mapRef          = useRef(null);
