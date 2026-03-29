@@ -905,8 +905,8 @@ useEffect(() => {
           />
 
           {/* Nearby filter pills */}
-          <div style={{position:'absolute',top:10,right:10,zIndex:1000}}>
-            <div style={{display:'flex',gap:4,background:'rgba(255,255,255,.92)',backdropFilter:'blur(6px)',borderRadius:20,padding:'5px 8px',boxShadow:'0 2px 10px rgba(0,0,0,.15)'}}>
+          <div style={{position:'absolute',top:10,right:10,zIndex:1000,maxWidth:220}}>
+            <div style={{display:'flex',gap:4,background:'rgba(255,255,255,.92)',backdropFilter:'blur(6px)',borderRadius:20,padding:'5px 8px',boxShadow:'0 2px 10px rgba(0,0,0,.15)',flexWrap:'wrap'}}>
               {[{k:'all',l:'All'},{k:'hot',l:'🔴 Drop In'},{k:'warm',l:'🟡 Due Soon'},{k:'good',l:'🟢 Recent'},{k:'none',l:'⚪ No Contact'}].map(f=>(
                 <button key={f.k} onClick={()=>setNearbyFilter(f.k)}
                   style={{padding:'3px 10px',borderRadius:14,fontSize:11,fontWeight:700,cursor:'pointer',border:'none',
@@ -1048,6 +1048,9 @@ useEffect(() => {
 }
 function MissingAddressesPopup({ missing, navigate }) {
   const [open, setOpen] = useState(false);
+  const [dismissed, setDismissed] = useState(new Set());
+  const visible = missing.filter(c => !dismissed.has(c.id));
+  if (visible.length === 0) return null;
   return (
     <div style={{position:'relative',display:'inline-block',marginTop:4}}>
       <button
@@ -1059,14 +1062,11 @@ function MissingAddressesPopup({ missing, navigate }) {
           borderRadius:6,padding:'2px 8px',cursor:'pointer',
         }}
       >
-        ⚠ {missing.length} address{missing.length !== 1 ? 'es' : ''} not found ···
+        ⚠ {visible.length} address{visible.length !== 1 ? 'es' : ''} not found ···
       </button>
       {open && (
         <>
-          <div
-            onClick={() => setOpen(false)}
-            style={{position:'fixed',inset:0,zIndex:9998}}
-          />
+          <div onClick={() => setOpen(false)} style={{position:'fixed',inset:0,zIndex:9998}}/>
           <div style={{
             position:'absolute',right:0,top:'100%',marginTop:4,
             background:'white',border:'1px solid var(--gray-200)',
@@ -1081,25 +1081,36 @@ function MissingAddressesPopup({ missing, navigate }) {
               ⚠ These addresses couldn't be geocoded
             </div>
             <div style={{maxHeight:260,overflowY:'auto'}}>
-              {missing.map(c => (
+              {visible.map(c => (
                 <div key={c.id} style={{
-                  padding:'9px 12px',borderBottom:'1px solid var(--gray-100)',
-                  display:'flex',flexDirection:'column',gap:2,
+                  padding:'8px 12px',borderBottom:'1px solid var(--gray-100)',
+                  display:'flex',alignItems:'flex-start',gap:8,
                 }}>
-                  <button
-                    onClick={() => { setOpen(false); navigate('/companies?company=' + c.id); }}
-                    style={{
-                      textAlign:'left',background:'none',border:'none',
-                      cursor:'pointer',fontWeight:700,fontSize:12,
-                      color:'var(--navy-700)',textDecoration:'underline',
-                      textDecorationStyle:'dotted',padding:0,
-                    }}
-                  >
-                    {c.name}
-                  </button>
-                  <div style={{fontSize:10,color:'var(--gray-400)'}}>
-                    {c.address}{c.city ? ', ' + c.city : ''}
+                  <div style={{flex:1,minWidth:0}}>
+                    <button
+                      onClick={() => { setOpen(false); navigate('/companies?company=' + c.id); }}
+                      style={{
+                        textAlign:'left',background:'none',border:'none',
+                        cursor:'pointer',fontWeight:700,fontSize:12,
+                        color:'var(--navy-700)',textDecoration:'underline',
+                        textDecorationStyle:'dotted',padding:0,display:'block',
+                      }}
+                    >
+                      {c.name}
+                    </button>
+                    <div style={{fontSize:10,color:'var(--gray-400)',marginTop:2}}>
+                      {c.address}{c.city ? ', ' + c.city : ''}
+                    </div>
                   </div>
+                  <button
+                    onClick={() => setDismissed(d => new Set([...d, c.id]))}
+                    title="Dismiss"
+                    style={{
+                      flexShrink:0,background:'none',border:'none',
+                      cursor:'pointer',fontSize:13,color:'var(--gray-300)',
+                      padding:'0 2px',lineHeight:1,marginTop:1,
+                    }}
+                  >✕</button>
                 </div>
               ))}
             </div>
@@ -1108,7 +1119,7 @@ function MissingAddressesPopup({ missing, navigate }) {
               fontSize:10,color:'var(--gray-400)',
               borderTop:'1px solid var(--gray-200)',
             }}>
-              Click a company to open its profile and fix the address
+              Click a name to fix · ✕ to hide for this session
             </div>
           </div>
         </>
