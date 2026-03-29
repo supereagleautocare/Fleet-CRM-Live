@@ -577,7 +577,7 @@ async function handleImport(e) {
             <div style={{ overflowY:'auto', flex:1 }}>
               {!selected && (
                 <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr 1.5fr 1.5fr 0.7fr', gap:0, padding:'6px 14px', borderBottom:'2px solid var(--gray-200)', background:'var(--gray-50)' }}>
-                  {['Company','Industry','Phone','Contact','Last Call','Stage'].map(h => (
+                  {['Company','Industry','Phone','Contact','Last Call','Follow-Up','Stage'].map(h => (
                     <div key={h} style={{ fontSize:10, fontWeight:700, color:'var(--gray-400)', textTransform:'uppercase', letterSpacing:'.06em' }}>{h}</div>
                   ))}
                 </div>
@@ -602,6 +602,17 @@ async function handleImport(e) {
                   {!selected && <div style={{ fontSize:12, color:'var(--gray-500)' }}>{fmtPhone(c.main_phone)}</div>}
                   {!selected && <div style={{ fontSize:12, color:'var(--gray-500)' }}>{c.preferred_contact_name ? `${c.preferred_contact_name}${c.preferred_contact_role ? ' · '+c.preferred_contact_role : ''}` : '—'}</div>}
                   {!selected && <div style={{ fontSize:12, color:'var(--gray-500)' }}>{c.last_contact_type ? `${c.last_contact_type} · ${fmtDate(c.last_contacted)}` : '—'}</div>}
+                  {!selected && <div style={{ fontSize:12 }}>
+                    {c.followup_due ? (
+                      <span style={{
+                        fontWeight:700, fontSize:11, padding:'1px 7px', borderRadius:8,
+                        background: new Date(c.followup_due+'T00:00:00') < new Date() ? '#fef2f2' : c.followup_due === new Date().toISOString().split('T')[0] ? '#fffbeb' : '#f0fdf4',
+                        color: new Date(c.followup_due+'T00:00:00') < new Date() ? '#dc2626' : c.followup_due === new Date().toISOString().split('T')[0] ? '#92400e' : '#15803d',
+                      }}>
+                        {fmtDate(c.followup_due)}
+                      </span>
+                    ) : <span style={{color:'var(--gray-300)'}}>—</span>}
+                  </div>}
                   {!selected && <div><span style={{ fontSize:9, padding:'1px 6px', borderRadius:8, background:'var(--gray-100)', color:'var(--gray-500)', fontWeight:700, textTransform:'uppercase' }}>{c.pipeline_stage||'new'}</span></div>}
                 </div>
               ))}
