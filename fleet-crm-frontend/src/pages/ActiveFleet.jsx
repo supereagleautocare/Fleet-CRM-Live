@@ -110,7 +110,23 @@ function IdleTag({ updated }) {
 }
 
 // ── SHOP FLOOR ────────────────────────────────────────────────────────────────
-function ShopFloor({ ros, companies, vehicles, employees, statuses }) {
+function ShopFloor({ ros, companies, vehicles, employees, statuses, onRefresh, pollSeconds = 60 }) {
+  const [countdown, setCountdown] = React.useState(pollSeconds);
+
+  // Fast auto-refresh while this tab is visible
+  React.useEffect(() => {
+    setCountdown(pollSeconds);
+    const tick = setInterval(() => {
+      setCountdown(prev => {
+        if (prev <= 1) {
+          onRefresh?.();
+          return pollSeconds;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(tick);
+  }, [pollSeconds, onRefresh]);
   const [sel, setSel] = useState(null);
   const [exp, setExp] = useState(null);
   const gc = id => companies.find(c => c.id===id);
@@ -125,6 +141,11 @@ function ShopFloor({ ros, companies, vehicles, employees, statuses }) {
   const rbg    = ro => { const h=hrsIn(ro.updated); return h>72?'row-overdue':h>24?'row-today':''; };
   return (
     <>
+      <div style={{display:'flex',justifyContent:'flex-end',marginBottom:8}}>
+        <span style={{fontSize:11,color:'var(--gray-400)',background:'var(--gray-50)',border:'1px solid var(--gray-200)',borderRadius:6,padding:'3px 10px'}}>
+          🔄 Auto-refresh in {countdown}s
+        </span>
+      </div>
       <div className="stat-grid" style={{gridTemplateColumns:'repeat(4,1fr)'}}>
         {[
           {l:'Active ROs',   v:active.length, c:''},
@@ -654,12 +675,31 @@ function SalesTab({ ros, companies, vehicles, employees, statuses }) {
 // ── FLEET SETTINGS ────────────────────────────────────────────────────────────
 function FleetSettings({ oilInterval, setOilInterval, statuses }) {
   const { showToast } = useApp();
-  const [token,      setToken]      = useState('');
-  const [shopId,     setShopId]     = useState('');
-  const [env,        setEnv]        = useState('production');
-  const [poll,       setPoll]       = useState(5);
-  const [cfxKey,     setCfxKey]     = useState('');
-  const [cfxEnabled, setCfxEnabled] = useState(false);
+  const [token,           setToken]           = useState('');
+  const [shopId,          setShopId]          = useState('');
+  const [env,             setEnv]             = useState('production');
+  const [poll,            setPoll]            = useState(5);
+  const [cfxKey,          setCfxKey]          = useState('');
+  const [cfxEnabled,      setCfxEnabled]      = useState(false);
+  const [bizStart,        setBizStart]        = useState(7);
+  const [bizEnd,          setBizEnd]          = useState(19);
+  const [floorPollSecs,   setFloorPollSecs]   = useState(60);
+  const [settingsLoaded,  setSettingsLoaded]  = useState(false);
+
+  useEffect(() => {
+    api.tekmetricSettings().then(s => {
+      if (s.shopId)     setShopId(s.shopId);
+      if (s.env)        setEnv(s.env);
+      if (s.pollInterval) setPoll(s.pollInterval);
+      if (s.oilInterval)  setOilInterval(s.oilInterval);
+      if (s.carfaxKey)    setCfxKey(s.carfaxKey);
+      setCfxEnabled(!!s.carfaxEnabled);
+      if (s.bizHoursStart != null) setBizStart(s.bizHoursStart);
+      if (s.bizHoursEnd   != null) setBizEnd(s.bizHoursEnd);
+      if (s.floorPollSeconds != null) setFloorPollSecs(s.floorPollSeconds);
+      setSettingsLoaded(true);
+    }).catch(() => setSettingsLoaded(true));
+  }, []);
   const [contacts,   setContacts]   = useState([{id:1,name:'Owner',email:'',phone:'',sms:true,emailOn:true}]);
   const [rules,      setRules]      = useState(statuses.map(s=>({...s,onEnter:s.id===2||s.id===5,onIdle:s.id===2||s.id===6,hours:s.id===6?48:24})));
   const add = () => setContacts(c=>[...c,{id:Date.now(),name:'',email:'',phone:'',sms:true,emailOn:true}]);
@@ -669,7 +709,7 @@ function FleetSettings({ oilInterval, setOilInterval, statuses }) {
   const setH = (i,v) => setRules(r=>r.map((x,j)=>j===i?{...x,hours:parseInt(v)||1}:x));
   const save = async () => {
     try {
-      await api.saveTekmetricSettings({ token, shopId, env, pollInterval:poll, oilInterval, carfaxKey:cfxKey, carfaxEnabled });
+      await api.saveTekmetricSettings({ token, shopId, env, pollInterval:poll, oilInterval, carfaxKey:cfxKey, carfaxEnabled:cfxEnabled, bizHoursStart:bizStart, bizHoursEnd:bizEnd, floorPollSeconds:floorPollSecs });
       showToast('Fleet settings saved');
     } catch(e) { showToast('Failed to save: ' + e.message, 'error'); }
   };
@@ -714,6 +754,38 @@ function FleetSettings({ oilInterval, setOilInterval, statuses }) {
             </div>
             <div style={{fontSize:11,color:'var(--gray-400)',marginTop:5}}>
               Auto-sync only runs Mon–Fri 7am–7pm. Change hours in BDAY_START/BDAY_END in ActiveFleet.jsx.
+            </div>
+          </div>
+        </div>
+        <div className="table-card" style={{padding:18}}>
+          <div style={{fontWeight:700,fontSize:13,color:'var(--gray-800)',marginBottom:4}}>🕐 Auto-Sync Hours</div>
+          <div style={{fontSize:12,color:'var(--gray-400)',marginBottom:14}}>Auto-sync only runs on weekdays between these hours. Outside these hours it pauses automatically.</div>
+          <div style={{display:'flex',gap:12,alignItems:'center',flexWrap:'wrap',marginBottom:16}}>
+            <div>
+              <div style={{fontSize:11,fontWeight:700,color:'var(--gray-500)',marginBottom:4}}>Opens (24h)</div>
+              <input type="number" min="0" max="23" value={bizStart} onChange={e=>setBizStart(parseInt(e.target.value)||0)}
+                style={{width:64,padding:'6px 8px',border:'1.5px solid var(--gray-200)',borderRadius:6,fontSize:14,fontWeight:700,textAlign:'center'}}/>
+            </div>
+            <div style={{fontSize:20,color:'var(--gray-300)',marginTop:18}}>→</div>
+            <div>
+              <div style={{fontSize:11,fontWeight:700,color:'var(--gray-500)',marginBottom:4}}>Closes (24h)</div>
+              <input type="number" min="0" max="23" value={bizEnd} onChange={e=>setBizEnd(parseInt(e.target.value)||0)}
+                style={{width:64,padding:'6px 8px',border:'1.5px solid var(--gray-200)',borderRadius:6,fontSize:14,fontWeight:700,textAlign:'center'}}/>
+            </div>
+            <div style={{fontSize:12,color:'var(--gray-500)',marginTop:18}}>
+              (7 = 7:00am, 19 = 7:00pm)
+            </div>
+          </div>
+          <div style={{marginBottom:4}}>
+            <div style={{fontSize:11,fontWeight:700,color:'var(--gray-500)',marginBottom:6}}>🔴 Shop Floor refresh interval</div>
+            <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
+              {[30,60,120,300].map(s=>(
+                <button key={s} onClick={()=>setFloorPollSecs(s)} className="btn btn-sm"
+                  style={{background:floorPollSecs===s?'var(--gold-500)':'white',color:floorPollSecs===s?'var(--navy-950)':'var(--gray-600)',border:'1px solid var(--gray-200)'}}>
+                  {s<60?`${s}s`:s===60?'1 min':s===120?'2 min':'5 min'}
+                </button>
+              ))}
+              <span style={{fontSize:11,color:'var(--gray-400)'}}>— Shop Floor only, while tab is open</span>
             </div>
           </div>
         </div>
@@ -822,16 +894,14 @@ function FleetSettings({ oilInterval, setOilInterval, statuses }) {
 // Change these two numbers if your shop hours are different.
 // BDAY_START = hour the shop opens (24-hour format, so 7 = 7:00am)
 // BDAY_END   = hour the shop closes (19 = 7:00pm)
-const BDAY_START   = 7;
-const BDAY_END     = 19;
 const POLL_MINUTES = 5;
 const POLL_MS      = POLL_MINUTES * 60 * 1000;
 
-function isBusinessHours() {
-  const now = new Date();
-  const day  = now.getDay();   // 0 = Sunday, 6 = Saturday
+function isBusinessHours(start = 7, end = 19) {
+  const now  = new Date();
+  const day  = now.getDay();
   const hour = now.getHours();
-  return day >= 1 && day <= 5 && hour >= BDAY_START && hour < BDAY_END;
+  return day >= 1 && day <= 5 && hour >= start && hour < end;
 }
 
 // ── INNER TABS ────────────────────────────────────────────────────────────────
@@ -852,8 +922,11 @@ export default function ActiveFleet() {
   const [lastSync,    setLastSync]    = useState(null);
   const [syncedStats, setSyncedStats] = useState(null);
   const [nextSyncIn,  setNextSyncIn]  = useState(POLL_MINUTES * 60);
-  const [oilInterval, setOilInterval] = useState(90);
-  const [isDemo,      setIsDemo]      = useState(true);
+  const [oilInterval,     setOilInterval]     = useState(90);
+  const [isDemo,          setIsDemo]          = useState(true);
+  const [bizHoursStart,   setBizHoursStart]   = useState(7);
+  const [bizHoursEnd,     setBizHoursEnd]     = useState(19);
+  const [floorPollSecs,   setFloorPollSecs]   = useState(60);
 
   const [statuses,  setStatuses]  = useState(DEMO_STATUSES);
   const [companies, setCompanies] = useState(DEMO_COMPANIES);
@@ -862,6 +935,16 @@ export default function ActiveFleet() {
   const [ros,       setRos]       = useState(DEMO_ROS);
   const [carfax,    setCarfax]    = useState(DEMO_CARFAX);
 
+  // Load saved settings on mount so biz hours + floor poll are respected
+  useEffect(() => {
+    api.tekmetricSettings().then(s => {
+      if (s.bizHoursStart != null) setBizHoursStart(s.bizHoursStart);
+      if (s.bizHoursEnd   != null) setBizHoursEnd(s.bizHoursEnd);
+      if (s.floorPollSeconds != null) setFloorPollSecs(s.floorPollSeconds);
+      if (s.oilInterval   != null) setOilInterval(s.oilInterval);
+    }).catch(() => {});
+  }, []);
+  
   const nextSyncTarget = useRef(Date.now() + POLL_MS);
   const syncing_ref    = useRef(false); // ref copy so the interval can read it
 
@@ -929,7 +1012,7 @@ export default function ActiveFleet() {
     const tick = setInterval(() => {
       const msLeft = nextSyncTarget.current - Date.now();
       if (msLeft <= 0) {
-        if (isBusinessHours()) {
+        if (isBusinessHours(bizHoursStart, bizHoursEnd)) {
           doSync(true);
         } else {
           // outside hours — just push the target forward, don't sync
@@ -1002,7 +1085,7 @@ export default function ActiveFleet() {
                 <div>Last sync: {fmtLastSync(lastSync)}</div>
                 {isBusinessHours()
                   ? <div>Next: ~{fmtCountdown(nextSyncIn)}</div>
-                  : <div style={{color:'#f59e0b'}}>Auto-sync paused (after hours)</div>
+                  : <div style={{color:'#f59e0b'}}>Auto-sync paused (outside {bizHoursStart}:00–{bizHoursEnd}:00)</div>
                 }
               </>
             ) : (
@@ -1034,7 +1117,7 @@ export default function ActiveFleet() {
 
       {/* ── Tab content ── */}
       <div className="page-body">
-        {tab==='shopfloor' && <ShopFloor ros={ros} companies={companies} vehicles={vehicles} employees={employees} statuses={statuses}/>}
+        {tab==='shopfloor' && <ShopFloor ros={ros} companies={companies} vehicles={vehicles} employees={employees} statuses={statuses} onRefresh={()=>doSync(true)} pollSeconds={floorPollSecs}/>}
         {tab==='vehicles'  && <VehiclesTab ros={ros} companies={companies} vehicles={vehicles} carfax={carfax} oilInterval={oilInterval}/>}
         {tab==='sales'     && <SalesTab ros={ros} companies={companies} vehicles={vehicles} employees={employees} statuses={statuses}/>}
         {tab==='settings'  && <FleetSettings oilInterval={oilInterval} setOilInterval={setOilInterval} statuses={statuses}/>}
