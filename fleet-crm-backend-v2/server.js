@@ -64,6 +64,9 @@ app.use('/api/scripts',    require('./routes/scripts'));
 app.use('/api/scorecard',  require('./routes/scorecard'));
 app.use('/api/pipeline',   require('./routes/pipeline'));
 app.use('/api/tekmetric',  require('./routes/tekmetric'));
+app.use('/api/companies',  require('./routes/companies'));
+app.use('/api/customers',  require('./routes/customers'));  // ← this line is missing entirely
+app.use('/api/followups',  require('./routes/followups'));
 
 // ─── Health check ─────────────────────────────────────────────────────────────
 app.get('/api/health', (_req, res) => {
