@@ -222,10 +222,9 @@ router.get('/calling', async (req, res) => {
                 OR (SELECT COUNT(*) FROM call_log WHERE entity_id=c.id AND log_type='company' AND log_category='call')=0)`;
     } else {
       sql += ` AND (
-        (fu.id IS NOT NULL AND fu.due_date <= current_date)
-        OR cq.id IS NOT NULL
-        OR c.pipeline_stage='new'
-        OR (SELECT COUNT(*) FROM call_log WHERE entity_id=c.id AND log_type='company' AND log_category='call')=0
+        cq.id IS NOT NULL
+        OR fu.id IS NULL
+        OR fu.due_date <= current_date
       )`;
     }
 
