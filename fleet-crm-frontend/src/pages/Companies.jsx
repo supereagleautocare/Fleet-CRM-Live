@@ -674,8 +674,14 @@ async function handleImport(e) {
                       )}
                     </div>
                     <div style={{ display:'flex', gap:8 }}>
-                      {!selected.in_queue && (
-                        <button className="btn btn-primary btn-sm" onClick={()=>handleAddToQueue(selected.id)}>+ Add to Queue</button>
+                      {selected.in_queue ? (
+                        <span style={{ padding:'5px 12px', borderRadius:8, background:'#f0fdf4', border:'1px solid #bbf7d0', color:'#166534', fontSize:12, fontWeight:700 }}>
+                          ✓ In Calling Queue
+                        </span>
+                      ) : (
+                        <button className="btn btn-primary btn-sm" onClick={()=>handleAddToQueue(selected.id)}>
+                          + Add to Queue
+                        </button>
                       )}
                       <button className="btn btn-ghost btn-sm" style={{ color:'#dc2626', border:'1px solid #fca5a5' }}
                         onClick={async()=>{
@@ -1012,9 +1018,11 @@ async function handleImport(e) {
                   <label className="form-label">City</label>
                   <input className="form-input" value={addForm.city} onChange={e=>setAddForm(f=>({...f,city:e.target.value}))} placeholder="Charlotte"/>
                 </div>
-                <div className="form-group" style={{ flexDirection:'row', alignItems:'center', gap:8 }}>
-                  <input type="checkbox" id="addqueue" checked={addToQueue} onChange={e=>setAddToQueue(e.target.checked)} style={{ width:16, height:16, accentColor:'var(--gold-500)' }}/>
-                  <label htmlFor="addqueue" style={{ fontSize:13, color:'var(--gray-700)', cursor:'pointer' }}>Also add to Company Calling Queue</label>
+                <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:8, marginBottom:12 }}>
+                  <input type="checkbox" id="addqueue" checked={addToQueue} onChange={e=>setAddToQueue(e.target.checked)} style={{ width:16, height:16, accentColor:'var(--gold-500)', flexShrink:0 }}/>
+                  <label htmlFor="addqueue" style={{ fontSize:13, color:'#92400e', cursor:'pointer', fontWeight:600 }}>
+                    📞 Add to Calling Queue immediately after creating
+                  </label>
                 </div>
                 <button type="submit" className="btn btn-primary btn-lg" style={{ width:'100%', marginTop:8 }} disabled={saving}>
                   {saving ? 'Saving…' : '+ Add Company'}
