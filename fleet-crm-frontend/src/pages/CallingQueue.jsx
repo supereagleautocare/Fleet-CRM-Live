@@ -62,7 +62,10 @@ export default function CallingQueue() {
       setRows(data);
       const inds = [...new Set(data.map(r => r.industry).filter(Boolean))].sort();
       setIndustries(inds);
-    } finally { setLoading(false); }
+  } catch (err) {
+    console.error('Calling queue load error:', err.message);
+    showToast('Failed to load calling queue: ' + err.message, 'error');
+  } finally { setLoading(false); }
   }
 
   useEffect(() => { load(); }, [filter, industry, search, showUpcoming]);
