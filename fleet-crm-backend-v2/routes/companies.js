@@ -66,7 +66,48 @@ function contactDisplayName(val) {
   const name = String(val || '').trim();
   return name || 'Unnamed Contact';
 }
+// ═══════════════════════════════════════════════════════
+// CALLING QUEUE
+// ═══════════════════════════════════════════════════════
 
+router.get('/queue/list', async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT q.*, c.name AS company_name, c.company_id AS company_id_str, c.main_phone, c.industry, c.address, c.city,
+        cc.name AS preferred_contact_name, cc.direct_line AS preferred_direct_line,
+        cc.email AS preferred_email, cc.role_title AS preferred_role
+      FROM calling_queue q
+      JOIN companies c ON c.id=q.entity_id
+      LEFT JOIN company_contacts cc ON cc.company_id=c.company_id AND cc.is_preferred=1
+      WHERE q.queue_type='company'
+      ORDER BY q.added_at ASC
+    `);
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/queue', async (req, res) => {
+  try {
+    const { company_id } = req.body;
+    if (!company_id) return res.status(400).json({ error: 'company_id is required.' });
+    const { rows: coRows } = await pool.query('SELECT * FROM companies WHERE id=$1', [company_id]);
+    if (!coRows[0]) return res.status(404).json({ error: 'Company not found.' });
+    const { rows: ex } = await pool.query("SELECT id FROM calling_queue WHERE queue_type='company' AND entity_id=$1", [company_id]);
+    if (ex[0]) return res.status(409).json({ error: 'Company is already in the calling queue.' });
+    const { rows } = await pool.query("INSERT INTO calling_queue (queue_type,entity_id,added_by) VALUES ('company',$1,$2) RETURNING *", [company_id, req.user.id]);
+    // Also set pipeline stage to 'call' so it appears in the calling queue
+    await pool.query("UPDATE companies SET pipeline_stage='call' WHERE id=$1 AND pipeline_stage='new'", [company_id]);
+    res.status(201).json(rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.delete('/queue/:queueId', async (req, res) => {
+  try {
+    const { rowCount } = await pool.query("DELETE FROM calling_queue WHERE id=$1 AND queue_type='company'", [req.params.queueId]);
+    if (rowCount === 0) return res.status(404).json({ error: 'Queue entry not found.' });
+    res.json({ message: 'Removed from queue.' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
 // ═══════════════════════════════════════════════════════
 // COMPANY PROFILES
 // ═══════════════════════════════════════════════════════
@@ -300,48 +341,7 @@ router.delete('/contacts/:contactId', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// ═══════════════════════════════════════════════════════
-// CALLING QUEUE
-// ═══════════════════════════════════════════════════════
 
-router.get('/queue/list', async (req, res) => {
-  try {
-    const { rows } = await pool.query(`
-      SELECT q.*, c.name AS company_name, c.company_id AS company_id_str, c.main_phone, c.industry, c.address, c.city,
-        cc.name AS preferred_contact_name, cc.direct_line AS preferred_direct_line,
-        cc.email AS preferred_email, cc.role_title AS preferred_role
-      FROM calling_queue q
-      JOIN companies c ON c.id=q.entity_id
-      LEFT JOIN company_contacts cc ON cc.company_id=c.company_id AND cc.is_preferred=1
-      WHERE q.queue_type='company'
-      ORDER BY q.added_at ASC
-    `);
-    res.json(rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-router.post('/queue', async (req, res) => {
-  try {
-    const { company_id } = req.body;
-    if (!company_id) return res.status(400).json({ error: 'company_id is required.' });
-    const { rows: coRows } = await pool.query('SELECT * FROM companies WHERE id=$1', [company_id]);
-    if (!coRows[0]) return res.status(404).json({ error: 'Company not found.' });
-    const { rows: ex } = await pool.query("SELECT id FROM calling_queue WHERE queue_type='company' AND entity_id=$1", [company_id]);
-    if (ex[0]) return res.status(409).json({ error: 'Company is already in the calling queue.' });
-    const { rows } = await pool.query("INSERT INTO calling_queue (queue_type,entity_id,added_by) VALUES ('company',$1,$2) RETURNING *", [company_id, req.user.id]);
-    // Also set pipeline stage to 'call' so it appears in the calling queue
-    await pool.query("UPDATE companies SET pipeline_stage='call' WHERE id=$1 AND pipeline_stage='new'", [company_id]);
-    res.status(201).json(rows[0]);
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-router.delete('/queue/:queueId', async (req, res) => {
-  try {
-    const { rowCount } = await pool.query("DELETE FROM calling_queue WHERE id=$1 AND queue_type='company'", [req.params.queueId]);
-    if (rowCount === 0) return res.status(404).json({ error: 'Queue entry not found.' });
-    res.json({ message: 'Removed from queue.' });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
 
 // ═══════════════════════════════════════════════════════
 // COMPLETE A COMPANY CALL
