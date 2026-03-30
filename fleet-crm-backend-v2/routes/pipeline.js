@@ -193,7 +193,7 @@ router.get('/calling', async (req, res) => {
         cc.direct_line as preferred_direct_line,
         cc.email       as preferred_email,
         fu.id          as followup_id,
-        fu.due_date,
+        COALESCE(fu.due_date, to_char(current_date, 'YYYY-MM-DD')) AS due_date,
         fu.source_type,
         cq.id          as calling_queue_id,
         cl_last.contact_type as last_contact_type,
@@ -235,7 +235,7 @@ router.get('/calling', async (req, res) => {
     if (industry) { params.push(industry); sql += ` AND c.industry=$${params.length}`; }
     if (search)   { params.push(`%${search}%`); sql += ` AND (c.name ILIKE $${params.length} OR c.industry ILIKE $${params.length})`; }
 
-    sql += ` ORDER BY fu.due_date ASC, c.name ASC`;
+    sql += ` ORDER BY due_date ASC, c.name ASC`;
     const { rows } = await pool.query(sql, params);
     res.json(rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
