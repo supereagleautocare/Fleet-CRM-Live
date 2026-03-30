@@ -790,5 +790,25 @@ router.get('/:id/geocode-lookup', async (req, res) => {
     return res.status(404).json({ error:'Address not found' });
   } catch (err) { res.status(500).json({ error:err.message }); }
 });
-
+// DELETE /api/companies/:id
+router.delete('/:id', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { rows } = await client.query('SELECT * FROM companies WHERE id = $1', [req.params.id]);
+    const company = rows[0];
+    if (!company) return res.status(404).json({ error: 'Company not found.' });
+    await client.query('BEGIN');
+    await client.query('DELETE FROM call_log WHERE entity_id = $1 AND log_type = $2', [company.id, 'company']);
+    await client.query('DELETE FROM follow_ups WHERE entity_id = $1 AND source_type = $2', [company.id, 'company']);
+    await client.query('DELETE FROM calling_queue WHERE entity_id = $1', [company.id]);
+    await client.query('DELETE FROM visit_queue WHERE entity_id = $1', [company.id]);
+    await client.query('DELETE FROM company_contacts WHERE company_id = $1', [company.company_id]);
+    await client.query('DELETE FROM companies WHERE id = $1', [company.id]);
+    await client.query('COMMIT');
+    res.json({ ok: true });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: 'Delete failed: ' + e.message });
+  } finally { client.release(); }
+});
 module.exports = router;
