@@ -77,23 +77,58 @@ router.get('/board', async (req, res) => {
 });
 
 // ── Sidebar badge counts ──────────────────────────────────────────────────────
-router.get('/counts', async (req, res) => {
+router.get('/calling', async (req, res) => {
   try {
-    const today = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in ET
-    const [callingRes, mailRes, emailRes, visitsRes] = await Promise.all([
-      pool.query(`
-        SELECT COUNT(DISTINCT c.id) as cnt FROM companies c
-        WHERE c.status='active' AND c.pipeline_stage IN ('new','call')
-          AND (
-            EXISTS (SELECT 1 FROM follow_ups fu WHERE fu.entity_id=c.id AND fu.source_type='company' AND fu.due_date <= $1)
-            OR EXISTS (SELECT 1 FROM calling_queue cq WHERE cq.entity_id=c.id AND cq.queue_type='company')
-            OR (SELECT COUNT(*) FROM call_log WHERE entity_id=c.id AND log_type='company' AND log_category='call') = 0
-          )
-      `, [today]),
-      pool.query(`SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='mail' AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND is_locked=0 AND due_date <= $1)`, [today]),
-      pool.query(`SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='email' AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND is_locked=0 AND due_date <= $1)`, [today]),
-      pool.query(`SELECT COUNT(*) as cnt FROM visit_queue WHERE scheduled_date <= $1`, [today]),
-    ]);
+    const today = new Date().toLocaleDateString('en-CA');
+    const { filter, industry, search, upcoming } = req.query;
+    const params = [today];
+    let sql = `
+      SELECT c.*,
+        cc.name        as preferred_contact_name,
+        cc.role_title  as preferred_role,
+        cc.direct_line as preferred_direct_line,
+        cc.email       as preferred_email,
+        fu.id          as followup_id,
+        COALESCE(fu.due_date, $1) AS due_date,
+        fu.source_type,
+        cq.id          as calling_queue_id,
+        cl_last.contact_type as last_contact_type,
+        cl_last.logged_at    as last_contacted,
+        cl_last.contact_name as last_contact_name,
+        cl_last.notes        as last_notes,
+        (SELECT COUNT(*) FROM call_log WHERE entity_id=c.id AND log_type='company' AND action_type!='Move') as call_count
+      FROM companies c
+      LEFT JOIN company_contacts cc ON cc.company_id=c.company_id AND cc.is_preferred=1
+      LEFT JOIN (
+        SELECT DISTINCT ON (entity_id) id, entity_id, due_date, source_type
+        FROM follow_ups WHERE source_type='company' AND is_locked=0
+        ORDER BY entity_id, id DESC
+      ) fu ON fu.entity_id=c.id
+      LEFT JOIN calling_queue cq ON cq.entity_id=c.id AND cq.queue_type='company'
+      LEFT JOIN (
+        SELECT DISTINCT ON (entity_id) entity_id, contact_type, logged_at, contact_name, notes
+        FROM call_log WHERE log_type='company' AND log_category='call'
+        ORDER BY entity_id, id DESC
+      ) cl_last ON cl_last.entity_id=c.id
+      WHERE c.status='active' AND c.pipeline_stage IN ('new','call')
+    `;
+
+    if (upcoming === '1') {
+      sql += ` AND (fu.id IS NOT NULL OR cq.id IS NOT NULL OR c.pipeline_stage='new'
+                OR (SELECT COUNT(*) FROM call_log WHERE entity_id=c.id AND log_type='company' AND log_category='call')=0)`;
+    } else {
+      sql += ` AND (cq.id IS NOT NULL OR fu.id IS NULL OR fu.due_date <= $1)`;
+    }
+
+    if (filter === 'first')    { sql += ` AND (SELECT COUNT(*) FROM call_log WHERE entity_id=c.id AND log_type='company' AND log_category='call' AND counts_as_attempt=1)=0`; }
+    if (filter === 'followup') { sql += ` AND (SELECT COUNT(*) FROM call_log WHERE entity_id=c.id AND log_type='company' AND log_category='call' AND counts_as_attempt=1)>0`; }
+    if (filter === 'overdue')  { sql += ` AND fu.due_date < $1`; }
+    if (industry) { params.push(industry); sql += ` AND c.industry=$${params.length}`; }
+    if (search)   { params.push(`%${search}%`); sql += ` AND (c.name ILIKE $${params.length} OR c.industry ILIKE $${params.length})`; }
+
+    sql += ` ORDER BY due_date ASC, c.name ASC`;
+    const { rows } = await pool.query(sql, params);
+    res.json(rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
