@@ -1001,7 +1001,7 @@ useEffect(() => {
                 <div>
                   <div style={{fontSize:11,fontWeight:700,textTransform:'uppercase',letterSpacing:'.07em',color:'var(--gray-500)',marginBottom:7}}>Next Action</div>
                   <div className="next-action-group">
-                    {['Call','Visit','Mail','Email','Stop'].map(a=>(
+                    {['Call','Mail','Email','Visit','Stop'].map(a=>(
                       <button key={a} className={`action-btn${logForm.next_action===a?a==='Stop'?' selected-stop':' selected-call':''}`}
                         onClick={()=>setLogForm(f=>({...f,next_action:a}))}>
                         {a==='Call'?'📞 ':a==='Visit'?'📍 ':a==='Mail'?'✉️ ':a==='Email'?'📧 ':'🚫 '}{a}
