@@ -193,7 +193,7 @@ router.get('/calling', async (req, res) => {
         cc.direct_line as preferred_direct_line,
         cc.email       as preferred_email,
         fu.id          as followup_id,
-        COALESCE(fu.due_date, to_char(current_date::text, 'YYYY-MM-DD')) AS due_date,
+        COALESCE(fu.due_date, to_char(current_date, 'YYYY-MM-DD')) AS due_date,
         fu.source_type,
         cq.id          as calling_queue_id,
         cl_last.contact_type as last_contact_type,
