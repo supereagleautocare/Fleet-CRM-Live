@@ -135,7 +135,7 @@ router.get('/calling', async (req, res) => {
 // ── 7-day forecast ────────────────────────────────────────────────────────────
 router.get('/forecast', async (req, res) => {
   try {
-    const today = new Date().toISOString().split('T')[0];
+    const today = new Date().toLocaleDateString('en-CA');
 
     const [oc, om, oe, ov] = await Promise.all([
       pool.query("SELECT COUNT(*) as cnt FROM follow_ups WHERE source_type='company' AND due_date < $1", [today]),
