@@ -179,8 +179,6 @@ router.post('/:id/complete', async (req, res) => {
       }
     }
 
-    await client.query('DELETE FROM visit_queue WHERE id = $1', [visit.id]);
-
     const { next_action_date: nad } = await scheduleNextAction(pool, {
       company, contact_type, next_action, next_action_date_override,
       contact_name: contact_name||visit.contact_name||null,
