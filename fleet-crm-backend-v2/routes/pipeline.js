@@ -91,7 +91,7 @@ router.get('/counts', async (req, res) => {
       `),
       pool.query(`SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='mail' AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND is_locked=0 AND due_date <= current_date::text)`),
       pool.query(`SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='email' AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND is_locked=0 AND due_date <= current_date::text)`),
-      pool.query(`SELECT COUNT(*) as cnt FROM visit_queue WHERE scheduled_date <= current_date`),
+      pool.query(`SELECT COUNT(*) as cnt FROM visit_queue WHERE scheduled_date <= current_date::text`),
     ]);
     res.json({
       calling: parseInt(callingRes.rows[0].cnt),
@@ -193,7 +193,7 @@ router.get('/calling', async (req, res) => {
         cc.direct_line as preferred_direct_line,
         cc.email       as preferred_email,
         fu.id          as followup_id,
-        COALESCE(fu.due_date, to_char(current_date, 'YYYY-MM-DD')) AS due_date,
+        COALESCE(fu.due_date, to_char(current_date::text, 'YYYY-MM-DD')) AS due_date,
         fu.source_type,
         cq.id          as calling_queue_id,
         cl_last.contact_type as last_contact_type,
@@ -224,13 +224,13 @@ router.get('/calling', async (req, res) => {
       sql += ` AND (
         cq.id IS NOT NULL
         OR fu.id IS NULL
-        OR fu.due_date <= current_date
+        OR fu.due_date <= current_date::text
       )`;
     }
 
     if (filter === 'first')    { sql += ` AND (SELECT COUNT(*) FROM call_log WHERE entity_id=c.id AND log_type='company' AND log_category='call' AND counts_as_attempt=1)=0`; }
     if (filter === 'followup') { sql += ` AND (SELECT COUNT(*) FROM call_log WHERE entity_id=c.id AND log_type='company' AND log_category='call' AND counts_as_attempt=1)>0`; }
-    if (filter === 'overdue')  { sql += ` AND fu.due_date < current_date`; }
+    if (filter === 'overdue')  { sql += ` AND fu.due_date < current_date::text`; }
     if (industry) { params.push(industry); sql += ` AND c.industry=$${params.length}`; }
     if (search)   { params.push(`%${search}%`); sql += ` AND (c.name ILIKE $${params.length} OR c.industry ILIKE $${params.length})`; }
 
