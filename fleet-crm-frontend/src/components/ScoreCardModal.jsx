@@ -191,6 +191,23 @@ export default function ScoreCardModal({ entityName, entityId, callLogId, onClos
     if (window.confirm('Exit scorecard? Your selections will be lost.')) onClose();
   }
 
+  async function handleSkip() {
+    try {
+      await api.saveScorecardEntry({
+        call_log_id: callLogId || null,
+        entity_id:   entityId  || null,
+        entity_name: entityName || null,
+        script_ids:  [],
+        total_score: 0,
+        max_score:   0,
+        notes: '__skipped__',
+      });
+      onSaved?.();
+    } catch(_) {
+      onClose();
+    }
+  }
+
   function confirmClose() {
     if (!dirty && selectedIds.length === 0) { onClose(); return; }
     if (window.confirm('Exit scorecard? Your selections will be lost.')) onClose();
@@ -326,7 +343,7 @@ export default function ScoreCardModal({ entityName, entityId, callLogId, onClos
                   )}
 
                   <div style={{ display:'flex', gap:8, marginTop:4 }}>
-                    <button className="btn btn-ghost btn-sm" style={{ color:'var(--gray-400)' }} onClick={confirmClose}>Skip</button>
+                    <button className="btn btn-ghost btn-sm" style={{ color:'var(--gray-400)' }} onClick={handleSkip}>Skip</button>
                     <button className="btn btn-primary" style={{ flex:1 }} disabled={!canScore} onClick={() => setStep('score')}>
                       Next — Score the Call →
                     </button>
@@ -464,7 +481,7 @@ export default function ScoreCardModal({ entityName, entityId, callLogId, onClos
                 <button className="btn btn-primary" style={{ flex:1 }} onClick={handleSave} disabled={saving}>
                   {saving ? 'Saving…' : `✅ Save${pct !== null ? ` — ${pct}%` : ''}`}
                 </button>
-                <button className="btn btn-ghost btn-sm" style={{ color:'var(--gray-400)' }} onClick={confirmClose}>Skip</button>
+                <button className="btn btn-ghost btn-sm" style={{ color:'var(--gray-400)' }} onClick={handleSkip}>Skip</button>
               </div>
             </>
           )}
