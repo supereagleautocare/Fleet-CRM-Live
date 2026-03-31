@@ -95,8 +95,14 @@ router.post('/queue', async (req, res) => {
     const { rows: ex } = await pool.query("SELECT id FROM calling_queue WHERE queue_type='company' AND entity_id=$1", [company_id]);
     if (ex[0]) return res.status(409).json({ error: 'Company is already in the calling queue.' });
     const { rows } = await pool.query("INSERT INTO calling_queue (queue_type,entity_id,added_by) VALUES ('company',$1,$2) RETURNING *", [company_id, req.user.id]);
-    // Also set pipeline stage to 'call' so it appears in the calling queue
     await pool.query("UPDATE companies SET pipeline_stage='call' WHERE id=$1 AND pipeline_stage='new'", [company_id]);
+    const co = coRows[0];
+    const todayStr = new Date().toLocaleDateString('en-CA'); // gives YYYY-MM-DD in local time
+    await pool.query(`
+      INSERT INTO follow_ups (source_type, entity_id, company_id_str, entity_name, phone, due_date, next_action)
+      VALUES ('company', $1, $2, $3, $4, $5, 'Call')
+      ON CONFLICT (source_type, entity_id) DO NOTHING
+    `, [co.id, co.company_id, co.name, co.main_phone, todayStr]);
     res.status(201).json(rows[0]);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
