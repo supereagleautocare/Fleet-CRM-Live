@@ -91,19 +91,19 @@ export default function CallingQueue() {
       //   followup_id      → this is a follow-up call, use the followups hub
       //   calling_queue_id → this is a first call from the manual queue
       //   neither          → fallback to quicklog (edge case: stage='new', no queue row)
+      let logResult;
       if (selected.followup_id) {
-        await api.completeFollowup(selected.followup_id, form);
+        logResult = await api.completeFollowup(selected.followup_id, form);
       } else if (selected.calling_queue_id) {
-        await api.completeCompanyCall(selected.calling_queue_id, form);
+        logResult = await api.completeCompanyCall(selected.calling_queue_id, form);
       } else {
-        await api.quicklogCompany(selected.id, form);
+        logResult = await api.quicklogCompany(selected.id, form);
       }
       showToast('Logged — next: ' + form.next_action);
-      // Close the calling panel FIRST, then trigger scorecard
       const scorecardData = scorecardEnabled ? {
         entityName: selected.entity_name || selected.name,
         entityId:   selected.id,
-        callLogId:  null,
+        callLogId:  logResult?.log_id || null,
       } : null;
       setSelected(null);
       await load();
