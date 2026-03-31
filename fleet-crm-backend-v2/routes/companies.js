@@ -436,7 +436,8 @@ router.get('/:id/history', async (req, res) => {
     const { rows } = await pool.query(`
       SELECT cl.*, u.name AS logged_by_name,
         se.id AS scorecard_id, se.total_score AS scorecard_total,
-        se.max_score AS scorecard_max, se.script_ids AS scorecard_script_ids
+        se.max_score AS scorecard_max, se.script_ids AS scorecard_script_ids,
+        se.notes AS scorecard_notes
       FROM call_log cl
       LEFT JOIN users u ON u.id=cl.logged_by
       LEFT JOIN scorecard_entries se ON cl.action_type='Call' AND se.entity_id=cl.entity_id
