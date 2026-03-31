@@ -79,26 +79,21 @@ router.get('/board', async (req, res) => {
 // ── Sidebar badge counts ──────────────────────────────────────────────────────
 router.get('/counts', async (req, res) => {
   try {
+    const today = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in ET
     const [callingRes, mailRes, emailRes, visitsRes] = await Promise.all([
       pool.query(`
         SELECT COUNT(DISTINCT c.id) as cnt FROM companies c
         WHERE c.status='active' AND c.pipeline_stage IN ('new','call')
           AND (
-            EXISTS (SELECT 1 FROM follow_ups fu WHERE fu.entity_id=c.id AND fu.source_type='company' AND fu.due_date <= current_date::text)
+            EXISTS (SELECT 1 FROM follow_ups fu WHERE fu.entity_id=c.id AND fu.source_type='company' AND fu.due_date <= $1)
             OR EXISTS (SELECT 1 FROM calling_queue cq WHERE cq.entity_id=c.id AND cq.queue_type='company')
             OR (SELECT COUNT(*) FROM call_log WHERE entity_id=c.id AND log_type='company' AND log_category='call') = 0
           )
-      `),
-      pool.query(`SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='mail' AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND is_locked=0 AND due_date <= current_date::text)`),
-      pool.query(`SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='email' AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND is_locked=0 AND due_date <= current_date::text)`),
-      pool.query(`SELECT COUNT(*) as cnt FROM visit_queue WHERE scheduled_date <= current_date::text`),
+      `, [today]),
+      pool.query(`SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='mail' AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND is_locked=0 AND due_date <= $1)`, [today]),
+      pool.query(`SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='email' AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND is_locked=0 AND due_date <= $1)`, [today]),
+      pool.query(`SELECT COUNT(*) as cnt FROM visit_queue WHERE scheduled_date <= $1`, [today]),
     ]);
-    res.json({
-      calling: parseInt(callingRes.rows[0].cnt),
-      mail:    parseInt(mailRes.rows[0].cnt),
-      email:   parseInt(emailRes.rows[0].cnt),
-      visits:  parseInt(visitsRes.rows[0].cnt),
-    });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -184,7 +179,8 @@ router.get('/stage/:stage', async (req, res) => {
 // ── Calling queue ─────────────────────────────────────────────────────────────
 router.get('/calling', async (req, res) => {
   try {
-    const { filter, industry, search, upcoming } = req.query;
+    const today = new Date().toLocaleDateString('en-CA');
+    const { filter, industry, search, upcoming } = req.query
     const params = [];
     let sql = `
       SELECT c.*,
@@ -224,13 +220,13 @@ router.get('/calling', async (req, res) => {
       sql += ` AND (
         cq.id IS NOT NULL
         OR fu.id IS NULL
-        OR fu.due_date <= current_date::text
+        OR fu.due_date <= '${today}'
       )`;
     }
 
     if (filter === 'first')    { sql += ` AND (SELECT COUNT(*) FROM call_log WHERE entity_id=c.id AND log_type='company' AND log_category='call' AND counts_as_attempt=1)=0`; }
     if (filter === 'followup') { sql += ` AND (SELECT COUNT(*) FROM call_log WHERE entity_id=c.id AND log_type='company' AND log_category='call' AND counts_as_attempt=1)>0`; }
-    if (filter === 'overdue')  { sql += ` AND fu.due_date < current_date::text`; }
+    if (filter === 'overdue') { sql += ` AND fu.due_date < '${today}'`; }
     if (industry) { params.push(industry); sql += ` AND c.industry=$${params.length}`; }
     if (search)   { params.push(`%${search}%`); sql += ` AND (c.name ILIKE $${params.length} OR c.industry ILIKE $${params.length})`; }
 
