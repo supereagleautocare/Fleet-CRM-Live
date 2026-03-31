@@ -78,8 +78,10 @@ router.post('/reorder/:scriptId', async (req, res) => {
 router.get('/entries', async (req, res) => {
   try {
     const days = parseInt(req.query.days) || 30;
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 19) + 'Z';
     const { rows } = await pool.query(
-      `SELECT * FROM scorecard_entries WHERE logged_at >= now() - interval '${days} days' ORDER BY logged_at DESC`
+      `SELECT * FROM scorecard_entries WHERE logged_at >= $1 ORDER BY logged_at DESC`,
+      [cutoff]
     );
     res.json(rows.map(r => ({ ...r, answers: JSON.parse(r.answers), script_ids: JSON.parse(r.script_ids) })));
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -88,17 +90,18 @@ router.get('/entries', async (req, res) => {
 router.get('/entries/daily', async (req, res) => {
   try {
     const days = parseInt(req.query.days) || 30;
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 19) + 'Z';
     const { rows } = await pool.query(`
       SELECT
-        logged_at::date AS day,
+        substring(logged_at, 1, 10) AS day,
         COUNT(*) AS calls,
         ROUND(AVG(CASE WHEN max_score > 0 THEN total_score * 100.0 / max_score ELSE NULL END)::numeric, 1) AS avg_pct,
         SUM(total_score) AS total_pts,
         SUM(max_score) AS max_pts
       FROM scorecard_entries
-      WHERE logged_at >= now() - interval '${days} days'
+      WHERE logged_at >= $1
       GROUP BY day ORDER BY day DESC
-    `);
+    `, [cutoff]);
     res.json(rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -120,10 +123,10 @@ router.post('/entries', async (req, res) => {
       );
       for (const q of questions) {
         const ans = answers[q.id];
-        if (ans === 'yes')     { totalScore += q.yes_points;     maxScore += q.yes_points; }
+        if (ans === 'yes')          { totalScore += q.yes_points;     maxScore += q.yes_points; }
         else if (ans === 'partial') { totalScore += q.partial_points; maxScore += q.yes_points; }
-        else if (ans === 'no') { totalScore += q.no_points;      maxScore += q.yes_points; }
-        else                   { maxScore += q.yes_points; }
+        else if (ans === 'no')      { totalScore += q.no_points;      maxScore += q.yes_points; }
+        else                        { maxScore += q.yes_points; }
       }
     }
 
