@@ -84,13 +84,13 @@ router.get('/counts', async (req, res) => {
         SELECT COUNT(DISTINCT c.id) as cnt FROM companies c
         WHERE c.status='active' AND c.pipeline_stage IN ('new','call')
           AND (
-            EXISTS (SELECT 1 FROM follow_ups fu WHERE fu.entity_id=c.id AND fu.source_type='company' AND fu.due_date <= current_date)
+            EXISTS (SELECT 1 FROM follow_ups fu WHERE fu.entity_id=c.id AND fu.source_type='company' AND fu.due_date <= current_date::text)
             OR EXISTS (SELECT 1 FROM calling_queue cq WHERE cq.entity_id=c.id AND cq.queue_type='company')
             OR (SELECT COUNT(*) FROM call_log WHERE entity_id=c.id AND log_type='company' AND log_category='call') = 0
           )
       `),
-      pool.query(`SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='mail' AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND is_locked=0 AND due_date <= current_date)`),
-      pool.query(`SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='email' AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND is_locked=0 AND due_date <= current_date)`),
+      pool.query(`SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='mail' AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND is_locked=0 AND due_date <= current_date::text)`),
+      pool.query(`SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='email' AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND is_locked=0 AND due_date <= current_date::text)`),
       pool.query(`SELECT COUNT(*) as cnt FROM visit_queue WHERE scheduled_date <= current_date`),
     ]);
     res.json({
