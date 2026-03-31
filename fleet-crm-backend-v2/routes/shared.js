@@ -66,7 +66,9 @@ function addDays(n) {
   const dow = d.getDay();
   if (dow === 6) d.setDate(d.getDate() - 1);
   if (dow === 0) d.setDate(d.getDate() + 1);
-  return d.toISOString().split('T')[0];
+  return d.getFullYear() + '-' +
+  String(d.getMonth() + 1).padStart(2, '0') + '-' +
+  String(d.getDate()).padStart(2, '0');
 }
 
 // ─── Today as "YYYY-MM-DD" ───────────────────────────────────────────────────
