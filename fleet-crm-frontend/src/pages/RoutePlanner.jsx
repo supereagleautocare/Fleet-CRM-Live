@@ -111,6 +111,9 @@ export default function RoutePlanner({ embedded = false }) {
   const [movingId, setMovingId]           = useState(null);
   const [contactTypes, setContactTypes]   = useState([]);
   const [myGps, setMyGps]                 = useState(null);
+  const [mapSearch, setMapSearch]         = useState('');
+  const [mapSearchOpen, setMapSearchOpen] = useState(false);
+  const mapInstanceRef2                   = useRef(null);
 
   // ── Nearby state ──────────────────────────────────────────────────────────
   const [nearbyCompanies, setNearbyCompanies] = useState([]);
@@ -876,6 +879,8 @@ useEffect(() => {
               if (nearbyFilter !== 'all' && c.priority !== nearbyFilter) return false;
               return true;
             })}
+            navigate={navigate}
+            onMapReady={m => { mapInstanceRef2.current = m; }}
             onAddNearby={async(comp)=>{
               try {
                 if (route) {
@@ -903,6 +908,47 @@ useEffect(() => {
               } catch(e){ showToast(e.message,'error'); }
             }}
           />
+
+          {/* Map search bar */}
+          <div style={{position:'absolute',top:10,left:10,zIndex:1000,width:250}}>
+            <div style={{position:'relative'}}>
+              <input
+                type="text"
+                placeholder="🔍 Search companies on map…"
+                value={mapSearch}
+                onChange={e=>{ setMapSearch(e.target.value); setMapSearchOpen(true); }}
+                onFocus={()=>setMapSearchOpen(true)}
+                onBlur={()=>setTimeout(()=>setMapSearchOpen(false),150)}
+                style={{width:'100%',padding:'7px 12px',borderRadius:8,border:'1px solid var(--gray-200)',fontSize:12,background:'rgba(255,255,255,.95)',boxSizing:'border-box',outline:'none'}}
+              />
+              {mapSearchOpen && mapSearch.trim().length > 0 && (()=>{
+                const results = nearbyMapped.filter(c=>
+                  c.name.toLowerCase().includes(mapSearch.toLowerCase()) ||
+                  (c.address||'').toLowerCase().includes(mapSearch.toLowerCase())
+                ).slice(0,7);
+                if (!results.length) return null;
+                return (
+                  <div style={{position:'absolute',top:'100%',left:0,right:0,background:'white',borderRadius:8,boxShadow:'0 4px 16px rgba(0,0,0,.15)',border:'1px solid var(--gray-200)',marginTop:4,overflow:'hidden',zIndex:2000}}>
+                    {results.map(c=>(
+                      <div key={c.id}
+                        onMouseDown={e=>{ e.preventDefault(); setMapSearch(''); setMapSearchOpen(false);
+                          if (mapInstanceRef2.current && c.lat && c.lng) {
+                            mapInstanceRef2.current.flyTo([c.lat, c.lng], 16, {animate:true, duration:0.8});
+                          }
+                        }}
+                        style={{padding:'8px 12px',cursor:'pointer',borderBottom:'1px solid var(--gray-100)',fontSize:12}}
+                        onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'}
+                        onMouseLeave={e=>e.currentTarget.style.background='white'}
+                      >
+                        <div style={{fontWeight:700,color:'var(--navy-800)'}}>{c.name}</div>
+                        {c.address&&<div style={{fontSize:10,color:'var(--gray-400)',marginTop:1}}>{c.address}{c.city?', '+c.city:''}</div>}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
 
           {/* Nearby filter pills */}
           <div style={{position:'absolute',top:10,right:10,zIndex:1000,maxWidth:220}}>
@@ -1128,7 +1174,7 @@ function MissingAddressesPopup({ missing, navigate }) {
   );
 }
 // ── Persistent Leaflet Map ────────────────────────────────────────────────────
-function PersistentMap({ routeStops=[], startGeo=null, returnHome=false, nearbyCompanies=[], onAddNearby }) {
+function PersistentMap({ routeStops=[], startGeo=null, returnHome=false, nearbyCompanies=[], onAddNearby, navigate, onMapReady }) {
   const mapRef          = useRef(null);
   const mapInstanceRef  = useRef(null);
   const routeLayerRef   = useRef(null);
@@ -1151,8 +1197,9 @@ function PersistentMap({ routeStops=[], startGeo=null, returnHome=false, nearbyC
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution:'© OpenStreetMap', maxZoom:19 }).addTo(map);
       mapInstanceRef.current = map;
       routeLayerRef.current  = L.layerGroup().addTo(map);
-           nearbyLayerRef.current = L.layerGroup().addTo(map);
-           setMapReady(true);
+      nearbyLayerRef.current = L.layerGroup().addTo(map);
+      onMapReady?.(map);
+      setMapReady(true);
       [50,150,300,600,1200].forEach(ms => setTimeout(() => { try { map.invalidateSize(); } catch(_){} }, ms));
       if (typeof ResizeObserver !== 'undefined' && mapRef.current) {
         ro = new ResizeObserver(() => { try { map.invalidateSize(); } catch(_){} });
