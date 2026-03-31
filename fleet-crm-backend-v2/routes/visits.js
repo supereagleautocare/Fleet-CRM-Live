@@ -211,7 +211,7 @@ router.post('/schedule', async (req, res) => {
 
     await pool.query('DELETE FROM visit_queue WHERE entity_id = $1', [company_id]);
 
-    const today = new Date().toISOString().split('T')[0];
+    const today = new Date().toLocaleDateString('en-CA');
     const { rows } = await pool.query(`
       INSERT INTO visit_queue (company_id, entity_id, entity_name, scheduled_date, address, city, contact_name)
       VALUES ($1,$2,$3,$4,$5,$6,null) RETURNING *
