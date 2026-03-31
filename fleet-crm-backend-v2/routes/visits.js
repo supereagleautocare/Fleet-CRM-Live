@@ -11,15 +11,30 @@ const router = express.Router();
 router.use(requireAuth);
 
 // GET /api/visits
-router.get('/', async (req, res) => {
+router.get('/all', async (req, res) => {
   try {
+    const today = new Date().toLocaleDateString('en-CA');
     const { rows } = await pool.query(`
       SELECT v.*,
-        CASE WHEN v.scheduled_date < current_date THEN 1 ELSE 0 END AS is_overdue
+        c.company_status,
+        c.is_starred,
+        CASE WHEN v.scheduled_date < $1 THEN 1 ELSE 0 END AS is_overdue,
+        CASE WHEN v.scheduled_date = $1 THEN 1 ELSE 0 END AS is_due_today,
+        cl.contact_type  AS last_contact_type,
+        cl.logged_at     AS last_contacted,
+        cl.notes         AS last_contact_notes,
+        cl.contact_name  AS last_contact_person,
+        (SELECT COUNT(*) FROM call_log
+         WHERE entity_id = v.entity_id AND log_type='company' AND action_type != 'Move') as call_count
       FROM visit_queue v
-      WHERE v.scheduled_date <= current_date
-      ORDER BY v.is_locked DESC, v.scheduled_date ASC, v.entity_name ASC
-    `);
+      LEFT JOIN companies c ON c.id = v.entity_id
+      LEFT JOIN (
+        SELECT DISTINCT ON (entity_id) entity_id, contact_type, logged_at, notes, contact_name
+        FROM call_log WHERE log_type = 'company'
+        ORDER BY entity_id, logged_at DESC
+      ) cl ON cl.entity_id = v.entity_id
+      ORDER BY v.scheduled_date ASC
+    `, [today]);
     res.json(rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
