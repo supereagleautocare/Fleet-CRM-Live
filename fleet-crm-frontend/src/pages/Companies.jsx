@@ -910,6 +910,13 @@ async function handleImport(e) {
                           </td>
                           <td style={{ fontSize:12, whiteSpace:'nowrap' }}>
                             {h.scorecard_id ? (() => {
+                              if (h.scorecard_notes === '__skipped__') {
+                                return (
+                                  <span style={{ padding:'2px 10px',borderRadius:20,background:'#f1f5f9',color:'#94a3b8',fontWeight:700,fontSize:11,border:'1px solid #e2e8f0' }}>
+                                    Skipped
+                                  </span>
+                                );
+                              }
                               const pct = h.scorecard_max > 0 ? Math.round((h.scorecard_total / h.scorecard_max) * 100) : 0;
                               const color = pct >= 80 ? '#15803d' : pct >= 60 ? '#d97706' : '#dc2626';
                               const bg    = pct >= 80 ? '#dcfce7' : pct >= 60 ? '#fef9c3' : '#fee2e2';
