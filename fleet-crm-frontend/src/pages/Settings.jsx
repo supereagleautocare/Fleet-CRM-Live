@@ -6,6 +6,216 @@ import ScriptEditor from '../components/ScriptEditor.jsx';
 import ScoreCardSettings from '../components/ScoreCardSettings.jsx';
 import ScoreCardModal from '../components/ScoreCardModal.jsx'; 
 
+const DEFAULT_PERMS = {
+  can_access_settings:  false,
+  can_add_companies:    true,
+  can_delete_companies: false,
+  can_delete_calls:     false,
+  can_manage_queue:     true,
+  can_manage_team:      false,
+};
+
+const PERM_LABELS = {
+  can_access_settings:  { label: 'Access Settings',      desc: 'View and change app settings' },
+  can_add_companies:    { label: 'Add Companies',         desc: 'Create new company records' },
+  can_delete_companies: { label: 'Delete Companies',      desc: 'Permanently remove companies' },
+  can_delete_calls:     { label: 'Delete Call Logs',      desc: 'Erase call history entries' },
+  can_manage_queue:     { label: 'Manage Calling Queue',  desc: 'Add and remove from queue' },
+  can_manage_team:      { label: 'Manage Team Members',   desc: 'Invite and remove users' },
+};
+
+function PermissionsPanel({ users, currentUserId, onRefresh }) {
+  const [selected, setSelected] = useState(null);
+  const [perms, setPerms]       = useState({});
+  const [role, setRole]         = useState('user');
+  const [saving, setSaving]     = useState(false);
+  const [saved, setSaved]       = useState(false);
+  const { showToast }           = useApp();
+
+  async function loadUser(u) {
+    setSelected(u);
+    setSaved(false);
+    try {
+      const r = await api.getUserPermissions(u.id);
+      setRole(r.role || 'user');
+      setPerms({ ...DEFAULT_PERMS, ...r.permissions });
+    } catch(e) { showToast(e.message, 'error'); }
+  }
+
+  async function save() {
+    setSaving(true);
+    try {
+      if (role !== selected.role) await api.updateUserRole(selected.id, role);
+      await api.updateUserPermissions(selected.id, perms);
+      setSaved(true);
+      onRefresh();
+      setTimeout(() => setSaved(false), 2000);
+    } catch(e) { showToast(e.message, 'error'); }
+    finally { setSaving(false); }
+  }
+
+  const editableUsers = users.filter(u => u.id !== currentUserId);
+
+  return (
+    <div className="table-card" style={{ padding:'18px 20px', marginBottom:16 }}>
+      <div style={{ fontWeight:700, fontSize:14, marginBottom:4 }}>🔐 User Permissions</div>
+      <div style={{ fontSize:12, color:'var(--gray-400)', marginBottom:16 }}>
+        Click a team member to manage what they can do. Admins always have full access.
+      </div>
+
+      <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:20 }}>
+        {editableUsers.map(u => (
+          <button key={u.id} onClick={() => loadUser(u)}
+            style={{
+              padding:'7px 14px', borderRadius:8, fontSize:13, fontWeight:600, cursor:'pointer',
+              border: selected?.id === u.id ? '2px solid var(--gold-500)' : '1px solid var(--gray-200)',
+              background: selected?.id === u.id ? '#fffbeb' : 'var(--gray-50)',
+              color: selected?.id === u.id ? '#92400e' : 'var(--gray-700)',
+            }}>
+            {u.name}
+            {u.role === 'admin' && (
+              <span style={{ marginLeft:6, fontSize:10, background:'#fde68a', borderRadius:4, padding:'1px 5px', color:'#92400e' }}>ADMIN</span>
+            )}
+          </button>
+        ))}
+        {editableUsers.length === 0 && (
+          <div style={{ fontSize:12, color:'var(--gray-400)' }}>No other team members yet.</div>
+        )}
+      </div>
+
+      {selected && (
+        <>
+          <div style={{ borderTop:'1px solid var(--gray-100)', paddingTop:16, marginBottom:16 }}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16, padding:'10px 14px', background:'var(--gray-50)', borderRadius:8, border:'1px solid var(--gray-200)' }}>
+              <div>
+                <div style={{ fontWeight:700, fontSize:13 }}>Account Role</div>
+                <div style={{ fontSize:11, color:'var(--gray-400)', marginTop:2 }}>Admin has full access to everything</div>
+              </div>
+              <select value={role} onChange={e => setRole(e.target.value)}
+                style={{ padding:'5px 10px', borderRadius:6, border:'1px solid var(--gray-200)', fontSize:13, fontWeight:600, background:'white', cursor:'pointer' }}>
+                <option value="user">User</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+
+            {role !== 'admin' ? (
+              <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                {Object.entries(PERM_LABELS).map(([key, { label, desc }]) => (
+                  <div key={key} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 14px', background:'var(--gray-50)', borderRadius:8, border:'1px solid var(--gray-200)' }}>
+                    <div>
+                      <div style={{ fontWeight:600, fontSize:13 }}>{label}</div>
+                      <div style={{ fontSize:11, color:'var(--gray-400)', marginTop:2 }}>{desc}</div>
+                    </div>
+                    <div onClick={() => setPerms(p => ({ ...p, [key]: !p[key] }))}
+                      style={{ width:42, height:24, borderRadius:12, cursor:'pointer', position:'relative', flexShrink:0, background: perms[key] ? '#22c55e' : 'var(--gray-300)', transition:'background .2s' }}>
+                      <div style={{ position:'absolute', top:3, left: perms[key] ? 21 : 3, width:18, height:18, borderRadius:9, background:'white', transition:'left .2s', boxShadow:'0 1px 3px rgba(0,0,0,.2)' }}/>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ padding:'12px 14px', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:8, fontSize:12, color:'#92400e' }}>
+                ⚡ Admins automatically have all permissions. No restrictions apply.
+              </div>
+            )}
+          </div>
+
+          <button onClick={save} disabled={saving} className="btn btn-primary" style={{ width:'100%' }}>
+            {saving ? 'Saving…' : saved ? '✓ Saved!' : `Save Permissions for ${selected.name}`}
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+function TeamInvitePanel({ users, onRefresh }) {
+  const [inviteUrl, setInviteUrl]     = useState(null);
+  const [resetEmail, setResetEmail]   = useState('');
+  const [resetUrl, setResetUrl]       = useState(null);
+  const [loading, setLoading]         = useState(false);
+  const { showToast }                 = useApp();
+
+  async function handleInvite(userId) {
+    setLoading(userId);
+    try {
+      const r = await api.inviteUser(userId);
+      setInviteUrl(r.invite_url);
+      setResetUrl(null);
+    } catch(e) { showToast(e.message, 'error'); }
+    finally { setLoading(false); }
+  }
+
+  async function handleReset(e) {
+    e.preventDefault();
+    setLoading('reset');
+    try {
+      const r = await api.forgotPassword(resetEmail);
+      setResetUrl(r.reset_url);
+      setInviteUrl(null);
+    } catch(e) { showToast(e.message, 'error'); }
+    finally { setLoading(false); }
+  }
+
+  return (
+    <div className="table-card" style={{ padding:'18px 20px', marginBottom:16 }}>
+      <div style={{ fontWeight:700, fontSize:14, marginBottom:4 }}>🔗 Invite Links & Password Reset</div>
+      <div style={{ fontSize:12, color:'var(--gray-400)', marginBottom:16 }}>
+        Generate a link and send it manually via text or email. Invite links expire in 48 hours, reset links in 2 hours.
+      </div>
+
+      <div style={{ marginBottom:20 }}>
+        <div style={{ fontWeight:600, fontSize:13, marginBottom:10 }}>Send Invite Link</div>
+        <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+          {users.map(u => (
+            <div key={u.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 12px', background:'var(--gray-50)', borderRadius:8, border:'1px solid var(--gray-200)' }}>
+              <div style={{ flex:1 }}>
+                <div style={{ fontWeight:600, fontSize:13 }}>{u.name}</div>
+                <div style={{ fontSize:11, color:'var(--gray-400)' }}>{u.email}</div>
+              </div>
+              <button className="btn btn-ghost btn-sm" disabled={loading === u.id}
+                onClick={() => { setInviteUrl(null); setResetUrl(null); handleInvite(u.id); }}>
+                {loading === u.id ? '…' : '📨 Get Invite Link'}
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ marginBottom: resetUrl ? 16 : 0 }}>
+        <div style={{ fontWeight:600, fontSize:13, marginBottom:10 }}>Password Reset Link</div>
+        <form onSubmit={handleReset} style={{ display:'flex', gap:8 }}>
+          <input className="form-input" type="email" placeholder="Enter their email address…"
+            value={resetEmail} onChange={e => setResetEmail(e.target.value)} required style={{ flex:1 }}/>
+          <button type="submit" className="btn btn-ghost btn-sm" disabled={loading === 'reset'}>
+            {loading === 'reset' ? '…' : '🔑 Get Reset Link'}
+          </button>
+        </form>
+      </div>
+
+      {(inviteUrl || resetUrl) && (
+        <div style={{ marginTop:16, padding:'12px 14px', background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:8 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:'#15803d', marginBottom:6 }}>
+            {inviteUrl ? '📨 Invite Link — copy and send this:' : '🔑 Reset Link — copy and send this:'}
+          </div>
+          <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+            <input readOnly value={inviteUrl || resetUrl}
+              style={{ flex:1, fontSize:11, padding:'6px 10px', border:'1px solid #bbf7d0', borderRadius:6, background:'white', fontFamily:'monospace' }}
+              onFocus={e => e.target.select()}/>
+            <button className="btn btn-primary btn-sm"
+              onClick={() => { navigator.clipboard.writeText(inviteUrl || resetUrl); showToast('Link copied!'); }}>
+              Copy
+            </button>
+          </div>
+          <div style={{ fontSize:11, color:'#15803d', marginTop:6 }}>
+            {inviteUrl ? 'They open this link and set their own password. Expires in 48 hours.' : 'They open this link to set a new password. Expires in 2 hours.'}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Settings() {
   const [rules, setRules]     = useState([]);
   const [settings, setSettings] = useState({});
@@ -32,7 +242,7 @@ export default function Settings() {
     return ()=>window.removeEventListener('scorecard-preview', handlePreview);
   },[]);
   const [addingType, setAddingType] = useState({});
-  const { showToast, user } = useApp();
+  const { showToast, user: currentUser } = useApp();
 
   async function load() {
     setLoading(true);
@@ -86,6 +296,15 @@ export default function Settings() {
       setNewUser({ name:'', email:'', password:'', role:'user' });
       await load();
     } catch (err) { showToast(err.message, 'error'); }
+  }
+
+  async function handleDeleteUser(u) {
+    if (!confirm(`Remove ${u.name} from the team? This cannot be undone.`)) return;
+    try {
+      await api.deleteUser(u.id);
+      showToast(u.name + ' removed');
+      await load();
+    } catch(err) { showToast(err.message, 'error'); }
   }
 
   const tabs = [
@@ -302,24 +521,37 @@ export default function Settings() {
             {/* ── TEAM ── */}
             {tab === 'team' && (
               <div style={{ display:'flex', flexDirection:'column', gap:16, maxWidth:640 }}>
+
+                <PermissionsPanel users={users} currentUserId={currentUser?.id} onRefresh={load} />
+                <TeamInvitePanel users={users} onRefresh={load} />
+
                 <div className="table-card">
                   <div className="table-card-header"><span className="table-card-title">Team Members</span></div>
                   <table>
-                    <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Joined</th></tr></thead>
+                    <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Joined</th><th></th></tr></thead>
                     <tbody>
                       {users.map(u=>(
                         <tr key={u.id}>
                           <td style={{ fontWeight:600 }}>
                             <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                              <div style={{ width:28, height:28, borderRadius:'50%', background:u.id===user?.id?'var(--gold-500)':'var(--navy-700)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:700, color:u.id===user?.id?'var(--navy-950)':'var(--white)' }}>
+                              <div style={{ width:28, height:28, borderRadius:'50%', background:u.id===currentUser?.id?'var(--gold-500)':'var(--navy-700)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:700, color:u.id===currentUser?.id?'var(--navy-950)':'var(--white)' }}>
                                 {u.name?.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()}
                               </div>
-                              {u.name} {u.id===user?.id && <span style={{ fontSize:10, color:'var(--gray-400)' }}>(you)</span>}
+                              {u.name} {u.id===currentUser?.id && <span style={{ fontSize:10, color:'var(--gray-400)' }}>(you)</span>}
                             </div>
                           </td>
                           <td style={{ fontSize:13, color:'var(--gray-600)' }}>{u.email}</td>
                           <td><span className={'badge '+(u.role==='admin'?'badge-gold':'badge-gray')}>{u.role==='admin'?'⭐ Admin':'User'}</span></td>
                           <td style={{ fontSize:12, color:'var(--gray-400)' }}>{u.created_at?.slice(0,10)}</td>
+                          <td>
+                            {u.id !== currentUser?.id && (
+                              <button onClick={() => handleDeleteUser(u)}
+                                style={{ background:'none', border:'none', cursor:'pointer', color:'var(--gray-300)', fontSize:16, padding:'2px 6px' }}
+                                title="Remove user">
+                                🗑️
+                              </button>
+                            )}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
