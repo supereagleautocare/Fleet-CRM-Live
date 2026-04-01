@@ -278,12 +278,12 @@ export default function Settings() {
                   </div>
                 </div>
                 {Object.entries(settings)
-                  .filter(([k])=>!['shop_address','shop_lat','shop_lng','fuel_price','mpg','mail_followup_days','email_followup_days','visit_delay_days'].includes(k))
-                  .length > 0 && (
-                  <div className="table-card" style={{ padding:'20px 24px' }}>
-                    <div style={{ fontWeight:700, fontSize:15, marginBottom:16 }}>⚙️ Other Settings</div>
-                    {Object.entries(settings)
-                      .filter(([k])=>!['shop_address','shop_lat','shop_lng','fuel_price','mpg','mail_followup_days','email_followup_days','visit_delay_days'].includes(k))
+  .filter(([k])=>!['shop_address','shop_lat','shop_lng','fuel_price','mpg','mail_followup_days','email_followup_days','visit_delay_days','tekmetric_token','tekmetric_shop_id','tekmetric_env','tekmetric_poll_interval','tekmetric_oil_interval','carfax_api_key','carfax_enabled','biz_hours_start','biz_hours_end','floor_poll_seconds','twilio_to_phone','scorecard_enabled'].includes(k))
+  .length > 0 && (
+  <div className="table-card" style={{ padding:'20px 24px' }}>
+    <div style={{ fontWeight:700, fontSize:15, marginBottom:16 }}>⚙️ Other Settings</div>
+    {Object.entries(settings)
+      .filter(([k])=>!['shop_address','shop_lat','shop_lng','fuel_price','mpg','mail_followup_days','email_followup_days','visit_delay_days','tekmetric_token','tekmetric_shop_id','tekmetric_env','tekmetric_poll_interval','tekmetric_oil_interval','carfax_api_key','carfax_enabled','biz_hours_start','biz_hours_end','floor_poll_seconds','twilio_to_phone','scorecard_enabled'].includes(k))
                       .map(([key,item])=>(
                       <div key={key} style={{ paddingBottom:16, marginBottom:16, borderBottom:'1px solid var(--gray-100)' }}>
                         <div style={{ fontWeight:600, fontSize:13, marginBottom:4 }}>{item.label||key}</div>
