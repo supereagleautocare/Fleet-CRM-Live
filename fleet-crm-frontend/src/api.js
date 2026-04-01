@@ -29,6 +29,7 @@ async function req(method, path, body) {
 
   if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
   return data;
+}
 
 // ── Auth ──────────────────────────────────────────────
 export const api = {
