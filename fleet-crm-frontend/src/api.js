@@ -38,9 +38,13 @@ export const api = {
   changePassword: (current, next)   => req('POST', '/auth/change-password', { current_password: current, new_password: next }),
   users:          ()                => req('GET',  '/auth/users'),
   addUser:        (data)            => req('POST', '/auth/users', data),
-  updateUserPermissions: (id, perms) => req('PUT', `/auth/users/${id}/permissions`, { permissions: perms }),
-  deleteUser:     (id)              => req('DELETE', `/auth/users/${id}`),
-  resetPassword:  (token, password) => req('POST', '/auth/reset-password', { token, password }),
+  updateUserPermissions: (id, perms)  => req('PUT',  `/auth/users/${id}/permissions`, perms),
+  updateUserRole:        (id, role)   => req('PUT',  `/auth/users/${id}/role`, { role }),
+  getUserPermissions:    (id)         => req('GET',  `/auth/users/${id}/permissions`),
+  deleteUser:            (id)         => req('DELETE',`/auth/users/${id}`),
+  inviteUser:            (user_id)    => req('POST', '/auth/invite', { user_id }),
+  forgotPassword:        (email)      => req('POST', '/auth/forgot-password', { email }),
+  resetPassword:         (token, password) => req('POST', '/auth/reset-password', { token, password }),
 
   // ── Dashboard ───────────────────────────────────────
   dashboard:      ()                => req('GET',  '/dashboard'),
