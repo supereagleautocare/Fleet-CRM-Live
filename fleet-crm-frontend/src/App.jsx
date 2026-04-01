@@ -13,6 +13,7 @@ import Settings from './pages/Settings.jsx';
 import QuickLog from './pages/QuickLog.jsx';
 import ScriptPopup from './pages/ScriptPopup.jsx';
 import ActiveFleet from './pages/ActiveFleet.jsx';
+import ResetPassword from './pages/ResetPassword.jsx';
 
 export const AppCtx = createContext(null);
 export const useApp = () => useContext(AppCtx);
@@ -96,6 +97,7 @@ export default function App() {
         {!user ? (
           <Routes>
             <Route path="/script-popup" element={<ScriptPopup />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="*" element={<Login />} />
           </Routes>
         ) : (
@@ -121,6 +123,8 @@ export default function App() {
                 <Route path="/quicklog"     element={<QuickLog />} />
                 <Route path="/settings"     element={<Settings />} />
                 <Route path="/script-popup" element={<ScriptPopup />} />
+                <Route path="/reset-password" element={<ResetPassword />} />
+                <Route path="*" element={<Navigate to="/dashboard" />} />
                 {/* Legacy redirects */}
                 <Route path="/followups"       element={<Navigate to="/calling" />} />
                 <Route path="/company-calling" element={<Navigate to="/calling" />} />
