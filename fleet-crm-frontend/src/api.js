@@ -40,6 +40,7 @@ export const api = {
   addUser:        (data)            => req('POST', '/auth/users', data),
   updateUserPermissions: (id, perms) => req('PUT', `/auth/users/${id}/permissions`, { permissions: perms }),
   deleteUser:     (id)              => req('DELETE', `/auth/users/${id}`),
+  resetPassword:  (token, password) => req('POST', '/auth/reset-password', { token, password }),
 
   // ── Dashboard ───────────────────────────────────────
   dashboard:      ()                => req('GET',  '/dashboard'),
