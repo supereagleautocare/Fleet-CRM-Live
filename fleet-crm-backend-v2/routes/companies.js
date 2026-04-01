@@ -548,17 +548,13 @@ router.post('/import', async (req, res) => {
         geocodeAndSave(companyDbId, row.address, row.city);
 
         if (add_to_queue) {
-  const { rows: inQ } = await client.query("SELECT id FROM calling_queue WHERE queue_type='company' AND entity_id=$1", [companyDbId]);
-  if (!inQ[0]) {
-    await client.query("INSERT INTO calling_queue (queue_type,entity_id,added_by) VALUES ('company',$1,$2)", [companyDbId, req.user.id]);
-    const todayStr = new Date().toLocaleDateString('en-CA');
-    await client.query(`
-      INSERT INTO follow_ups (source_type, entity_id, company_id_str, entity_name, phone, due_date, next_action)
-      VALUES ('company', $1, $2, $3, $4, $5, 'Call')
-      ON CONFLICT (source_type, entity_id) DO NOTHING
-    `, [companyDbId, companyIdStr, name, phone||null, todayStr]);
-  }
-}
+         const { rows: inQ } = await client.query("SELECT id FROM calling_queue WHERE queue_type='company' AND entity_id=$1", [companyDbId]);
+         if (!inQ[0]) {
+           await client.query("INSERT INTO calling_queue (queue_type,entity_id,added_by) VALUES ('company',$1,$2)", [companyDbId, req.user.id]);
+           const todayStr = new Date().toLocaleDateString('en-CA');
+           await client.query(`
+          }
+         }
 
         if (row.is_dnc) {
           await client.query("DELETE FROM follow_ups WHERE entity_id=$1 AND source_type='company'", [companyDbId]);
