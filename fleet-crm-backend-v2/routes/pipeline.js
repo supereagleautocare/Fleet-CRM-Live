@@ -130,9 +130,10 @@ router.get('/forecast', async (req, res) => {
         ? pool.query(`SELECT COUNT(DISTINCT c.id) as cnt FROM companies c
             WHERE c.status='active' AND c.pipeline_stage IN ('new','call')
             AND (
-              EXISTS (SELECT 1 FROM follow_ups fu WHERE fu.entity_id=c.id AND fu.source_type='company' AND fu.due_date <= $1)
-              OR EXISTS (SELECT 1 FROM calling_queue cq WHERE cq.entity_id=c.id AND cq.queue_type='company')
-              OR (SELECT COUNT(*) FROM call_log WHERE entity_id=c.id AND log_type='company' AND log_category='call') = 0
+              EXISTS (SELECT 1 FROM follow_ups fu WHERE fu.entity_id=c.id AND fu.source_type='company' AND fu.due_date = $1)
+              OR (NOT EXISTS (SELECT 1 FROM follow_ups fu WHERE fu.entity_id=c.id AND fu.source_type='company')
+                  AND (EXISTS (SELECT 1 FROM calling_queue cq WHERE cq.entity_id=c.id AND cq.queue_type='company')
+                       OR (SELECT COUNT(*) FROM call_log WHERE entity_id=c.id AND log_type='company' AND log_category='call') = 0))
             )`, [ds])
         : pool.query("SELECT COUNT(*) as cnt FROM follow_ups WHERE source_type='company' AND due_date=$1", [ds]);
       const [dc, dm, de, dv] = await Promise.all([
