@@ -148,4 +148,84 @@ router.delete('/users/:id', requireAuth, async (req, res) => {
   }
 });
 
+// ── POST /api/auth/forgot-password ────────────────────────────────────────────
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'Email required.' });
+    const { rows } = await pool.query('SELECT * FROM users WHERE email = $1', [email.toLowerCase().trim()]);
+    if (!rows[0]) {
+      return res.json({ message: 'If that email exists in our system you will receive a reset link shortly.' });
+    }
+    const token = require('crypto').randomBytes(32).toString('hex');
+    const expires = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+    const perms = typeof rows[0].permissions === 'string' ? JSON.parse(rows[0].permissions || '{}') : (rows[0].permissions || {});
+    perms.reset_token = token;
+    perms.reset_expires = expires;
+    await pool.query('UPDATE users SET permissions = $1 WHERE id = $2', [JSON.stringify(perms), rows[0].id]);
+    const baseUrl = process.env.APP_URL || 'http://localhost:3000';
+    const resetUrl = `${baseUrl}/reset-password?token=${token}`;
+
+    const { Resend } = require('resend');
+    const resend = new Resend(process.env.RESEND_API_KEY);
+    await resend.emails.send({
+      from: 'onboarding@resend.dev',
+      to: rows[0].email,
+      subject: 'Reset your Fleet CRM password',
+      html: `
+        <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;background:#f8fafc;border-radius:12px">
+          <div style="text-align:center;margin-bottom:24px">
+            <div style="font-size:32px">🦅</div>
+            <div style="font-size:18px;font-weight:800;color:#0f2040">Super Eagle Fleet CRM</div>
+          </div>
+          <div style="background:white;border-radius:10px;padding:24px;border:1px solid #e2e8f0">
+            <p style="font-size:15px;color:#334155;margin:0 0 16px">Hi ${rows[0].name},</p>
+            <p style="font-size:14px;color:#64748b;margin:0 0 24px;line-height:1.6">
+              Someone requested a password reset for your Fleet CRM account. Click the button below to set a new password. This link expires in <strong>2 hours</strong>.
+            </p>
+            <div style="text-align:center;margin-bottom:24px">
+              <a href="${resetUrl}" style="display:inline-block;background:#f59e0b;color:#0f2040;font-weight:800;font-size:15px;padding:12px 32px;border-radius:8px;text-decoration:none">
+                Reset My Password →
+              </a>
+            </div>
+            <p style="font-size:12px;color:#94a3b8;margin:0;line-height:1.6">
+              If you didn't request this, ignore this email — your password won't change.<br/>
+              Or copy this link: ${resetUrl}
+            </p>
+          </div>
+        </div>
+      `,
+    });
+
+    res.json({ message: 'If that email exists in our system you will receive a reset link shortly.' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── POST /api/auth/reset-password ─────────────────────────────────────────────
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { token, password } = req.body;
+    if (!token || !password) return res.status(400).json({ error: 'Token and password required.' });
+    if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters.' });
+    const { rows } = await pool.query(
+      `SELECT * FROM users WHERE permissions::jsonb->>'reset_token' = $1`, [token]
+    );
+    const user = rows[0];
+    if (!user) return res.status(400).json({ error: 'Invalid or expired reset link.' });
+    const perms = typeof user.permissions === 'string' ? JSON.parse(user.permissions || '{}') : (user.permissions || {});
+    if (perms.reset_expires && new Date(perms.reset_expires) < new Date()) {
+      return res.status(400).json({ error: 'This reset link has expired.' });
+    }
+    const bcrypt = require('bcryptjs');
+    const hash = bcrypt.hashSync(password, 10);
+    delete perms.reset_token;
+    delete perms.reset_expires;
+    await pool.query(
+      'UPDATE users SET password_hash = $1, permissions = $2 WHERE id = $3',
+      [hash, JSON.stringify(perms), user.id]
+    );
+    res.json({ message: 'Password reset successfully. You can now log in.' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 module.exports = router;
