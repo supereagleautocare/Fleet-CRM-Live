@@ -42,7 +42,7 @@ export default function CompanyMergeModal({ sourceCompany, onClose, onMerged }) 
       setSearching(true);
       try {
         const results = await api.searchCompanyName(searchQuery.trim());
-        setSearchResults((results || []).filter(r => r.id !== sourceCompany.id));
+        setSearchResults((results || []).filter(r => String(r.id) !== String(sourceCompany.id)));
       } catch (e) {
         setSearchResults([]);
       } finally {
