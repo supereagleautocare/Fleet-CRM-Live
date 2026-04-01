@@ -97,7 +97,7 @@ router.post('/queue', async (req, res) => {
     const { rows } = await pool.query("INSERT INTO calling_queue (queue_type,entity_id,added_by) VALUES ('company',$1,$2) RETURNING *", [company_id, req.user.id]);
     await pool.query("UPDATE companies SET pipeline_stage='call' WHERE id=$1 AND pipeline_stage='new'", [company_id]);
     const co = coRows[0];
-    const todayStr = new Date().toLocaleDateString('en-CA'); // gives YYYY-MM-DD in local time
+    const todayStr = new Date().toISOString().split('T')[0]; // gives YYYY-MM-DD in local time
     await pool.query(`
       INSERT INTO follow_ups (source_type, entity_id, company_id_str, entity_name, phone, due_date, next_action)
       VALUES ('company', $1, $2, $3, $4, $5, 'Call')
@@ -551,7 +551,7 @@ router.post('/import', async (req, res) => {
           const { rows: inQ } = await client.query("SELECT id FROM calling_queue WHERE queue_type='company' AND entity_id=$1", [companyDbId]);
           if (!inQ[0]) {
             await client.query("INSERT INTO calling_queue (queue_type,entity_id,added_by) VALUES ('company',$1,$2)", [companyDbId, req.user.id]);
-            const todayStr = new Date().toLocaleDateString('en-CA');
+            const todayStr = new Date().toISOString().split('T')[0];
             await client.query(`INSERT INTO follow_ups (source_type,entity_id,company_id_str,entity_name,phone,due_date,next_action) VALUES ('company',$1,$2,$3,$4,$5,'Call') ON CONFLICT (source_type,entity_id) DO NOTHING`, [companyDbId, companyIdStr, name, phone||null, todayStr]);
           }
         }
