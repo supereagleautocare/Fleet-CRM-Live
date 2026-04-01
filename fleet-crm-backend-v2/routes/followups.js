@@ -16,7 +16,7 @@ router.get('/', async (req, res) => {
       SELECT f.*,
         CASE WHEN f.due_date < current_date THEN 1 ELSE 0 END AS is_overdue
       FROM follow_ups f
-      WHERE f.due_date <= current_date AND f.source_type = 'company'
+      WHERE f.due_date::date <= current_date AND f.source_type = 'company'
       ORDER BY f.is_locked DESC, f.due_date ASC, f.entity_name ASC
     `);
     res.json(rows);
