@@ -73,7 +73,7 @@ export const api = {
   addContact:      (id, data)      => req('POST', `/companies/${id}/contacts`, data),
   updateContact:   (contactId, d)  => req('PUT',  `/companies/contacts/${contactId}`, d),
   deleteContact:   (contactId)     => req('DELETE',`/companies/contacts/${contactId}`),
-  importCallHistory: (companies)   => req('POST', '/companies/import', { companies }),
+  importCallHistory: (companies, addToQueue = false) => req('POST', '/companies/import', { companies, add_to_queue: addToQueue }),
   importNewCompanies: (companies)  => req('POST', '/companies/import-new-companies', { companies }),
   nearbyData:      ()              => req('GET',  '/companies/nearby-data'),
   deleteCompany:  (id)          => req('DELETE', `/companies/${id}`),
