@@ -163,7 +163,7 @@ export default function ImportSettings({ onDone }) {
       const coName = String(row[C.company_name] || '').trim();
       const phoneDigitsOnly = phoneDigits(row[C.phone]);
       const normalizedName = normalizeName(coName);
-      const key = normalizedName ? `${normalizedName}|${phoneDigitsOnly}` : (coId || phoneDigitsOnly);
+      const key = coId || (normalizedName ? normalizedName : phoneDigitsOnly);
       if (!key) continue;
       if (!byCompany[key]) {
         byCompany[key] = {
