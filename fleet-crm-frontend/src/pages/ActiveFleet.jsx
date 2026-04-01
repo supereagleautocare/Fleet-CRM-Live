@@ -708,11 +708,17 @@ function FleetSettings({ oilInterval, setOilInterval, statuses }) {
   const togR = (i,k) => setRules(r=>r.map((x,j)=>j===i?{...x,[k]:!x[k]}:x));
   const setH = (i,v) => setRules(r=>r.map((x,j)=>j===i?{...x,hours:parseInt(v)||1}:x));
   const save = async () => {
-    try {
-      await api.saveTekmetricSettings({ token, shopId, env, pollInterval:poll, oilInterval, carfaxKey:cfxKey, carfaxEnabled:cfxEnabled, bizHoursStart:bizStart, bizHoursEnd:bizEnd, floorPollSeconds:floorPollSecs });
-      showToast('Fleet settings saved');
-    } catch(e) { showToast('Failed to save: ' + e.message, 'error'); }
-  };
+  try {
+    await api.saveTekmetricSettings({
+      ...(token.trim() ? { token } : {}),  // ← only include if not empty
+      shopId, env, pollInterval: poll, oilInterval,
+      carfaxKey: cfxKey, carfaxEnabled: cfxEnabled,
+      bizHoursStart: bizStart, bizHoursEnd: bizEnd,
+      floorPollSeconds: floorPollSecs
+    });
+    showToast('Fleet settings saved');
+  } catch(e) { showToast('Failed to save: ' + e.message, 'error'); }
+};
   return (
     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,alignItems:'start'}}>
       <div style={{display:'flex',flexDirection:'column',gap:14}}>
@@ -727,7 +733,7 @@ function FleetSettings({ oilInterval, setOilInterval, statuses }) {
 
           <div className="form-group">
             <label className="form-label">API Bearer Token</label>
-            <input type="password" className="form-input" value={token} onChange={e=>setToken(e.target.value)} placeholder="Paste your Tekmetric token here"/>
+            <input type="password" className="form-input" value={token} onChange={e=>setToken(e.target.value)} placeholder={tokenPlaceholder || 'Paste your Tekmetric token here'}>
           </div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
             <div className="form-group">
@@ -938,6 +944,8 @@ export default function ActiveFleet() {
   // Load saved settings on mount so biz hours + floor poll are respected
   useEffect(() => {
     api.tekmetricSettings().then(s => {
+      if (s.connected) setTokenPlaceholder('••••••••••••••••'); // show it's set
+      if (s.shopId)   setShopId(s.shopId);
       if (s.bizHoursStart != null) setBizHoursStart(s.bizHoursStart);
       if (s.bizHoursEnd   != null) setBizHoursEnd(s.bizHoursEnd);
       if (s.floorPollSeconds != null) setFloorPollSecs(s.floorPollSeconds);
