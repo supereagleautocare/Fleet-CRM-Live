@@ -3,10 +3,31 @@ import { useApp } from '../App.jsx';
 
 export default function Login() {
   const { login } = useApp();
-  const [email, setEmail]     = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError]     = useState('');
-  const [loading, setLoading] = useState(false);
+  const [email, setEmail]             = useState('');
+  const [password, setPassword]       = useState('');
+  const [error, setError]             = useState('');
+  const [loading, setLoading]         = useState(false);
+  const [showForgot, setShowForgot]   = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotSent, setForgotSent]   = useState(false);
+  const [forgotLoading, setForgotLoading] = useState(false);
+
+  async function handleForgot(e) {
+    e.preventDefault();
+    setForgotLoading(true);
+    try {
+      await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: forgotEmail }),
+      });
+      setForgotSent(true);
+    } catch(_) {
+      setForgotSent(true);
+    } finally {
+      setForgotLoading(false);
+    }
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
