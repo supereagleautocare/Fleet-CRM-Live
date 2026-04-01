@@ -18,9 +18,17 @@ async function req(method, path, body) {
   });
 
   const data = await res.json().catch(() => ({}));
+
+  if (res.status === 401) {
+    clearToken();
+    localStorage.removeItem('fleet_crm_token');
+    localStorage.removeItem('fleet_crm_user');
+    window.location.href = '/';
+    throw new Error(data.error || 'Session expired — please log in again.');
+  }
+
   if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
   return data;
-}
 
 // ── Auth ──────────────────────────────────────────────
 export const api = {
