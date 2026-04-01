@@ -170,7 +170,7 @@ router.post('/forgot-password', async (req, res) => {
     const resend = new Resend(process.env.RESEND_API_KEY);
     await resend.emails.send({
       from: 'onboarding@resend.dev',
-      to: rows[0].email,
+      to: 'nathan@supereagleautocare.com',
       subject: 'Reset your Fleet CRM password',
       html: `
         <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;background:#f8fafc;border-radius:12px">
