@@ -15,60 +15,6 @@ import { useApp } from '../App.jsx';
 import { api } from '../api.js';
 
 // ── DEMO DATA ─────────────────────────────────────────────────────────────────
-const DEMO_STATUSES = [
-  { id:1, name:'Estimate',            color:'#6366f1', bg:'#eef2ff' },
-  { id:2, name:'Work In Progress',    color:'#d97706', bg:'#fffbeb' },
-  { id:3, name:'Complete',            color:'#16a34a', bg:'#f0fdf4' },
-  { id:4, name:'Saved For Later',     color:'#7c3aed', bg:'#faf5ff' },
-  { id:5, name:'Posted',              color:'#1d4ed8', bg:'#eff6ff' },
-  { id:6, name:'Accounts Receivable', color:'#dc2626', bg:'#fef2f2' },
-];
-const DEMO_COMPANIES = [
-  { id:101, name:'Riverside Logistics LLC', contact:'Mike Torres',  phone:'713-555-0101', email:'mike@riverside.com'    },
-  { id:102, name:'Gulf Coast Contractors',  contact:'Sarah Chen',   phone:'713-555-0202', email:'sarah@gulfcoast.com'   },
-  { id:103, name:'Lone Star Deliveries',    contact:'James Webb',   phone:'713-555-0303', email:'james@lonestar.com'    },
-  { id:104, name:'Metro HVAC Services',     contact:'Diana Park',   phone:'713-555-0404', email:'diana@metrohvac.com'   },
-  { id:105, name:'Texan Plumbing Co',       contact:'Bob Martinez', phone:'713-555-0505', email:'bob@texanplumbing.com' },
-];
-const DEMO_EMPLOYEES = [
-  { id:1, name:'Jake Sullivan', role:'Technician'      },
-  { id:2, name:'Maria Reyes',   role:'Technician'      },
-  { id:3, name:'Chris Dolan',   role:'Service Advisor' },
-  { id:4, name:'Pam Nguyen',    role:'Service Advisor' },
-];
-const DEMO_VEHICLES = [
-  { id:201, cid:101, year:2021, make:'Ford',         model:'F-150',          plate:'TXF-101', vin:'1FTFW1ET0MFA12345', color:'White',  oilElsewhere:false, sold:false },
-  { id:202, cid:101, year:2020, make:'Ford',         model:'Transit 350',    plate:'TXF-102', vin:'1FTBW2CM4LKA67890', color:'White',  oilElsewhere:false, sold:false },
-  { id:203, cid:101, year:2022, make:'Chevrolet',    model:'Silverado 1500', plate:'TXC-103', vin:'1GCUDDED4NZ234567', color:'Black',  oilElsewhere:true,  sold:false },
-  { id:204, cid:102, year:2019, make:'Ram',          model:'1500 Classic',   plate:'TXR-201', vin:'1C6SRFFT8KN345678', color:'Gray',   oilElsewhere:false, sold:false },
-  { id:205, cid:102, year:2021, make:'Ford',         model:'Ranger',         plate:'TXF-202', vin:'1FTER4FH4MLD45678', color:'Blue',   oilElsewhere:false, sold:false },
-  { id:206, cid:103, year:2020, make:'Mercedes-Benz',model:'Sprinter 2500',  plate:'TXM-301', vin:'WD3PE8CDXKP456789', color:'White',  oilElsewhere:false, sold:false },
-  { id:207, cid:103, year:2021, make:'Mercedes-Benz',model:'Sprinter 2500',  plate:'TXM-302', vin:'WD3PE8CDX1P456789', color:'White',  oilElsewhere:false, sold:false },
-  { id:208, cid:103, year:2019, make:'Ford',         model:'E-350 Cargo',    plate:'TXF-303', vin:'1FTSS3EL4KDA56789', color:'White',  oilElsewhere:false, sold:false },
-  { id:209, cid:104, year:2022, make:'Ford',         model:'Transit Connect', plate:'TXF-401', vin:'NM0LS7F20N1678901', color:'White',  oilElsewhere:false, sold:false },
-  { id:210, cid:104, year:2020, make:'Chevrolet',    model:'Express 2500',   plate:'TXC-402', vin:'1GCWGBFP0L1789012', color:'Yellow', oilElsewhere:false, sold:false },
-  { id:211, cid:105, year:2021, make:'Ram',          model:'ProMaster City',  plate:'TXR-501', vin:'3C6TRVPG5ME890123', color:'White',  oilElsewhere:false, sold:true  },
-  { id:212, cid:105, year:2019, make:'Ford',         model:'F-250 SD',        plate:'TXF-502', vin:'1FT7W2BT9KEA90123', color:'Red',    oilElsewhere:false, sold:false },
-];
-const DEMO_ROS = [
-  { id:1001,rn:2241,cid:101,vid:201,sid:2,techId:1,saId:3,labor:18500,parts:32000,disc:0,   total:50500,paid:0,    created:'2026-03-09T08:00:00Z',updated:'2026-03-10T14:30:00Z',lastContact:'2026-03-10T09:00:00Z',contactMethod:'Call', jobs:[{name:'Oil Change + Full Inspection',auth:true,labor:8500,parts:2000},{name:'Front Brake Pad Replacement',auth:true,labor:10000,parts:30000}] },
-  { id:1002,rn:2189,cid:101,vid:202,sid:5,techId:2,saId:4,labor:22000,parts:45000,disc:2000,total:65000,paid:65000,created:'2026-02-20T09:00:00Z',updated:'2026-02-25T16:00:00Z',lastContact:'2026-02-20T10:00:00Z',contactMethod:'Text', jobs:[{name:'Transmission Service',auth:true,labor:22000,parts:45000}] },
-  { id:1003,rn:2150,cid:101,vid:201,sid:5,techId:1,saId:3,labor:9500, parts:5000, disc:0,   total:14500,paid:14500,created:'2026-01-15T10:00:00Z',updated:'2026-01-16T15:00:00Z',lastContact:'2026-01-15T11:00:00Z',contactMethod:'Text', jobs:[{name:'Oil Change',auth:true,labor:4500,parts:3000},{name:'Tire Rotation',auth:true,labor:2500,parts:0}] },
-  { id:1004,rn:2244,cid:102,vid:204,sid:1,techId:null,saId:3,labor:0,parts:0,disc:0,total:0,paid:0,created:'2026-03-11T07:30:00Z',updated:'2026-03-11T07:30:00Z',lastContact:null,contactMethod:null,jobs:[{name:'AC System Diagnostic',auth:false,labor:12500,parts:0},{name:'AC Compressor Replacement',auth:false,labor:18000,parts:65000}] },
-  { id:1005,rn:2198,cid:102,vid:205,sid:5,techId:2,saId:4,labor:14500,parts:28000,disc:1500,total:41000,paid:41000,created:'2026-02-28T08:00:00Z',updated:'2026-03-02T17:00:00Z',lastContact:'2026-02-28T09:00:00Z',contactMethod:'Email',jobs:[{name:'4-Wheel Alignment',auth:true,labor:8500,parts:0},{name:'New Tires 4x Cooper',auth:true,labor:6000,parts:28000}] },
-  { id:1006,rn:2210,cid:103,vid:206,sid:5,techId:1,saId:3,labor:35000,parts:72000,disc:5000,total:102000,paid:102000,created:'2026-01-18T09:00:00Z',updated:'2026-01-22T16:00:00Z',lastContact:'2026-01-18T08:00:00Z',contactMethod:'Call', jobs:[{name:'Engine Tune-Up',auth:true,labor:15000,parts:22000},{name:'Cooling System Flush',auth:true,labor:8000,parts:12000}] },
-  { id:1007,rn:2228,cid:103,vid:207,sid:3,techId:2,saId:4,labor:12000,parts:18000,disc:0,   total:30000,paid:0,    created:'2026-03-07T10:00:00Z',updated:'2026-03-10T13:00:00Z',lastContact:'2026-03-07T11:00:00Z',contactMethod:'Text', jobs:[{name:'Oil & Filter + Inspection',auth:true,labor:12000,parts:18000}] },
-  { id:1008,rn:2238,cid:104,vid:209,sid:2,techId:1,saId:3,labor:8500, parts:4500, disc:0,   total:13000,paid:0,    created:'2026-03-08T08:30:00Z',updated:'2026-03-10T11:00:00Z',lastContact:'2026-03-10T08:00:00Z',contactMethod:'Text', jobs:[{name:'Oil Change',auth:true,labor:4500,parts:2500},{name:'Cabin Air Filter',auth:true,labor:4000,parts:2000}] },
-  { id:1009,rn:2239,cid:104,vid:210,sid:2,techId:2,saId:4,labor:24000,parts:55000,disc:3000,total:76000,paid:0,    created:'2026-03-08T09:00:00Z',updated:'2026-03-10T15:00:00Z',lastContact:null,contactMethod:null,jobs:[{name:'Alternator Replacement',auth:true,labor:14000,parts:35000},{name:'Serpentine Belt',auth:true,labor:6000,parts:12000}] },
-  { id:1010,rn:2233,cid:104,vid:209,sid:6,techId:1,saId:3,labor:25000,parts:20000,disc:0,   total:45000,paid:0,    created:'2026-03-01T08:00:00Z',updated:'2026-03-05T17:00:00Z',lastContact:'2026-03-03T09:00:00Z',contactMethod:'Call', jobs:[{name:'Transmission Rebuild',auth:true,labor:25000,parts:20000}] },
-  { id:1011,rn:2243,cid:105,vid:211,sid:2,techId:2,saId:4,labor:6500, parts:3200, disc:0,   total:9700, paid:0,    created:'2026-03-09T11:00:00Z',updated:'2026-03-10T16:00:00Z',lastContact:'2026-03-09T11:30:00Z',contactMethod:'Text', jobs:[{name:'Full Synthetic Oil Service',auth:true,labor:4500,parts:2200},{name:'Wiper Blades',auth:true,labor:2000,parts:1000}] },
-  { id:1012,rn:2230,cid:105,vid:212,sid:5,techId:1,saId:3,labor:32000,parts:48000,disc:4000,total:76000,paid:76000,created:'2026-02-22T09:00:00Z',updated:'2026-02-27T16:00:00Z',lastContact:'2026-02-22T10:00:00Z',contactMethod:'Email',jobs:[{name:'Suspension Overhaul',auth:true,labor:20000,parts:28000},{name:'Exhaust Repair',auth:true,labor:12000,parts:20000}] },
-];
-const DEMO_CARFAX = [
-  { vid:203, date:'2026-02-15', shop:'Jiffy Lube - Houston',         service:'Oil Change'           },
-  { vid:208, date:'2026-01-28', shop:'Valvoline Instant Oil Change', service:'Oil Change + Filter'  },
-  { vid:210, date:'2026-03-01', shop:'Firestone Complete Auto Care', service:'Synthetic Oil Change'  },
-];
 
 // ── UTILS ─────────────────────────────────────────────────────────────────────
 const f$       = c   => `$${(c/100).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
@@ -929,17 +875,17 @@ export default function ActiveFleet() {
   const [syncedStats, setSyncedStats] = useState(null);
   const [nextSyncIn,  setNextSyncIn]  = useState(POLL_MINUTES * 60);
   const [oilInterval,     setOilInterval]     = useState(90);
-  const [isDemo,          setIsDemo]          = useState(true);
+  const [isDemo,          setIsDemo]          = useState(false);
   const [bizHoursStart,   setBizHoursStart]   = useState(7);
   const [bizHoursEnd,     setBizHoursEnd]     = useState(19);
   const [floorPollSecs,   setFloorPollSecs]   = useState(60);
 
-  const [statuses,  setStatuses]  = useState(DEMO_STATUSES);
-  const [companies, setCompanies] = useState(DEMO_COMPANIES);
-  const [vehicles,  setVehicles]  = useState(DEMO_VEHICLES);
-  const [employees, setEmployees] = useState(DEMO_EMPLOYEES);
-  const [ros,       setRos]       = useState(DEMO_ROS);
-  const [carfax,    setCarfax]    = useState(DEMO_CARFAX);
+  const [statuses,  setStatuses]  = useState([]);
+  const [companies, setCompanies] = useState([]);
+  const [vehicles,  setVehicles]  = useState([]);
+  const [employees, setEmployees] = useState([]);
+  const [ros,       setRos]       = useState([]);
+  const [carfax,    setCarfax]    = useState([]);
 
   // Load saved settings on mount so biz hours + floor poll are respected
   useEffect(() => {
