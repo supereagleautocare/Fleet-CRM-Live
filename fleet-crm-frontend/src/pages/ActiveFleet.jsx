@@ -245,7 +245,7 @@ function ShopFloor({ companies, vehicles, employees, statuses }) {
 }
 
 // ── VEHICLES TAB ──────────────────────────────────────────────────────────────
-function VehiclesTab({ ros, companies, vehicles, carfax, oilInterval }) {
+function VehiclesTab({ ros, companies, vehicles, carfax, oilInterval, statuses }) {
   const [view,   setView]   = useState('fleet');
   const [selCo,  setSelCo]  = useState(companies[0]?.id);
   const [selVeh, setSelVeh] = useState(null);
@@ -1084,7 +1084,7 @@ export default function ActiveFleet() {
       {/* ── Tab content ── */}
       <div className="page-body">
         {tab==='shopfloor' && <ShopFloor companies={companies} vehicles={vehicles} employees={employees} statuses={statuses}/>}
-        {tab==='vehicles'  && <VehiclesTab ros={ros} companies={companies} vehicles={vehicles} carfax={carfax} oilInterval={oilInterval}/>}
+        {tab==='vehicles' && <VehiclesTab ros={ros} companies={companies} vehicles={vehicles} carfax={carfax} oilInterval={oilInterval} statuses={statuses}/>}
         {tab==='sales'     && <SalesTab ros={ros} companies={companies} vehicles={vehicles} employees={employees} statuses={statuses}/>}
         {tab==='settings'  && <FleetSettings oilInterval={oilInterval} setOilInterval={setOilInterval} statuses={statuses}/>}
       </div>
