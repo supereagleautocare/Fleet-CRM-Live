@@ -56,23 +56,39 @@ function IdleTag({ updated }) {
 }
 
 // ── SHOP FLOOR ────────────────────────────────────────────────────────────────
-function ShopFloor({ ros, companies, vehicles, employees, statuses, onRefresh, pollSeconds = 60 }) {
-  const [countdown, setCountdown] = useState(pollSeconds);
+function ShopFloor({ companies, vehicles, employees, statuses }) {
+  const [ros,       setRos]       = useState([]);
+  const [countdown, setCountdown] = useState(60);
+  const [lastPoll,  setLastPoll]  = useState(null);
+  const [polling,   setPolling]   = useState(false);
 
-  // Fast auto-refresh while this tab is visible
+  async function pollShopFloor() {
+    setPolling(true);
+    try {
+      const data = await api.tekmetricShopFloor();
+      setRos(data.ros || []);
+      setLastPoll(new Date());
+    } catch(e) {
+      console.error('[ShopFloor]', e.message);
+    } finally {
+      setPolling(false);
+    }
+  }
+
+  // Poll on mount and every 60 seconds
   useEffect(() => {
-    setCountdown(pollSeconds);
+    pollShopFloor();
     const tick = setInterval(() => {
       setCountdown(prev => {
         if (prev <= 1) {
-          onRefresh?.();
-          return pollSeconds;
+          pollShopFloor();
+          return 60;
         }
         return prev - 1;
       });
     }, 1000);
     return () => clearInterval(tick);
-  }, [pollSeconds, onRefresh]);
+  }, []);
   const [sel, setSel] = useState(null);
   const [exp, setExp] = useState(null);
   const gc = id => companies.find(c => c.id===id);
@@ -87,10 +103,14 @@ function ShopFloor({ ros, companies, vehicles, employees, statuses, onRefresh, p
   const rbg    = ro => { const h=hrsIn(ro.updated); return h>72?'row-overdue':h>24?'row-today':''; };
   return (
     <>
-      <div style={{display:'flex',justifyContent:'flex-end',marginBottom:8}}>
-        <span style={{fontSize:11,color:'var(--gray-400)',background:'var(--gray-50)',border:'1px solid var(--gray-200)',borderRadius:6,padding:'3px 10px'}}>
-          🔄 Auto-refresh in {countdown}s
+      <div style={{display:'flex',justifyContent:'flex-end',alignItems:'center',gap:8,marginBottom:8}}>
+        {lastPoll && <span style={{fontSize:11,color:'var(--gray-400)'}}>Last updated: {lastPoll.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',second:'2-digit'})}</span>}
+        <span style={{fontSize:11,color:polling?'var(--gold-500)':'var(--gray-400)',background:'var(--gray-50)',border:'1px solid var(--gray-200)',borderRadius:6,padding:'3px 10px'}}>
+          {polling ? '⏳ Refreshing…' : `🔄 Next refresh in ${countdown}s`}
         </span>
+        <button onClick={pollShopFloor} disabled={polling} className="btn btn-ghost btn-sm" style={{fontSize:11}}>
+          Refresh Now
+        </button>
       </div>
       <div className="stat-grid" style={{gridTemplateColumns:'repeat(4,1fr)'}}>
         {[
@@ -697,12 +717,15 @@ function FleetSettings({ oilInterval, setOilInterval, statuses }) {
           <div className="form-group" style={{marginBottom:0}}>
             <label className="form-label">Auto-sync interval</label>
             <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
-              {[1,2,5,10,15].map(m=>(
+              {[15,30,60].map(m=>(
                 <button key={m} onClick={()=>setPoll(m)} className="btn btn-sm"
                   style={{background:poll===m?'var(--navy-800)':'white',color:poll===m?'white':'var(--gray-600)',border:'1px solid var(--gray-200)'}}>
-                  {m}min
+                  {m===60?'1 hr':`${m}min`}
                 </button>
               ))}
+            </div>
+            <div style={{fontSize:11,color:'var(--gray-400)',marginTop:5}}>
+              Full sync pulls customers, vehicles, and employees. Shop Floor updates separately every 60s.
             </div>
             <div style={{fontSize:11,color:'var(--gray-400)',marginTop:5}}>
               Auto-sync only runs Mon–Fri 7am–7pm. Change hours in BDAY_START/BDAY_END in ActiveFleet.jsx.
@@ -728,17 +751,8 @@ function FleetSettings({ oilInterval, setOilInterval, statuses }) {
               (7 = 7:00am, 19 = 7:00pm)
             </div>
           </div>
-          <div style={{marginBottom:4}}>
-            <div style={{fontSize:11,fontWeight:700,color:'var(--gray-500)',marginBottom:6}}>🔴 Shop Floor refresh interval</div>
-            <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
-              {[30,60,120,300].map(s=>(
-                <button key={s} onClick={()=>setFloorPollSecs(s)} className="btn btn-sm"
-                  style={{background:floorPollSecs===s?'var(--gold-500)':'white',color:floorPollSecs===s?'var(--navy-950)':'var(--gray-600)',border:'1px solid var(--gray-200)'}}>
-                  {s<60?`${s}s`:s===60?'1 min':s===120?'2 min':'5 min'}
-                </button>
-              ))}
-              <span style={{fontSize:11,color:'var(--gray-400)'}}>— Shop Floor only, while tab is open</span>
-            </div>
+          <div style={{marginBottom:4,padding:'10px 14px',background:'#f0fdf4',border:'1px solid #bbf7d0',borderRadius:8,fontSize:12,color:'#15803d'}}>
+            🔧 <strong>Shop Floor</strong> polls Tekmetric directly every 60 seconds for live RO updates — independent of the auto-sync above.
           </div>
         </div>
         <div className="table-card" style={{padding:18}}>
@@ -846,8 +860,7 @@ function FleetSettings({ oilInterval, setOilInterval, statuses }) {
 // Change these two numbers if your shop hours are different.
 // BDAY_START = hour the shop opens (24-hour format, so 7 = 7:00am)
 // BDAY_END   = hour the shop closes (19 = 7:00pm)
-const POLL_MINUTES = 5;
-const POLL_MS      = POLL_MINUTES * 60 * 1000;
+const [pollMinutes, setPollMinutes] = useState(15);
 
 function isBusinessHours(start = 7, end = 19) {
   const now  = new Date();
@@ -894,6 +907,7 @@ export default function ActiveFleet() {
       if (s.bizHoursEnd   != null) setBizHoursEnd(s.bizHoursEnd);
       if (s.floorPollSeconds != null) setFloorPollSecs(s.floorPollSeconds);
       if (s.oilInterval   != null) setOilInterval(s.oilInterval);
+      if (s.pollInterval != null) setPollMinutes(s.pollInterval);
     }).catch(() => {});
   }, []);
   
@@ -1069,7 +1083,7 @@ export default function ActiveFleet() {
 
       {/* ── Tab content ── */}
       <div className="page-body">
-        {tab==='shopfloor' && <ShopFloor ros={ros} companies={companies} vehicles={vehicles} employees={employees} statuses={statuses} onRefresh={()=>doSync(true)} pollSeconds={floorPollSecs}/>}
+        {tab==='shopfloor' && <ShopFloor companies={companies} vehicles={vehicles} employees={employees} statuses={statuses}/>}
         {tab==='vehicles'  && <VehiclesTab ros={ros} companies={companies} vehicles={vehicles} carfax={carfax} oilInterval={oilInterval}/>}
         {tab==='sales'     && <SalesTab ros={ros} companies={companies} vehicles={vehicles} employees={employees} statuses={statuses}/>}
         {tab==='settings'  && <FleetSettings oilInterval={oilInterval} setOilInterval={setOilInterval} statuses={statuses}/>}
