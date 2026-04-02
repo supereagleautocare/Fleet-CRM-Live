@@ -89,12 +89,16 @@ function ShopFloor({ companies, vehicles, employees, statuses }) {
     }, 1000);
     return () => clearInterval(tick);
   }, []);
-  const [sel, setSel] = useState(null);
-  const [exp, setExp] = useState(null);
+  const [sel,       setSel]       = useState(null);
+  const [exp,       setExp]       = useState(null);
+  const [dateField, setDateField] = useState('created');
+  const [drRange,   setDrRange]   = useState('all');
+  const [drStart,   setDrStart]   = useState('');
+  const [drEnd,     setDrEnd]     = useState('');
   const gc = id => companies.find(c => c.id===id);
   const gv = id => vehicles.find(v => v.id===id);
   const ge = id => employees.find(e => e.id===id);
-  const active = ros.filter(r => r.sid!==5);
+  const active = filterRange(ros.filter(r => r.sid!==5), drRange, drStart, drEnd, dateField);
   const filt   = sel ? active.filter(r => r.sid===sel) : active;
   const idle   = active.filter(r => hrsIn(r.updated)>24).length;
   const noct   = active.filter(r => !r.lastContact).length;
@@ -141,6 +145,34 @@ function ShopFloor({ companies, vehicles, employees, statuses }) {
           );
         })}
         <span style={{marginLeft:'auto',fontSize:10.5,color:'var(--gray-400)'}}>🟡 24–72h &nbsp; 🔴 72h+</span>
+      </div>
+      <div style={{display:'flex',gap:6,marginBottom:14,flexWrap:'wrap',alignItems:'center',padding:'10px 14px',background:'var(--gray-50)',border:'1px solid var(--gray-200)',borderRadius:8}}>
+        <span style={{fontSize:11,fontWeight:700,color:'var(--gray-500)',textTransform:'uppercase',letterSpacing:'.05em',marginRight:4}}>Date field:</span>
+        {[{k:'created',l:'Created'},{k:'promiseTime',l:'Promise Date'}].map(f=>(
+          <button key={f.k} onClick={()=>setDateField(f.k)} className="btn btn-sm"
+            style={{fontSize:11,background:dateField===f.k?'var(--navy-800)':'white',color:dateField===f.k?'white':'var(--gray-600)',border:'1px solid var(--gray-200)'}}>
+            {f.l}
+          </button>
+        ))}
+        <div style={{width:1,height:18,background:'var(--gray-200)',margin:'0 6px'}}/>
+        {DATE_RANGES.map(r=>(
+          <button key={r.key} onClick={()=>setDrRange(r.key)} className="btn btn-sm"
+            style={{fontSize:11,background:drRange===r.key?'var(--navy-800)':'white',color:drRange===r.key?'white':'var(--gray-600)',border:'1px solid var(--gray-200)'}}>
+            {r.label}
+          </button>
+        ))}
+        {drRange==='custom'&&(
+          <>
+            <input type="date" value={drStart} onChange={e=>setDrStart(e.target.value)}
+              style={{padding:'4px 8px',border:'1.5px solid var(--gray-200)',borderRadius:6,fontSize:11}}/>
+            <span style={{fontSize:11,color:'var(--gray-500)'}}>→</span>
+            <input type="date" value={drEnd} onChange={e=>setDrEnd(e.target.value)}
+              style={{padding:'4px 8px',border:'1.5px solid var(--gray-200)',borderRadius:6,fontSize:11}}/>
+          </>
+        )}
+        {drRange!=='all'&&(
+          <button onClick={()=>{setDrRange('all');setDrStart('');setDrEnd('');}} className="btn btn-ghost btn-sm" style={{fontSize:11,marginLeft:'auto'}}>Clear</button>
+        )}
       </div>
       <div className="table-card">
         <div className="table-card-header">
@@ -508,11 +540,21 @@ function VehiclesTab({ ros, companies, vehicles, carfax, oilInterval, statuses }
 const DATE_RANGES = [
   {key:'today',label:'Today'},{key:'week',label:'This Week'},{key:'month',label:'This Month'},
   {key:'q',label:'This Quarter'},{key:'ytd',label:'YTD'},{key:'30',label:'Last 30d'},
-  {key:'90',label:'Last 90d'},{key:'all',label:'All Time'},
+  {key:'90',label:'Last 90d'},{key:'all',label:'All Time'},{key:'custom',label:'Custom Range'},
 ];
-function filterRange(ros, range) {
-  if (range==='all') return ros;
-  const now=new Date(), s=new Date();
+function filterRange(ros, range, customStart, customEnd, dateField = 'created') {
+  if (range === 'all') return ros;
+  if (range === 'custom') {
+    const s = customStart ? new Date(customStart + 'T00:00:00') : null;
+    const e = customEnd   ? new Date(customEnd   + 'T23:59:59') : null;
+    return ros.filter(r => {
+      const d = new Date(r[dateField] || r.created);
+      if (s && d < s) return false;
+      if (e && d > e) return false;
+      return true;
+    });
+  }
+  const now = new Date(), s = new Date();
   if      (range==='today') { s.setHours(0,0,0,0); }
   else if (range==='week')  { s.setDate(now.getDate()-now.getDay()); s.setHours(0,0,0,0); }
   else if (range==='month') { s.setDate(1); s.setHours(0,0,0,0); }
@@ -520,14 +562,16 @@ function filterRange(ros, range) {
   else if (range==='ytd')   { s.setMonth(0,1); s.setHours(0,0,0,0); }
   else if (range==='30')    { s.setDate(now.getDate()-30); }
   else if (range==='90')    { s.setDate(now.getDate()-90); }
-  return ros.filter(r=>new Date(r.created)>=s);
+  return ros.filter(r => new Date(r[dateField] || r.created) >= s);
 }
 function SalesTab({ ros, companies, vehicles, employees, statuses }) {
-  const [range, setRange] = useState('ytd');
+  const [range,       setRange]       = useState('ytd');
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd,   setCustomEnd]   = useState('');
   const [selCo, setSelCo] = useState(null);
   const gv = id => vehicles.find(v=>v.id===id);
   const ge = id => employees.find(e=>e.id===id);
-  const filt = useMemo(()=>filterRange(ros,range),[ros,range]);
+  const filt = useMemo(()=>filterRange(ros,range,customStart,customEnd),[ros,range,customStart,customEnd]);
   const byco = useMemo(()=>companies.map(c=>{
     const cr=filt.filter(r=>r.cid===c.id), p=cr.filter(r=>r.sid===5);
     const dec=cr.flatMap(r=>r.jobs.filter(j=>!j.auth));
@@ -538,7 +582,7 @@ function SalesTab({ ros, companies, vehicles, employees, statuses }) {
   const scd = byco.find(c=>c.id===selCo);
   return (
     <>
-      <div style={{display:'flex',gap:5,marginBottom:16,flexWrap:'wrap',alignItems:'center'}}>
+      <div style={{display:'flex',gap:5,marginBottom:range==='custom'?8:16,flexWrap:'wrap',alignItems:'center'}}>
         {selCo&&<button onClick={()=>setSelCo(null)} className="btn btn-ghost btn-sm">← All Companies</button>}
         {DATE_RANGES.map(r=>(
           <button key={r.key} onClick={()=>setRange(r.key)} className="btn btn-sm"
@@ -547,6 +591,19 @@ function SalesTab({ ros, companies, vehicles, employees, statuses }) {
           </button>
         ))}
       </div>
+      {range==='custom'&&(
+        <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:16,padding:'10px 14px',background:'var(--gray-50)',border:'1px solid var(--gray-200)',borderRadius:8,flexWrap:'wrap'}}>
+          <span style={{fontSize:12,fontWeight:600,color:'var(--gray-600)'}}>From</span>
+          <input type="date" value={customStart} onChange={e=>setCustomStart(e.target.value)}
+            style={{padding:'5px 10px',border:'1.5px solid var(--gray-200)',borderRadius:6,fontSize:12}}/>
+          <span style={{fontSize:12,fontWeight:600,color:'var(--gray-600)'}}>To</span>
+          <input type="date" value={customEnd} onChange={e=>setCustomEnd(e.target.value)}
+            style={{padding:'5px 10px',border:'1.5px solid var(--gray-200)',borderRadius:6,fontSize:12}}/>
+          {(customStart||customEnd)&&(
+            <button onClick={()=>{setCustomStart('');setCustomEnd('');}} className="btn btn-ghost btn-sm" style={{fontSize:11}}>Clear</button>
+          )}
+        </div>
+      )}
       {selCo&&scd?(
         <>
           <div style={{marginBottom:14,padding:'12px 16px',background:'white',border:'1px solid var(--gray-200)',borderRadius:'var(--r-lg)',display:'flex',alignItems:'center',gap:14,flexWrap:'wrap'}}>
