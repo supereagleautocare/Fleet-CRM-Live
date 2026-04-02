@@ -641,10 +641,12 @@ function SalesTab({ ros, companies, vehicles, employees, statuses }) {
 // ── FLEET SETTINGS ────────────────────────────────────────────────────────────
 function FleetSettings({ oilInterval, setOilInterval, statuses }) {
   const { showToast } = useApp();
-  const [token,           setToken]           = useState('');
-  const [shopId,          setShopId]          = useState('');
+  const [clientId,        setClientId]        = useState('');
+  const [clientSecret,    setClientSecret]    = useState('');
   const [env,             setEnv]             = useState('production');
-  const [poll,            setPoll]            = useState(5);
+  const [connected,       setConnected]       = useState(false);
+  const [connecting,      setConnecting]      = useState(false);
+  const [connectedShopId, setConnectedShopId] = useState('');
   const [cfxKey,          setCfxKey]          = useState('');
   const [cfxEnabled,      setCfxEnabled]      = useState(false);
   const [bizStart,        setBizStart]        = useState(7);
@@ -654,9 +656,9 @@ function FleetSettings({ oilInterval, setOilInterval, statuses }) {
 
   useEffect(() => {
     api.tekmetricSettings().then(s => {
-      if (s.shopId)     setShopId(s.shopId);
-      if (s.env)        setEnv(s.env);
-      if (s.pollInterval) setPoll(s.pollInterval);
+      if (s.shopId)       setConnectedShopId(s.shopId);
+      if (s.connected)    setConnected(true);
+      if (s.env)          setEnv(s.env);
       if (s.oilInterval)  setOilInterval(s.oilInterval);
       if (s.carfaxKey)    setCfxKey(s.carfaxKey);
       setCfxEnabled(!!s.carfaxEnabled);
@@ -673,46 +675,76 @@ function FleetSettings({ oilInterval, setOilInterval, statuses }) {
   const del = id => setContacts(c=>c.filter(x=>x.id!==id));
   const togR = (i,k) => setRules(r=>r.map((x,j)=>j===i?{...x,[k]:!x[k]}:x));
   const setH = (i,v) => setRules(r=>r.map((x,j)=>j===i?{...x,hours:parseInt(v)||1}:x));
+  const connect = async () => {
+    if (!clientId.trim() || !clientSecret.trim()) {
+      showToast('Enter both your Client ID and Client Secret first', 'error'); return;
+    }
+    setConnecting(true);
+    try {
+      const result = await api.connectTekmetric({ clientId: clientId.trim(), clientSecret: clientSecret.trim(), env });
+      setConnected(true);
+      setConnectedShopId(result.shopId);
+      setClientId('');
+      setClientSecret('');
+      showToast(`✅ Connected to Tekmetric! Shop ID: ${result.shopId}`);
+    } catch(e) { showToast(e.message, 'error'); }
+    finally { setConnecting(false); }
+  };
+
   const save = async () => {
-  try {
-    await api.saveTekmetricSettings({
-      ...(token.trim() ? { token } : {}),  // ← only include if not empty
-      shopId, env, pollInterval: poll, oilInterval,
-      carfaxKey: cfxKey, carfaxEnabled: cfxEnabled,
-      bizHoursStart: bizStart, bizHoursEnd: bizEnd,
-      floorPollSeconds: floorPollSecs
-    });
-    showToast('Fleet settings saved');
-  } catch(e) { showToast('Failed to save: ' + e.message, 'error'); }
-};
+    try {
+      await api.saveTekmetricSettings({
+        env, oilInterval,
+        carfaxKey: cfxKey, carfaxEnabled: cfxEnabled,
+        bizHoursStart: bizStart, bizHoursEnd: bizEnd,
+        floorPollSeconds: floorPollSecs,
+      });
+      showToast('Settings saved');
+    } catch(e) { showToast('Failed to save: ' + e.message, 'error'); }
+  };
   return (
     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,alignItems:'start'}}>
       <div style={{display:'flex',flexDirection:'column',gap:14}}>
         <div className="table-card" style={{padding:18}}>
           <div style={{fontWeight:700,fontSize:13,color:'var(--gray-800)',marginBottom:14}}>🔌 Tekmetric Connection</div>
 
-          {/* What sandbox vs production means — helpful for the user */}
+          {connected && connectedShopId ? (
+            <div style={{padding:'12px 14px',background:'#f0fdf4',border:'1.5px solid #bbf7d0',borderRadius:8,marginBottom:14,display:'flex',alignItems:'center',justifyContent:'space-between',gap:10}}>
+              <div>
+                <div style={{fontWeight:700,fontSize:13,color:'#15803d'}}>✅ Connected to Tekmetric</div>
+                <div style={{fontSize:11,color:'#166534',marginTop:2}}>Shop ID: <strong>{connectedShopId}</strong> · {env === 'sandbox' ? 'Sandbox (test)' : 'Production (live)'}</div>
+              </div>
+              <button type="button" className="btn btn-ghost btn-sm" style={{color:'#dc2626',border:'1px solid #fca5a5',flexShrink:0}} onClick={()=>{setConnected(false);setConnectedShopId('');}}>
+                Disconnect
+              </button>
+            </div>
+          ) : (
+            <div style={{padding:'10px 14px',background:'#fef2f2',border:'1px solid #fca5a5',borderRadius:8,marginBottom:14,fontSize:12,color:'#dc2626'}}>
+              ⚠ Not connected — enter your credentials below and click Connect.
+            </div>
+          )}
+
           <div style={{marginBottom:14,padding:'10px 14px',background:'#eff6ff',border:'1px solid #bfdbfe',borderRadius:8,fontSize:12,color:'#1e40af',lineHeight:1.7}}>
-            <strong>Sandbox</strong> = Tekmetric's fake test environment. Safe to experiment — no real shop data.<br/>
-            <strong>Production</strong> = your actual live shop. Use this when you're ready to go live.
+            Enter your Tekmetric <strong>Client ID</strong> and <strong>Client Secret</strong> — these are provided when Tekmetric approves your API application. Your secret is never stored; only the generated token is saved.<br/>
+            <strong>Sandbox</strong> = test environment (safe). <strong>Production</strong> = your live shop.
           </div>
 
-          <div className="form-group">
-            <label className="form-label">API Bearer Token</label>
-            <input type="password" className="form-input" value={token} onChange={e=>setToken(e.target.value)} placeholder="Paste your Tekmetric token here" />
-          </div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
             <div className="form-group">
-              <label className="form-label">Shop ID</label>
-              <input type="text" className="form-input" value={shopId} onChange={e=>setShopId(e.target.value)} placeholder="e.g. 1"/>
+              <label className="form-label">Client ID</label>
+              <input type="text" className="form-input" value={clientId} onChange={e=>setClientId(e.target.value)} placeholder="Your Tekmetric Client ID" autoComplete="off"/>
             </div>
             <div className="form-group">
-              <label className="form-label">Environment</label>
-              <select className="form-select" value={env} onChange={e=>setEnv(e.target.value)}>
-                <option value="sandbox">Sandbox (test — safe)</option>
-                <option value="production">Production (live shop)</option>
-              </select>
+              <label className="form-label">Client Secret</label>
+              <input type="password" className="form-input" value={clientSecret} onChange={e=>setClientSecret(e.target.value)} placeholder="Your Tekmetric Client Secret" autoComplete="new-password"/>
             </div>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Environment</label>
+            <select className="form-select" value={env} onChange={e=>setEnv(e.target.value)}>
+              <option value="sandbox">Sandbox — test environment, safe to experiment</option>
+              <option value="production">Production — your actual live shop</option>
+            </select>
           </div>
           <div className="form-group" style={{marginBottom:0}}>
             <label className="form-label">Auto-sync interval</label>
@@ -847,9 +879,13 @@ function FleetSettings({ oilInterval, setOilInterval, statuses }) {
             </div>
           ))}
         </div>
-        <div style={{marginTop:14,paddingTop:14,borderTop:'1px solid var(--gray-100)',display:'flex',gap:10,alignItems:'center'}}>
-          <button onClick={save} className="btn btn-primary">Save Settings</button>
-          <span style={{fontSize:11,color:'var(--gray-400)',marginLeft:'auto'}}>SMS/email delivery wired in at launch</span>
+        <div style={{marginTop:14,paddingTop:14,borderTop:'1px solid var(--gray-100)',display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
+          {!connected && (
+            <button onClick={connect} disabled={connecting||!clientId.trim()||!clientSecret.trim()} className="btn btn-primary">
+              {connecting ? '⏳ Connecting…' : '🔌 Connect to Tekmetric'}
+            </button>
+          )}
+          <button onClick={save} className="btn btn-navy">Save Settings</button>
         </div>
       </div>
     </div>
