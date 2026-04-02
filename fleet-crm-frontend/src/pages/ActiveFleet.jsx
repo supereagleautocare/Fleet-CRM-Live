@@ -681,7 +681,7 @@ function FleetSettings({ oilInterval, setOilInterval, statuses }) {
     }
     setConnecting(true);
     try {
-      const result = await api.connectTekmetric({ clientId: clientId.trim(), clientSecret: clientSecret.trim(), env });
+      const result = await api.tekmetricConnect({ clientId: clientId.trim(), clientSecret: clientSecret.trim(), env });
       setConnected(true);
       setConnectedShopId(result.shopId);
       setClientId('');
@@ -746,22 +746,8 @@ function FleetSettings({ oilInterval, setOilInterval, statuses }) {
               <option value="production">Production — your actual live shop</option>
             </select>
           </div>
-          <div className="form-group" style={{marginBottom:0}}>
-            <label className="form-label">Auto-sync interval</label>
-            <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
-              {[15,30,60].map(m=>(
-                <button key={m} onClick={()=>setPoll(m)} className="btn btn-sm"
-                  style={{background:poll===m?'var(--navy-800)':'white',color:poll===m?'white':'var(--gray-600)',border:'1px solid var(--gray-200)'}}>
-                  {m===60?'1 hr':`${m}min`}
-                </button>
-              ))}
-            </div>
-            <div style={{fontSize:11,color:'var(--gray-400)',marginTop:5}}>
-              Full sync pulls customers, vehicles, and employees. Shop Floor updates separately every 60s.
-            </div>
-            <div style={{fontSize:11,color:'var(--gray-400)',marginTop:5}}>
-              Auto-sync only runs Mon–Fri 7am–7pm. Change hours in BDAY_START/BDAY_END in ActiveFleet.jsx.
-            </div>
+          <div style={{padding:'10px 14px',background:'var(--gray-50)',border:'1px solid var(--gray-200)',borderRadius:8,fontSize:12,color:'var(--gray-600)'}}>
+            🔄 <strong>Refresh behavior:</strong> Shop Floor updates every 60 seconds automatically. Vehicles, Sales, and Employees sync when you click <strong>Sync Now</strong> in the header.
           </div>
         </div>
         <div className="table-card" style={{padding:18}}>
@@ -897,6 +883,9 @@ function FleetSettings({ oilInterval, setOilInterval, statuses }) {
 // BDAY_START = hour the shop opens (24-hour format, so 7 = 7:00am)
 // BDAY_END   = hour the shop closes (19 = 7:00pm)
 
+const POLL_MINUTES = 60;
+const POLL_MS = POLL_MINUTES * 60 * 1000;
+
 function isBusinessHours(start = 7, end = 19) {
   const now  = new Date();
   const day  = now.getDay();
@@ -927,7 +916,6 @@ export default function ActiveFleet() {
   const [bizHoursStart,   setBizHoursStart]   = useState(7);
   const [bizHoursEnd,     setBizHoursEnd]     = useState(19);
   const [floorPollSecs,   setFloorPollSecs]   = useState(60);
-  const [pollMinutes, setPollMinutes] = useState(15);
 
 
   const [statuses,  setStatuses]  = useState([]);
