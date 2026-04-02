@@ -121,8 +121,10 @@ router.post('/connect', async (req, res) => {
     });
 
     if (!tokenRes.ok) {
-      return res.status(401).json({ error: 'Tekmetric rejected your credentials. Double-check your Client ID and Client Secret.' });
-    }
+      return res.status(400).json({
+        error: 'Tekmetric rejected your credentials. Double-check your Client ID and Client Secret.',
+        detail: errBody,
+      });
 
     const tokenData = await tokenRes.json();
     const accessToken = tokenData.access_token;
