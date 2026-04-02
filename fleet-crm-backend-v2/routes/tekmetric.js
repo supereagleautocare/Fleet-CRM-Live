@@ -111,22 +111,36 @@ router.post('/connect', async (req, res) => {
 
     const credentials = Buffer.from(`${clientId.trim()}:${clientSecret.trim()}`).toString('base64');
 
-    const tokenRes = await fetch(`${baseUrl}/api/v1/oauth/token`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Basic ${credentials}`,
-        'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
-      },
-      body: 'grant_type=client_credentials',
-    });
-
-    if (!tokenRes.ok) {
-      return res.status(400).json({
-        error: 'Tekmetric rejected your credentials. Double-check your Client ID and Client Secret.',
-        detail: errBody,
+    const tokenData = await new Promise((resolve, reject) => {
+      const https = require('https');
+      const postBody = 'grant_type=client_credentials';
+      const hostname = env === 'sandbox' ? 'sandbox.tekmetric.com' : 'shop.tekmetric.com';
+      const options = {
+        hostname,
+        path: '/api/v1/oauth/token',
+        method: 'POST',
+        headers: {
+          'Authorization': `Basic ${credentials}`,
+          'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+          'Content-Length': Buffer.byteLength(postBody),
+        },
+      };
+      const request = https.request(options, (response) => {
+        let data = '';
+        response.on('data', chunk => data += chunk);
+        response.on('end', () => {
+          if (response.statusCode >= 400) {
+            reject(new Error(`Tekmetric rejected your credentials (${response.statusCode}). Double-check your Client ID and Client Secret.`));
+          } else {
+            try { resolve(JSON.parse(data)); }
+            catch(e) { reject(new Error('Invalid response from Tekmetric')); }
+          }
+        });
       });
-
-    const tokenData = await tokenRes.json();
+      request.on('error', reject);
+      request.write(postBody);
+      request.end();
+    });
     const accessToken = tokenData.access_token;
 
     // scope comes back as space-separated shop IDs e.g. "1 2"
