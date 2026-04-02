@@ -50,7 +50,8 @@ class RateLimiter {
 }
 const tekLimiter = new RateLimiter(500);
 
-async function tekFetchWithRetry(url, token, attempt = 1) {
+async function tekFetchWithRetry(url, token, attempt = 1, env = 'production') {
+  tekLimiter.max = env === 'sandbox' ? 250 : 500;
   await tekLimiter.throttle();
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
   if (res.status === 429) {
@@ -200,18 +201,7 @@ router.get('/fleet-data', async (req, res) => {
     let customers = [], page = 0, totalPages = 1;
     while (page < totalPages) {
       const data = await tekFetchWithRetry(
-        `console.log('[Tekmetric] Fetching business customers...');
-         let customers = [], page = 0, totalPages = 1;
-         while (page < totalPages) {
-         const data = await tekFetchWithRetry(
-    `       ${base}/customers?shop=${shopId}&customerTypeId=2&size=100&page=${page}`,
-           token
-         );
-         customers = [...customers, ...(data.content || [])];
-         totalPages = data.totalPages || 1;
-         page++;
-         if (page < totalPages) await sleep(100);
-        }
+        `${base}/customers?shop=${shopId}&customerTypeId=2&size=100&page=${page}`,
         token
       );
       customers = [...customers, ...(data.content || [])];
@@ -220,7 +210,6 @@ router.get('/fleet-data', async (req, res) => {
       if (page < totalPages) await sleep(100);
     }
     console.log(`[Tekmetric] Found ${customers.length} business customers.`);
-
     async function batchFetch(items, fn, batchSize = 8) {
       const results = [], failures = [];
       for (let i = 0; i < items.length; i += batchSize) {
@@ -431,6 +420,38 @@ router.get('/shop-floor', async (req, res) => {
 
   } catch (err) {
     console.error('[Tekmetric] Shop floor error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Disconnect Tekmetric ──────────────────────────────────────────────────────
+router.post('/disconnect', async (req, res) => {
+  try {
+    const { token, shopId, env } = await getTekConfig();
+
+    // Tell Tekmetric to revoke our access to this shop
+    if (token && shopId) {
+      try {
+        const base = baseUrl(env);
+        await fetch(`${base}/shops/${shopId}/scope`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        console.log('[Tekmetric] Shop scope revoked');
+      } catch (_) {
+        // Non-fatal — token may already be expired
+        console.warn('[Tekmetric] Could not revoke scope — clearing locally anyway');
+      }
+    }
+
+    // Erase the token and shop ID from your database
+    await pool.query(
+      `UPDATE config_settings SET value = '' WHERE key IN ('tekmetric_token', 'tekmetric_shop_id')`
+    );
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[Tekmetric /disconnect]', err.message);
     res.status(500).json({ error: err.message });
   }
 });
