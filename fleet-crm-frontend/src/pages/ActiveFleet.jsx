@@ -902,7 +902,6 @@ function FleetSettings({ oilInterval, setOilInterval, statuses }) {
 // BDAY_END   = hour the shop closes (19 = 7:00pm)
 const POLL_MINUTES = 5;
 const POLL_MS      = POLL_MINUTES * 60 * 1000;
-}
 
 function isBusinessHours(start = 7, end = 19) {
   const now  = new Date();
