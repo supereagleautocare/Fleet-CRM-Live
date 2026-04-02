@@ -49,7 +49,7 @@ export const api = {
   // ── Dashboard ───────────────────────────────────────
   dashboard:      ()                => req('GET',  '/dashboard'),
   dashboardDrill: (type, period)    => req('GET',  `/dashboard/activity-drill?type=${type}&period=${period}`),
-  tekmetricFleetData:    ()     => req('GET',  '/tekmetric/fleet-data'),
+  tekmetricFleetData:    (full) => req('GET',  full ? '/tekmetric/fleet-data?full=1' : '/tekmetric/fleet-data'),
   tekmetricShopFloor:    ()     => req('GET',  '/tekmetric/shop-floor'),
   tekmetricSettings:     ()     => req('GET',  '/tekmetric/settings'),
   saveTekmetricSettings: (data) => req('POST', '/tekmetric/settings', data),
