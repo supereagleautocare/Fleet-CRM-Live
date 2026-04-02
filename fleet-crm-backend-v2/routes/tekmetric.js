@@ -417,5 +417,11 @@ router.get('/shop-floor', async (req, res) => {
     }));
 
     res.json({ ros, statuses, companies, vehicles, employees, syncedAt: new Date().toISOString() });
-  
+
+  } catch (err) {
+    console.error('[Tekmetric] Shop floor error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
