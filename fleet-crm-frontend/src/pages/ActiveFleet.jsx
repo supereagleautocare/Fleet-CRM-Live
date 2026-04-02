@@ -56,28 +56,25 @@ function IdleTag({ updated }) {
 }
 
 // ── SHOP FLOOR ────────────────────────────────────────────────────────────────
-function ShopFloor({ companies: parentCompanies, vehicles: parentVehicles, employees: parentEmployees, statuses: parentStatuses }) {
+function ShopFloor() {
   const [ros,       setRos]       = useState([]);
+  const [statuses,  setStatuses]  = useState([]);
   const [companies, setCompanies] = useState([]);
   const [vehicles,  setVehicles]  = useState([]);
   const [employees, setEmployees] = useState([]);
-  const [statuses,  setStatuses]  = useState([]);
   const [countdown, setCountdown] = useState(60);
   const [lastPoll,  setLastPoll]  = useState(null);
   const [polling,   setPolling]   = useState(false);
 
-  // Merge parent data (from full sync) with live shop floor data
-  // Shop floor data takes priority for active ROs, parent fills in the rest
   async function pollShopFloor() {
     setPolling(true);
     try {
       const data = await api.tekmetricShopFloor();
-      setRos(data.ros || []);
-      // Use live data from poll, fall back to parent if poll didn't return it yet
-      setStatuses(data.statuses?.length  ? data.statuses  : parentStatuses);
-      setCompanies(data.companies?.length ? data.companies : parentCompanies);
-      setVehicles(data.vehicles?.length  ? data.vehicles  : parentVehicles);
-      setEmployees(data.employees?.length ? data.employees : parentEmployees);
+      setRos(data.ros       || []);
+      setStatuses(data.statuses   || []);
+      setCompanies(data.companies || []);
+      setVehicles(data.vehicles   || []);
+      setEmployees(data.employees || []);
       setLastPoll(new Date());
     } catch(e) {
       console.error('[ShopFloor]', e.message);
@@ -1153,7 +1150,7 @@ export default function ActiveFleet() {
 
       {/* ── Tab content ── */}
       <div className="page-body">
-        {tab==='shopfloor' && <ShopFloor companies={companies} vehicles={vehicles} employees={employees} statuses={statuses}/>}
+        {tab==='shopfloor' && <ShopFloor />}
         {tab==='vehicles' && <VehiclesTab ros={ros} companies={companies} vehicles={vehicles} carfax={carfax} oilInterval={oilInterval} statuses={statuses}/>}
         {tab==='sales'     && <SalesTab ros={ros} companies={companies} vehicles={vehicles} employees={employees} statuses={statuses}/>}
         {tab==='settings'  && <FleetSettings oilInterval={oilInterval} setOilInterval={setOilInterval} statuses={statuses}/>}
