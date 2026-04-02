@@ -30,7 +30,28 @@ function baseUrl(env) {
 
 function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 
+// ── Global rate limiter — hard cap at 500 req/min across ALL Tekmetric calls ─
+class RateLimiter {
+  constructor(maxPerMinute) {
+    this.max = maxPerMinute;
+    this.log = []; // timestamps of recent requests
+  }
+  async throttle() {
+    const now = Date.now();
+    this.log = this.log.filter(t => now - t < 60000);
+    if (this.log.length >= this.max) {
+      const wait = 60000 - (now - this.log[0]) + 50;
+      console.warn(`[RateLimit] Cap reached — waiting ${wait}ms`);
+      await sleep(wait);
+      return this.throttle();
+    }
+    this.log.push(Date.now());
+  }
+}
+const tekLimiter = new RateLimiter(500);
+
 async function tekFetchWithRetry(url, token, attempt = 1) {
+  await tekLimiter.throttle();
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
   if (res.status === 429) {
     if (attempt >= 3) throw new Error(`Tekmetric rate limit hit after 3 attempts for ${url}`);
