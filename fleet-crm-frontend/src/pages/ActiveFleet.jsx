@@ -860,7 +860,6 @@ function FleetSettings({ oilInterval, setOilInterval, statuses }) {
 // Change these two numbers if your shop hours are different.
 // BDAY_START = hour the shop opens (24-hour format, so 7 = 7:00am)
 // BDAY_END   = hour the shop closes (19 = 7:00pm)
-const [pollMinutes, setPollMinutes] = useState(15);
 
 function isBusinessHours(start = 7, end = 19) {
   const now  = new Date();
@@ -892,6 +891,8 @@ export default function ActiveFleet() {
   const [bizHoursStart,   setBizHoursStart]   = useState(7);
   const [bizHoursEnd,     setBizHoursEnd]     = useState(19);
   const [floorPollSecs,   setFloorPollSecs]   = useState(60);
+  const [pollMinutes, setPollMinutes] = useState(15);
+
 
   const [statuses,  setStatuses]  = useState([]);
   const [companies, setCompanies] = useState([]);
