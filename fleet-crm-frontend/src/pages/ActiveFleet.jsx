@@ -679,7 +679,7 @@ function FleetSettings({ oilInterval, setOilInterval, statuses }) {
 
           <div className="form-group">
             <label className="form-label">API Bearer Token</label>
-            <input type="password" className="form-input" value={token} onChange={e=>setToken(e.target.value)} placeholder={tokenPlaceholder || 'Paste your Tekmetric token here'} />
+            <input type="password" className="form-input" value={token} onChange={e=>setToken(e.target.value)} placeholder="Paste your Tekmetric token here" />
           </div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
             <div className="form-group">
