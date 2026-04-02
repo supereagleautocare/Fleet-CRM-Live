@@ -681,7 +681,7 @@ function FleetSettings({ oilInterval, setOilInterval, statuses }) {
     }
     setConnecting(true);
     try {
-      const result = await api.tekmetricConnect({ clientId: clientId.trim(), clientSecret: clientSecret.trim(), env });
+      const result = await api.connectTekmetric({ clientId: clientId.trim(), clientSecret: clientSecret.trim(), env });
       setConnected(true);
       setConnectedShopId(result.shopId);
       setClientId('');
