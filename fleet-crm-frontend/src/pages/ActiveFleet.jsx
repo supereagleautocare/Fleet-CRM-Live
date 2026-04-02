@@ -56,17 +56,28 @@ function IdleTag({ updated }) {
 }
 
 // ── SHOP FLOOR ────────────────────────────────────────────────────────────────
-function ShopFloor({ companies, vehicles, employees, statuses }) {
+function ShopFloor({ companies: parentCompanies, vehicles: parentVehicles, employees: parentEmployees, statuses: parentStatuses }) {
   const [ros,       setRos]       = useState([]);
+  const [companies, setCompanies] = useState([]);
+  const [vehicles,  setVehicles]  = useState([]);
+  const [employees, setEmployees] = useState([]);
+  const [statuses,  setStatuses]  = useState([]);
   const [countdown, setCountdown] = useState(60);
   const [lastPoll,  setLastPoll]  = useState(null);
   const [polling,   setPolling]   = useState(false);
 
+  // Merge parent data (from full sync) with live shop floor data
+  // Shop floor data takes priority for active ROs, parent fills in the rest
   async function pollShopFloor() {
     setPolling(true);
     try {
       const data = await api.tekmetricShopFloor();
       setRos(data.ros || []);
+      // Use live data from poll, fall back to parent if poll didn't return it yet
+      setStatuses(data.statuses?.length  ? data.statuses  : parentStatuses);
+      setCompanies(data.companies?.length ? data.companies : parentCompanies);
+      setVehicles(data.vehicles?.length  ? data.vehicles  : parentVehicles);
+      setEmployees(data.employees?.length ? data.employees : parentEmployees);
       setLastPoll(new Date());
     } catch(e) {
       console.error('[ShopFloor]', e.message);
