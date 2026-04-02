@@ -179,7 +179,8 @@ router.get('/fleet-data', async (req, res) => {
     let customers = [], page = 0, totalPages = 1;
     while (page < totalPages) {
       const data = await tekFetchWithRetry(
-        `${base}/customers?shop=${shopId}&customerTypeId=2&size=100&page=${page}`, token
+        `${base}/repair-orders?shop=${shopId}&repairOrderStatusId=1,2,3,4,6&customerTypeId=2&size=100&page=${page}`,
+        token
       );
       customers = [...customers, ...(data.content || [])];
       totalPages = data.totalPages || 1;
