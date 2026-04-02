@@ -189,31 +189,37 @@ router.get('/fleet-data', async (req, res) => {
     }
     console.log(`[Tekmetric] Found ${customers.length} business customers.`);
 
-    console.log('[Tekmetric] Fetching repair orders...');
-    let allRos = [], roFailures = 0;
-    for (const customer of customers) {
-      try {
-        const roData = await tekFetchWithRetry(`${base}/repair-orders?shop=${shopId}&customerId=${customer.id}&size=100`, token);
-        allRos = [...allRos, ...(roData.content || [])];
-      } catch (err) {
-        roFailures++;
-        console.warn(`[Tekmetric] RO fetch failed for customer ${customer.id}: ${err.message}`);
+    async function batchFetch(items, fn, batchSize = 8) {
+      const results = [], failures = [];
+      for (let i = 0; i < items.length; i += batchSize) {
+        const batch = items.slice(i, i + batchSize);
+        const settled = await Promise.allSettled(batch.map(fn));
+        settled.forEach((r, idx) => {
+          if (r.status === 'fulfilled') results.push(...r.value);
+          else failures.push({ item: batch[idx], error: r.reason?.message });
+        });
+        if (i + batchSize < items.length) await sleep(150);
       }
-      await sleep(100);
+      return { results, failures };
     }
 
+    console.log('[Tekmetric] Fetching repair orders...');
+    const roFetch = await batchFetch(customers, async c => {
+      const d = await tekFetchWithRetry(`${base}/repair-orders?shop=${shopId}&customerId=${c.id}&size=100`, token);
+      return d.content || [];
+    });
+    const allRos = roFetch.results;
+    const roFailures = roFetch.failures.length;
+    if (roFailures) console.warn(`[Tekmetric] ${roFailures} RO fetch failures`);
+
     console.log('[Tekmetric] Fetching vehicles...');
-    let allVehicles = [], vehicleFailures = 0;
-    for (const customer of customers) {
-      try {
-        const vData = await tekFetchWithRetry(`${base}/vehicles?shop=${shopId}&customerId=${customer.id}&size=100`, token);
-        allVehicles = [...allVehicles, ...(vData.content || [])];
-      } catch (err) {
-        vehicleFailures++;
-        console.warn(`[Tekmetric] Vehicle fetch failed for customer ${customer.id}: ${err.message}`);
-      }
-      await sleep(100);
-    }
+    const vFetch = await batchFetch(customers, async c => {
+      const d = await tekFetchWithRetry(`${base}/vehicles?shop=${shopId}&customerId=${c.id}&size=100`, token);
+      return d.content || [];
+    });
+    const allVehicles = vFetch.results;
+    const vehicleFailures = vFetch.failures.length;
+    if (vehicleFailures) console.warn(`[Tekmetric] ${vehicleFailures} vehicle fetch failures`);
 
     console.log('[Tekmetric] Fetching employees...');
     const empData = await tekFetchWithRetry(`${base}/employees?shop=${shopId}&size=100`, token);
@@ -312,8 +318,10 @@ router.get('/shop-floor', async (req, res) => {
       parts: ro.partsSales  || 0,
       total: ro.totalSales  || 0,
       paid:  ro.amountPaid  || 0,
-      created: ro.createdDate,
-      updated: ro.updatedDate,
+      created:     ro.createdDate,
+      updated:     ro.updatedDate,
+      promiseTime: ro.customerTimeOut || null,
+      milesIn:     ro.milesIn        || null,
       lastContact:   null,
       contactMethod: null,
       jobs: (ro.jobs || []).map(j => ({
@@ -322,9 +330,72 @@ router.get('/shop-floor', async (req, res) => {
         labor: j.laborTotal || 0,
         parts: j.partsTotal || 0,
       })),
+      // embed status info directly so frontend doesn't need a separate sync
+      status: ro.repairOrderStatus ? {
+        id:   ro.repairOrderStatus.id,
+        name: ro.repairOrderStatus.name,
+        code: ro.repairOrderStatus.code,
+      } : null,
     }));
 
-    res.json({ ros, syncedAt: new Date().toISOString() });
+    // ── Fetch companies, vehicles, employees for just these active ROs ────────
+    const customerIds = [...new Set(allRos.map(r => r.customerId).filter(Boolean))];
+    const vehicleIds  = [...new Set(allRos.map(r => r.vehicleId).filter(Boolean))];
+    const techIds     = [...new Set([
+      ...allRos.map(r => r.technicianId),
+      ...allRos.map(r => r.serviceWriterId),
+    ].filter(Boolean))];
+
+    async function fetchMany(ids, urlFn) {
+      const results = [];
+      for (let i = 0; i < ids.length; i += 8) {
+        const batch = ids.slice(i, i + 8);
+        const settled = await Promise.allSettled(batch.map(id =>
+          tekFetchWithRetry(urlFn(id), token).catch(() => null)
+        ));
+        settled.forEach(r => { if (r.status === 'fulfilled' && r.value) results.push(r.value); });
+        if (i + 8 < ids.length) await sleep(100);
+      }
+      return results;
+    }
+
+    const [rawCustomers, rawVehicles, empData] = await Promise.all([
+      fetchMany(customerIds, id => `${base}/customers/${id}`),
+      fetchMany(vehicleIds,  id => `${base}/vehicles/${id}`),
+      tekFetchWithRetry(`${base}/employees?shop=${shopId}&size=100`, token).catch(() => ({ content: [] })),
+    ]);
+
+    const STATUS_COLORS = ['#6366f1','#d97706','#16a34a','#7c3aed','#1d4ed8','#dc2626','#0891b2','#059669','#7c2d12'];
+    const STATUS_BGS    = ['#eef2ff','#fffbeb','#f0fdf4','#faf5ff','#eff6ff','#fef2f2','#ecfeff','#d1fae5','#fff7ed'];
+    const statusMap = {};
+    allRos.forEach(ro => {
+      if (ro.repairOrderStatus && !statusMap[ro.repairOrderStatus.id]) {
+        statusMap[ro.repairOrderStatus.id] = ro.repairOrderStatus;
+      }
+    });
+    const statuses = Object.values(statusMap).map((s, i) => ({
+      id: s.id, name: s.name, code: s.code,
+      color: STATUS_COLORS[i % STATUS_COLORS.length],
+      bg:    STATUS_BGS[i % STATUS_BGS.length],
+    }));
+
+    const companies = rawCustomers.map(c => ({
+      id:      c.id,
+      name:    c.firstName && c.lastName ? `${c.firstName} ${c.lastName}` : c.firstName || c.lastName || `Customer ${c.id}`,
+      phone:   c.phone?.[0]?.number || null,
+      email:   Array.isArray(c.email) ? c.email[0] : c.email || null,
+    }));
+
+    const vehicles = rawVehicles.map(v => ({
+      id: v.id, cid: v.customerId, year: v.year, make: v.make, model: v.model,
+      plate: v.licensePlate, vin: v.vin, color: v.color,
+    }));
+
+    const employees = (empData.content || []).map(e => ({
+      id: e.id, name: `${e.firstName} ${e.lastName}`.trim(),
+    }));
+
+    res.json({ ros, statuses, companies, vehicles, employees, syncedAt: new Date().toISOString() });
   } catch (err) {
     console.error('[ShopFloor poll]', err.message);
     res.status(500).json({ error: err.message });
