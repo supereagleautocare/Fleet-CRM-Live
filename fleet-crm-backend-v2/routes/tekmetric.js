@@ -216,4 +216,55 @@ router.get('/fleet-data', async (req, res) => {
   }
 });
 
+// ── Lightweight shop floor poll — active ROs only ─────────────────────────────
+router.get('/shop-floor', async (req, res) => {
+  try {
+    const { token, shopId, env } = await getTekConfig();
+    if (!token || !shopId) return res.status(400).json({ error: 'Tekmetric not configured.' });
+
+    const base = baseUrl(env);
+
+    // Single paginated call — only active statuses, skip Posted(5) and Deleted(7)
+    let allRos = [], page = 0, totalPages = 1;
+    while (page < totalPages) {
+      const data = await tekFetchWithRetry(
+        `${base}/repair-orders?shop=${shopId}&repairOrderStatusId=1,2,3,4,6&size=100&page=${page}`,
+        token
+      );
+      allRos = [...allRos, ...(data.content || [])];
+      totalPages = data.totalPages || 1;
+      page++;
+      if (page < totalPages) await sleep(200);
+    }
+
+    const ros = allRos.map(ro => ({
+      id:    ro.id,
+      rn:    ro.repairOrderNumber,
+      cid:   ro.customerId,
+      vid:   ro.vehicleId,
+      sid:   ro.repairOrderStatus?.id,
+      techId: ro.technicianId,
+      saId:  ro.serviceWriterId,
+      labor: ro.laborSales  || 0,
+      parts: ro.partsSales  || 0,
+      total: ro.totalSales  || 0,
+      paid:  ro.amountPaid  || 0,
+      created: ro.createdDate,
+      updated: ro.updatedDate,
+      lastContact:   null,
+      contactMethod: null,
+      jobs: (ro.jobs || []).map(j => ({
+        name:  j.name,
+        auth:  j.authorized,
+        labor: j.laborTotal || 0,
+        parts: j.partsTotal || 0,
+      })),
+    }));
+
+    res.json({ ros, syncedAt: new Date().toISOString() });
+  } catch (err) {
+    console.error('[ShopFloor poll]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
 module.exports = router;
