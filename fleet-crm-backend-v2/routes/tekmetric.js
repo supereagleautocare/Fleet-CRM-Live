@@ -10,6 +10,17 @@ const router = express.Router();
 router.use(requireAuth);
 
 // ── Config helpers ────────────────────────────────────────────────────────────
+// ── Server-side delta sync cache ──────────────────────────────────────────────
+let tekCache = {
+  customers:     [],
+  vehicles:      [],
+  ros:           [],
+  employees:     [],
+  statuses:      [],
+  lastFullSync:  null,
+  lastDeltaSync: null,
+};
+
 async function getTekConfig() {
   const { rows } = await pool.query(
     "SELECT key, value FROM config_settings WHERE key IN ('tekmetric_token','tekmetric_shop_id','tekmetric_env')"
@@ -34,11 +45,17 @@ function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 class RateLimiter {
   constructor(maxPerMinute) {
     this.max = maxPerMinute;
-    this.log = []; // timestamps of recent requests
+    this.log = [];
+    this.totalSinceStart = 0;
   }
   async throttle() {
     const now = Date.now();
     this.log = this.log.filter(t => now - t < 60000);
+    this.totalSinceStart++;
+    const pct = Math.round((this.log.length / this.max) * 100);
+    if (pct >= 80) {
+      console.warn(`[RateLimit] ⚠ ${this.log.length}/${this.max} req/min used (${pct}%)`);
+    }
     if (this.log.length >= this.max) {
       const wait = 60000 - (now - this.log[0]) + 50;
       console.warn(`[RateLimit] Cap reached — waiting ${wait}ms`);
@@ -46,6 +63,16 @@ class RateLimiter {
       return this.throttle();
     }
     this.log.push(Date.now());
+  }
+  usage() {
+    const now = Date.now();
+    this.log = this.log.filter(t => now - t < 60000);
+    return {
+      thisMinute: this.log.length,
+      max: this.max,
+      pct: Math.round((this.log.length / this.max) * 100),
+      total: this.totalSinceStart,
+    };
   }
 }
 const tekLimiter = new RateLimiter(500);
@@ -182,6 +209,7 @@ router.post('/connect', async (req, res) => {
 });
 
 // ── Main fleet-data endpoint ──────────────────────────────────────────────────
+// ── Main fleet-data endpoint ──────────────────────────────────────────────────
 router.get('/fleet-data', async (req, res) => {
   try {
     const { token, shopId, env } = await getTekConfig();
@@ -193,23 +221,41 @@ router.get('/fleet-data', async (req, res) => {
     }
 
     const base = baseUrl(env);
+    const forceFullSync = req.query.full === '1';
+    const cacheAge = tekCache.lastFullSync
+      ? (Date.now() - new Date(tekCache.lastFullSync).getTime()) / 3600000
+      : 999;
+    const doFullSync = forceFullSync || !tekCache.lastFullSync || cacheAge > 24;
+    const deltaFrom  = tekCache.lastDeltaSync || tekCache.lastFullSync;
 
-    console.log('[Tekmetric] Fetching shop info...');
-    const shopData = await tekFetchWithRetry(`${base}/shops/${shopId}`, token);
+    console.log(`[Tekmetric] Starting ${doFullSync ? 'FULL' : 'DELTA'} sync...`);
+    if (!doFullSync) console.log(`[Tekmetric] Fetching changes since ${deltaFrom}`);
 
-    console.log('[Tekmetric] Fetching business customers...');
-    let customers = [], page = 0, totalPages = 1;
+    // ── Customers (businesses only) ───────────────────────────────────────────
+    let fetchedCustomers = [], page = 0, totalPages = 1;
     while (page < totalPages) {
-      const data = await tekFetchWithRetry(
-        `${base}/customers?shop=${shopId}&customerTypeId=2&size=100&page=${page}`,
-        token
-      );
-      customers = [...customers, ...(data.content || [])];
+      const url = doFullSync
+        ? `${base}/customers?shop=${shopId}&customerTypeId=2&size=100&page=${page}`
+        : `${base}/customers?shop=${shopId}&customerTypeId=2&updatedDateStart=${encodeURIComponent(deltaFrom)}&size=100&page=${page}`;
+      const data = await tekFetchWithRetry(url, token, 1, env);
+      fetchedCustomers = [...fetchedCustomers, ...(data.content || [])];
       totalPages = data.totalPages || 1;
       page++;
       if (page < totalPages) await sleep(100);
     }
-    console.log(`[Tekmetric] Found ${customers.length} business customers.`);
+    console.log(`[Tekmetric] Fetched ${fetchedCustomers.length} ${doFullSync ? 'total' : 'updated'} customers`);
+
+    if (doFullSync) {
+      tekCache.customers = fetchedCustomers;
+    } else {
+      const updatedIds = new Set(fetchedCustomers.map(c => c.id));
+      tekCache.customers = [
+        ...tekCache.customers.filter(c => !updatedIds.has(c.id)),
+        ...fetchedCustomers,
+      ];
+    }
+    const customers = tekCache.customers;
+
     async function batchFetch(items, fn, batchSize = 8) {
       const results = [], failures = [];
       for (let i = 0; i < items.length; i += batchSize) {
@@ -224,28 +270,67 @@ router.get('/fleet-data', async (req, res) => {
       return { results, failures };
     }
 
-    console.log('[Tekmetric] Fetching repair orders...');
-    const roFetch = await batchFetch(customers, async c => {
-      const d = await tekFetchWithRetry(`${base}/repair-orders?shop=${shopId}&customerId=${c.id}&size=100`, token);
-      return d.content || [];
-    });
-    const allRos = roFetch.results;
-    const roFailures = roFetch.failures.length;
-    if (roFailures) console.warn(`[Tekmetric] ${roFailures} RO fetch failures`);
+    // ── Repair Orders ─────────────────────────────────────────────────────────
+    const customersToFetchRos = doFullSync ? customers : fetchedCustomers;
+    let roFailures = 0;
+    if (customersToFetchRos.length > 0) {
+      console.log(`[Tekmetric] Fetching ROs for ${customersToFetchRos.length} customers...`);
+      const roFetch = await batchFetch(customersToFetchRos, async c => {
+        const d = await tekFetchWithRetry(`${base}/repair-orders?shop=${shopId}&customerId=${c.id}&size=100`, token, 1, env);
+        return d.content || [];
+      });
+      roFailures = roFetch.failures.length;
+      if (doFullSync) {
+        tekCache.ros = roFetch.results;
+      } else {
+        const changedCids = new Set(customersToFetchRos.map(c => c.id));
+        tekCache.ros = [
+          ...tekCache.ros.filter(r => !changedCids.has(r.customerId)),
+          ...roFetch.results,
+        ];
+      }
+    } else {
+      console.log('[Tekmetric] No customer changes — skipping RO fetch');
+    }
+    const allRos = tekCache.ros;
 
-    console.log('[Tekmetric] Fetching vehicles...');
-    const vFetch = await batchFetch(customers, async c => {
-      const d = await tekFetchWithRetry(`${base}/vehicles?shop=${shopId}&customerId=${c.id}&size=100`, token);
-      return d.content || [];
-    });
-    const allVehicles = vFetch.results;
-    const vehicleFailures = vFetch.failures.length;
-    if (vehicleFailures) console.warn(`[Tekmetric] ${vehicleFailures} vehicle fetch failures`);
+    // ── Vehicles ──────────────────────────────────────────────────────────────
+    const customersToFetchVehicles = doFullSync ? customers : fetchedCustomers;
+    let vehicleFailures = 0;
+    if (customersToFetchVehicles.length > 0) {
+      console.log(`[Tekmetric] Fetching vehicles for ${customersToFetchVehicles.length} customers...`);
+      const vFetch = await batchFetch(customersToFetchVehicles, async c => {
+        const d = await tekFetchWithRetry(`${base}/vehicles?shop=${shopId}&customerId=${c.id}&size=100`, token, 1, env);
+        return d.content || [];
+      });
+      vehicleFailures = vFetch.failures.length;
+      if (doFullSync) {
+        tekCache.vehicles = vFetch.results;
+      } else {
+        const changedCids = new Set(customersToFetchVehicles.map(c => c.id));
+        tekCache.vehicles = [
+          ...tekCache.vehicles.filter(v => !changedCids.has(v.customerId)),
+          ...vFetch.results,
+        ];
+      }
+    }
+    const allVehicles = tekCache.vehicles;
 
+    // ── Employees (always fetch — tiny endpoint) ──────────────────────────────
     console.log('[Tekmetric] Fetching employees...');
-    const empData = await tekFetchWithRetry(`${base}/employees?shop=${shopId}&size=100`, token);
-    const employees = empData.content || [];
+    const empData = await tekFetchWithRetry(`${base}/employees?shop=${shopId}&size=100`, token, 1, env);
+    tekCache.employees = empData.content || [];
 
+    // ── Update timestamps ─────────────────────────────────────────────────────
+    const syncedAt = new Date().toISOString();
+    if (doFullSync) {
+      tekCache.lastFullSync  = syncedAt;
+      tekCache.lastDeltaSync = null;
+    } else {
+      tekCache.lastDeltaSync = syncedAt;
+    }
+
+    // ── Normalize and return ──────────────────────────────────────────────────
     const statusMap = {};
     allRos.forEach(ro => {
       if (ro.repairOrderStatus) {
@@ -284,20 +369,27 @@ router.get('/fleet-data', async (req, res) => {
       jobs: (ro.jobs||[]).map(j => ({ name:j.name, auth:j.authorized, labor:j.laborTotal||0, parts:j.partsTotal||0 })),
     }));
 
-    const normalizedEmployees = employees.map(e => ({
+    const normalizedEmployees = tekCache.employees.map(e => ({
       id: e.id, name: `${e.firstName} ${e.lastName}`.trim(), role: e.employeeRole?.name || 'Employee',
     }));
 
-    console.log(`[Tekmetric] Sync complete. ${customers.length} businesses, ${allRos.length} ROs, ${allVehicles.length} vehicles.`);
+    console.log(`[Tekmetric] ${doFullSync ? 'Full' : 'Delta'} sync complete. ${customers.length} businesses, ${allRos.length} ROs, ${allVehicles.length} vehicles.`);
 
     res.json({
       statuses, companies: normalizedCompanies, vehicles: normalizedVehicles,
-      ros: normalizedRos, employees: normalizedEmployees, syncedAt: new Date().toISOString(),
+      ros: normalizedRos, employees: normalizedEmployees, syncedAt,
       syncedStats: {
-        customers: customers.length, ros: allRos.length, vehicles: allVehicles.length,
-        employees: employees.length, statuses: statuses.length,
+        syncType:       doFullSync ? 'full' : 'delta',
+        changedRecords: fetchedCustomers.length,
+        customers:      customers.length,
+        ros:            allRos.length,
+        vehicles:       allVehicles.length,
+        employees:      tekCache.employees.length,
+        statuses:       statuses.length,
         roFailures, vehicleFailures,
-        apiCallsUsed: 1 + page + customers.length * 2 + 1,
+        rateLimiter:    tekLimiter.usage(),
+        lastFullSync:   tekCache.lastFullSync,
+        lastDeltaSync:  tekCache.lastDeltaSync,
       },
     });
   } catch (err) {
