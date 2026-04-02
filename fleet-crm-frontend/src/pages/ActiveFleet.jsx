@@ -751,29 +751,6 @@ function FleetSettings({ oilInterval, setOilInterval, statuses }) {
           </div>
         </div>
         <div className="table-card" style={{padding:18}}>
-          <div style={{fontWeight:700,fontSize:13,color:'var(--gray-800)',marginBottom:4}}>🕐 Auto-Sync Hours</div>
-          <div style={{fontSize:12,color:'var(--gray-400)',marginBottom:14}}>Auto-sync only runs on weekdays between these hours. Outside these hours it pauses automatically.</div>
-          <div style={{display:'flex',gap:12,alignItems:'center',flexWrap:'wrap',marginBottom:16}}>
-            <div>
-              <div style={{fontSize:11,fontWeight:700,color:'var(--gray-500)',marginBottom:4}}>Opens (24h)</div>
-              <input type="number" min="0" max="23" value={bizStart} onChange={e=>setBizStart(parseInt(e.target.value)||0)}
-                style={{width:64,padding:'6px 8px',border:'1.5px solid var(--gray-200)',borderRadius:6,fontSize:14,fontWeight:700,textAlign:'center'}}/>
-            </div>
-            <div style={{fontSize:20,color:'var(--gray-300)',marginTop:18}}>→</div>
-            <div>
-              <div style={{fontSize:11,fontWeight:700,color:'var(--gray-500)',marginBottom:4}}>Closes (24h)</div>
-              <input type="number" min="0" max="23" value={bizEnd} onChange={e=>setBizEnd(parseInt(e.target.value)||0)}
-                style={{width:64,padding:'6px 8px',border:'1.5px solid var(--gray-200)',borderRadius:6,fontSize:14,fontWeight:700,textAlign:'center'}}/>
-            </div>
-            <div style={{fontSize:12,color:'var(--gray-500)',marginTop:18}}>
-              (7 = 7:00am, 19 = 7:00pm)
-            </div>
-          </div>
-          <div style={{marginBottom:4,padding:'10px 14px',background:'#f0fdf4',border:'1px solid #bbf7d0',borderRadius:8,fontSize:12,color:'#15803d'}}>
-            🔧 <strong>Shop Floor</strong> polls Tekmetric directly every 60 seconds for live RO updates — independent of the auto-sync above.
-          </div>
-        </div>
-        <div className="table-card" style={{padding:18}}>
           <div style={{fontWeight:700,fontSize:13,color:'var(--gray-800)',marginBottom:4}}>🛢 Oil Change Interval</div>
           <div style={{fontSize:12,color:'var(--gray-400)',marginBottom:14}}>Vehicles past this threshold appear in your Oil Change call list.</div>
           <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
