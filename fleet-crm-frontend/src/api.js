@@ -53,6 +53,7 @@ export const api = {
   tekmetricShopFloor:    ()     => req('GET',  '/tekmetric/shop-floor'),
   tekmetricSettings:     ()     => req('GET',  '/tekmetric/settings'),
   saveTekmetricSettings: (data) => req('POST', '/tekmetric/settings', data),
+  connectTekmetric:      (data) => req('POST', '/tekmetric/connect',  data),
 
   // ── Follow-ups ──────────────────────────────────────
   followups:         ()             => req('GET',  '/followups'),
