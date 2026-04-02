@@ -733,7 +733,7 @@ function FleetSettings({ oilInterval, setOilInterval, statuses }) {
 
           <div className="form-group">
             <label className="form-label">API Bearer Token</label>
-            <input type="password" className="form-input" value={token} onChange={e=>setToken(e.target.value)} placeholder={tokenPlaceholder || 'Paste your Tekmetric token here'}>
+            <input type="password" className="form-input" value={token} onChange={e=>setToken(e.target.value)} placeholder={tokenPlaceholder || 'Paste your Tekmetric token here'} />
           </div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
             <div className="form-group">
@@ -902,6 +902,7 @@ function FleetSettings({ oilInterval, setOilInterval, statuses }) {
 // BDAY_END   = hour the shop closes (19 = 7:00pm)
 const POLL_MINUTES = 5;
 const POLL_MS      = POLL_MINUTES * 60 * 1000;
+}
 
 function isBusinessHours(start = 7, end = 19) {
   const now  = new Date();
