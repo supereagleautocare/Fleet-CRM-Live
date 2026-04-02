@@ -1035,7 +1035,7 @@ export default function ActiveFleet() {
   }, [doSync]);
 
   // ── Derived ────────────────────────────────────────────────────────────────
-  const active = ros.filter(r => r.sid !== 5 && r.sid !== 7);
+  const activeRos = ros.filter(r => r.sid !== 5 && r.sid !== 7);
   const idleROs   = activeRos.filter(r => hrsIn(r.updated) > 24);
 
   function fmtCountdown(secs) {
