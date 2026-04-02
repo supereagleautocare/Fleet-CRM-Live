@@ -97,6 +97,52 @@ router.get('/settings', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ── Exchange Client ID + Secret for bearer token ──────────────────────────────
+router.post('/connect', async (req, res) => {
+  try {
+    const { clientId, clientSecret, env } = req.body;
+    if (!clientId || !clientSecret) {
+      return res.status(400).json({ error: 'Client ID and Client Secret are required.' });
+    }
+
+    const baseUrl = env === 'sandbox'
+      ? 'https://sandbox.tekmetric.com'
+      : 'https://shop.tekmetric.com';
+
+    const credentials = Buffer.from(`${clientId.trim()}:${clientSecret.trim()}`).toString('base64');
+
+    const tokenRes = await fetch(`${baseUrl}/api/v1/oauth/token`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${credentials}`,
+        'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+      },
+      body: 'grant_type=client_credentials',
+    });
+
+    if (!tokenRes.ok) {
+      return res.status(401).json({ error: 'Tekmetric rejected your credentials. Double-check your Client ID and Client Secret.' });
+    }
+
+    const tokenData = await tokenRes.json();
+    const accessToken = tokenData.access_token;
+
+    // scope comes back as space-separated shop IDs e.g. "1 2"
+    const shopIds = (tokenData.scope || '').trim().split(' ').filter(Boolean);
+    const shopId  = shopIds[0] || '';
+
+    // Store the token and shop ID — the client secret is NEVER stored
+    await pool.query(`INSERT INTO config_settings (key,value,label) VALUES ($1,$2,$3) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value`, ['tekmetric_token',   accessToken,          'Tekmetric API Token']);
+    await pool.query(`INSERT INTO config_settings (key,value,label) VALUES ($1,$2,$3) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value`, ['tekmetric_shop_id', shopId,               'Tekmetric Shop ID']);
+    await pool.query(`INSERT INTO config_settings (key,value,label) VALUES ($1,$2,$3) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value`, ['tekmetric_env',     env || 'production',  'Tekmetric Environment']);
+
+    res.json({ ok: true, shopId, shopIds, message: `Connected! Shop ID: ${shopId}` });
+  } catch (err) {
+    console.error('[Tekmetric /connect]', err.message);
+    res.status(500).json({ error: 'Connection failed: ' + err.message });
+  }
+});
+
 // ── Main fleet-data endpoint ──────────────────────────────────────────────────
 router.get('/fleet-data', async (req, res) => {
   try {
