@@ -450,7 +450,7 @@ function VehiclesTab({ ros, companies, vehicles, carfax, oilInterval }) {
                           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:8,marginBottom:8}}>
                             <div style={{display:'flex',alignItems:'center',gap:10}}>
                               <span style={{fontFamily:'var(--font-mono)',fontSize:13,fontWeight:700,color:'var(--navy-800)'}}>RO #{ro.rn}</span>
-                              <StatusBadge sid={ro.sid} statuses={DEMO_STATUSES}/>
+                              <StatusBadge sid={ro.sid} statuses={statuses}/>
                               {dec.length>0&&<span className="badge badge-overdue" style={{fontSize:9.5}}>{dec.length} declined</span>}
                               {ro.jobs.some(j=>j.auth&&isOil(j.name))&&<span className="badge" style={{fontSize:9.5,background:'#f0fdf4',color:'#15803d'}}>🛢 Oil Change</span>}
                             </div>
@@ -890,8 +890,6 @@ export default function ActiveFleet() {
   // Load saved settings on mount so biz hours + floor poll are respected
   useEffect(() => {
     api.tekmetricSettings().then(s => {
-      if (s.connected) setTokenPlaceholder('••••••••••••••••'); // show it's set
-      if (s.shopId)   setShopId(s.shopId);
       if (s.bizHoursStart != null) setBizHoursStart(s.bizHoursStart);
       if (s.bizHoursEnd   != null) setBizHoursEnd(s.bizHoursEnd);
       if (s.floorPollSeconds != null) setFloorPollSecs(s.floorPollSeconds);
