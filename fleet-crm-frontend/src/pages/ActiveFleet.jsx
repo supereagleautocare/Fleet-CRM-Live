@@ -779,7 +779,7 @@ function FleetSettings({ oilInterval, setOilInterval, statuses }) {
                 <div style={{fontWeight:700,fontSize:13,color:'#15803d'}}>✅ Connected to Tekmetric</div>
                 <div style={{fontSize:11,color:'#166534',marginTop:2}}>Shop ID: <strong>{connectedShopId}</strong> · {env === 'sandbox' ? 'Sandbox (test)' : 'Production (live)'}</div>
               </div>
-              <button type="button" className="btn btn-ghost btn-sm" style={{color:'#dc2626',border:'1px solid #fca5a5',flexShrink:0}} onClick={()=>{setConnected(false);setConnectedShopId('');}}>
+              <button type="button" className="btn btn-ghost btn-sm" style={{color:'#dc2626',border:'1px solid #fca5a5',flexShrink:0}} onClick={() => api.disconnectTekmetric().then(() => { setConnected(false); setConnectedShopId(''); }).catch(e => showToast(e.message, 'error'))}>
                 Disconnect
               </button>
             </div>
