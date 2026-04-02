@@ -54,6 +54,7 @@ export const api = {
   tekmetricSettings:     ()     => req('GET',  '/tekmetric/settings'),
   saveTekmetricSettings: (data) => req('POST', '/tekmetric/settings', data),
   connectTekmetric:      (data) => req('POST', '/tekmetric/connect',  data),
+  disconnectTekmetric:   ()     => req('POST', '/tekmetric/disconnect'),
 
   // ── Follow-ups ──────────────────────────────────────
   followups:         ()             => req('GET',  '/followups'),
