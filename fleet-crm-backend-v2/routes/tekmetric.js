@@ -417,6 +417,55 @@ router.get('/shop-floor', async (req, res) => {
     }));
 
     res.json({ ros, statuses, companies, vehicles, employees, syncedAt: new Date().toISOString() });
+  // ── Fetch supporting data as paginated lists (not per-customer) ───────────
+    // Customers — business type only, paginated
+    let allCustomers = [], cPage = 0, cPages = 1;
+    while (cPage < cPages) {
+      const d = await tekFetchWithRetry(
+        `${base}/customers?shop=${shopId}&customerTypeId=2&size=100&page=${cPage}`, token
+      );
+      allCustomers = [...allCustomers, ...(d.content || [])];
+      cPages = d.totalPages || 1;
+      cPage++;
+    }
+
+    // Vehicles — fetch shop-wide paginated (no per-customer loop needed)
+    let allVehicles = [], vPage = 0, vPages = 1;
+    while (vPage < vPages) {
+      const d = await tekFetchWithRetry(
+        `${base}/vehicles?shop=${shopId}&size=100&page=${vPage}`, token
+      ).catch(() => ({ content: [], totalPages: 1 }));
+      allVehicles = [...allVehicles, ...(d.content || [])];
+      vPages = d.totalPages || 1;
+      vPage++;
+    }
+
+    // Employees — single call
+    const empData = await tekFetchWithRetry(
+      `${base}/employees?shop=${shopId}&size=100`, token
+    ).catch(() => ({ content: [] }));
+
+    const companies = allCustomers.map(c => ({
+      id:      c.id,
+      name:    c.firstName && c.lastName
+                 ? `${c.firstName} ${c.lastName}`
+                 : c.firstName || c.lastName || `Customer ${c.id}`,
+      phone:   c.phone?.[0]?.number || null,
+      email:   Array.isArray(c.email) ? c.email[0] : c.email || null,
+    }));
+
+    const vehicles = allVehicles.map(v => ({
+      id: v.id, cid: v.customerId,
+      year: v.year, make: v.make, model: v.model,
+      plate: v.licensePlate, vin: v.vin, color: v.color,
+    }));
+
+    const employees = (empData.content || []).map(e => ({
+      id: e.id, name: `${e.firstName} ${e.lastName}`.trim(),
+    }));
+
+    console.log(`[ShopFloor] ${ros.length} ROs · ${companies.length} companies · ${vehicles.length} vehicles`);
+    res.json({ ros, statuses, companies, vehicles, employees, syncedAt: new Date().toISOString() });
   } catch (err) {
     console.error('[ShopFloor poll]', err.message);
     res.status(500).json({ error: err.message });
