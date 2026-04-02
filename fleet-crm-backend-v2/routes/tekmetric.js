@@ -441,7 +441,7 @@ router.get('/shop-floor', async (req, res) => {
     }
 
     // Employees — single call
-    const empData = await tekFetchWithRetry(
+    const empDataFloor = await tekFetchWithRetry(
       `${base}/employees?shop=${shopId}&size=100`, token
     ).catch(() => ({ content: [] }));
 
@@ -460,7 +460,7 @@ router.get('/shop-floor', async (req, res) => {
       plate: v.licensePlate, vin: v.vin, color: v.color,
     }));
 
-    const employees = (empData.content || []).map(e => ({
+    const employees = (empDataFloor.content || []).map(e => ({
       id: e.id, name: `${e.firstName} ${e.lastName}`.trim(),
     }));
 
