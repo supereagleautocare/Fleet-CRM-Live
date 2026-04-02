@@ -814,6 +814,20 @@ function FleetSettings({ oilInterval, setOilInterval, statuses }) {
           <div style={{padding:'10px 14px',background:'var(--gray-50)',border:'1px solid var(--gray-200)',borderRadius:8,fontSize:12,color:'var(--gray-600)'}}>
             🔄 <strong>Refresh behavior:</strong> Shop Floor updates every 60 seconds automatically. Vehicles, Sales, and Employees sync when you click <strong>Sync Now</strong> in the header.
           </div>
+
+          {/* Connect button lives here — always visible next to the credentials */}
+          <div style={{marginTop:14,paddingTop:14,borderTop:'1px solid var(--gray-100)',display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
+            {!connected ? (
+              <button onClick={connect} disabled={connecting||!clientId.trim()||!clientSecret.trim()} className="btn btn-primary" style={{fontSize:14,padding:'10px 20px'}}>
+                {connecting ? '⏳ Connecting…' : '🔌 Connect to Tekmetric'}
+              </button>
+            ) : (
+              <button type="button" className="btn btn-ghost btn-sm" style={{color:'#dc2626',border:'1px solid #fca5a5',flexShrink:0}} onClick={() => api.disconnectTekmetric().then(() => { setConnected(false); setConnectedShopId(''); }).catch(e => showToast(e.message, 'error'))}>
+                Disconnect
+              </button>
+            )}
+            {!clientId.trim() && !connected && <span style={{fontSize:12,color:'var(--gray-400)'}}>Enter your Client ID and Secret above first</span>}
+          </div>
         </div>
         <div className="table-card" style={{padding:18}}>
           <div style={{fontWeight:700,fontSize:13,color:'var(--gray-800)',marginBottom:4}}>🛢 Oil Change Interval</div>
@@ -908,11 +922,6 @@ function FleetSettings({ oilInterval, setOilInterval, statuses }) {
           ))}
         </div>
         <div style={{marginTop:14,paddingTop:14,borderTop:'1px solid var(--gray-100)',display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
-          {!connected && (
-            <button onClick={connect} disabled={connecting||!clientId.trim()||!clientSecret.trim()} className="btn btn-primary">
-              {connecting ? '⏳ Connecting…' : '🔌 Connect to Tekmetric'}
-            </button>
-          )}
           <button onClick={save} className="btn btn-navy">Save Settings</button>
         </div>
       </div>
