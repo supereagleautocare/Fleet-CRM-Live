@@ -879,7 +879,6 @@ function FleetSettings({ oilInterval, setOilInterval, statuses, onSettingsChange
   const [bizEnd,          setBizEnd]          = useState(19);
   const [floorPollSecs,   setFloorPollSecs]   = useState(30);
   const [apiRateLimit,    setApiRateLimit]    = useState(300);
-  const [manualShopId,    setManualShopId]    = useState('');
   const [settingsLoaded,  setSettingsLoaded]  = useState(false);
 
   useEffect(() => {
@@ -893,10 +892,7 @@ function FleetSettings({ oilInterval, setOilInterval, statuses, onSettingsChange
       if (s.bizHoursEnd     != null) setBizEnd(s.bizHoursEnd);
       if (s.floorPollSeconds != null) setFloorPollSecs(s.floorPollSeconds);
       if (s.apiRateLimit    != null) setApiRateLimit(s.apiRateLimit);
-      // Load shopId regardless — user can edit it manually if blank
-      const sid = s.shopId || '';
-      setConnectedShopId(sid);
-      setManualShopId(sid);
+      setConnectedShopId(s.shopId || '');
       setSettingsLoaded(true);
     }).catch(() => setSettingsLoaded(true));
   }, []);
@@ -936,22 +932,11 @@ function FleetSettings({ oilInterval, setOilInterval, statuses, onSettingsChange
       setConnected(true);
       setClientId('');
       setClientSecret('');
-      // If Tekmetric returned a shopId use it; otherwise keep whatever is already saved
       if (result.shopId) {
         setConnectedShopId(result.shopId);
-        setManualShopId(result.shopId);
         showToast(`✅ Connected! Shop ID: ${result.shopId}`);
       } else {
-        // Re-read from DB so we don't lose a previously saved Shop ID
-        const s = await api.tekmetricSettings().catch(() => ({}));
-        const existing = s.shopId || '';
-        setConnectedShopId(existing);
-        setManualShopId(existing);
-        if (existing) {
-          showToast(`✅ Connected! Using saved Shop ID: ${existing}`);
-        } else {
-          showToast('Connected — enter your Shop ID below and click Save.', 'error');
-        }
+        showToast('✅ Connected! Shop ID will be detected automatically.', 'error');
       }
     } catch(e) { showToast(e.message, 'error'); }
     finally { setConnecting(false); }
@@ -962,7 +947,6 @@ function FleetSettings({ oilInterval, setOilInterval, statuses, onSettingsChange
       await Promise.all([
         api.saveTekmetricSettings({
           env, oilInterval,
-          shopId: manualShopId.trim() || undefined,
           carfaxKey: cfxKey, carfaxEnabled: cfxEnabled,
           bizHoursStart: bizStart, bizHoursEnd: bizEnd,
           floorPollSeconds: floorPollSecs,
@@ -991,7 +975,7 @@ function FleetSettings({ oilInterval, setOilInterval, statuses, onSettingsChange
                 </div>
               </div>
               <button type="button" className="btn btn-ghost btn-sm" style={{color:'#dc2626',border:'1px solid #fca5a5',flexShrink:0}}
-                onClick={() => api.disconnectTekmetric().then(() => { setConnected(false); setConnectedShopId(''); setManualShopId(''); }).catch(e => showToast(e.message, 'error'))}>
+                onClick={() => api.disconnectTekmetric().then(() => { setConnected(false); setConnectedShopId(''); }).catch(e => showToast(e.message, 'error'))}>
                 Disconnect
               </button>
             </div>
@@ -1016,19 +1000,12 @@ function FleetSettings({ oilInterval, setOilInterval, statuses, onSettingsChange
               <input type="password" className="form-input" value={clientSecret} onChange={e=>setClientSecret(e.target.value)} placeholder="Your Tekmetric Client Secret" autoComplete="new-password"/>
             </div>
           </div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-            <div className="form-group">
-              <label className="form-label">Environment</label>
-              <select className="form-select" value={env} onChange={e=>setEnv(e.target.value)}>
-                <option value="sandbox">Sandbox — test environment, safe to experiment</option>
-                <option value="production">Production — your actual live shop</option>
-              </select>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Shop ID <span style={{fontWeight:400,color:'var(--gray-400)'}}>(auto-filled on connect, or enter manually)</span></label>
-              <input type="text" className="form-input" value={manualShopId} onChange={e=>{ setManualShopId(e.target.value); setConnectedShopId(e.target.value); }}
-                placeholder="e.g. 12345"/>
-            </div>
+          <div className="form-group">
+            <label className="form-label">Environment</label>
+            <select className="form-select" value={env} onChange={e=>setEnv(e.target.value)}>
+              <option value="sandbox">Sandbox — test environment, safe to experiment</option>
+              <option value="production">Production — your actual live shop</option>
+            </select>
           </div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
             <div className="form-group" style={{marginBottom:0}}>

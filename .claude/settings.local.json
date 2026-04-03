@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C \"c:/Users/Super Eagle/Desktop/fleet-crm\" add -A)",
+      "Bash(git -C 'c:/Users/Super Eagle/Desktop/fleet-crm' commit -m 'fix: remove manual Shop ID field, auto-discover only:*)",
+      "Bash(git -C \"c:/Users/Super Eagle/Desktop/fleet-crm\" push)"
+    ]
+  }
+}
