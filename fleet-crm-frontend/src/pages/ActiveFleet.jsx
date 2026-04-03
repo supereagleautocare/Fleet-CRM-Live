@@ -1028,7 +1028,7 @@ function FleetSettings({ oilInterval, setOilInterval, statuses, onSettingsChange
              </div>
            </div>
 
-           <div style={{display
+           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
             <div className="form-group" style={{marginBottom:0}}>
               <label className="form-label">Shop Floor Refresh (seconds)</label>
               <input type="number" className="form-input" value={floorPollSecs} min={10} max={300}
