@@ -721,14 +721,32 @@ router.post('/connect', async (req, res) => {
     });
 
     const accessToken = tokenData.access_token;
-    const shopIds     = (tokenData.scope || '').trim().split(' ').filter(Boolean);
-    const shopId      = shopIds[0] || '';
+
+    // Try scope first, then auto-discover via /shops endpoint
+    let shopId = (tokenData.scope || '').trim().split(' ').filter(Boolean)[0] || '';
+
+    if (!shopId) {
+      try {
+        const base2 = env === 'sandbox' ? 'https://sandbox.tekmetric.com/api/v1' : 'https://shop.tekmetric.com/api/v1';
+        const shopsRes = await fetch(`${base2}/shops?size=10&page=0`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (shopsRes.ok) {
+          const shopsData = await shopsRes.json();
+          const first = (shopsData.content || shopsData)[0];
+          if (first?.id) shopId = String(first.id);
+        }
+        console.log(`[Tekmetric /connect] Auto-discovered shop ID from /shops: ${shopId || 'none'}`);
+      } catch (e) {
+        console.warn('[Tekmetric /connect] Could not auto-discover shop ID:', e.message);
+      }
+    }
 
     await pool.query(
       `INSERT INTO config_settings (key,value,label) VALUES ($1,$2,$3) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value`,
       ['tekmetric_token', accessToken, 'Tekmetric API Token']
     );
-    // Only overwrite shop_id if Tekmetric returned one — never wipe a manually-saved ID with blank
+    // Only overwrite shop_id if we found one — never wipe a manually-saved ID with blank
     if (shopId) {
       await pool.query(
         `INSERT INTO config_settings (key,value,label) VALUES ($1,$2,$3) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value`,
