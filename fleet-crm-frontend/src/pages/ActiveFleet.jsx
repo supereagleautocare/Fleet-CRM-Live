@@ -936,7 +936,7 @@ function FleetSettings({ oilInterval, setOilInterval, statuses, onSettingsChange
         setConnectedShopId(result.shopId);
         showToast(`✅ Connected! Shop ID: ${result.shopId}`);
       } else {
-        showToast('✅ Connected! Shop ID will be detected automatically.', 'error');
+        showToast('✅ Connected! Shop ID will be detected automatically.');
       }
     } catch(e) { showToast(e.message, 'error'); }
     finally { setConnecting(false); }
@@ -946,9 +946,13 @@ function FleetSettings({ oilInterval, setOilInterval, statuses, onSettingsChange
     try {
       await Promise.all([
         api.saveTekmetricSettings({
-          env, oilInterval,
-          carfaxKey: cfxKey, carfaxEnabled: cfxEnabled,
-          bizHoursStart: bizStart, bizHoursEnd: bizEnd,
+          env,
+          shopId: connectedShopId,
+          oilInterval,
+          carfaxKey: cfxKey,
+          carfaxEnabled: cfxEnabled,
+          bizHoursStart: bizStart,
+          bizHoursEnd: bizEnd,
           floorPollSeconds: floorPollSecs,
           apiRateLimit,
         }),
@@ -970,7 +974,9 @@ function FleetSettings({ oilInterval, setOilInterval, statuses, onSettingsChange
               <div>
                 <div style={{fontWeight:700,fontSize:13,color:'#15803d'}}>✅ Token saved</div>
                 <div style={{fontSize:11,color:'#166534',marginTop:2}}>
-                  {connectedShopId ? <>Shop ID: <strong>{connectedShopId}</strong></> : <span style={{color:'#dc2626',fontWeight:700}}>⚠ Shop ID missing — enter it below</span>}
+                  {connectedShopId
+                    ? <>Shop ID: <strong>{connectedShopId}</strong></>
+                    : <span style={{color:'#dc2626',fontWeight:700}}>⚠ Shop ID missing — enter it manually below, then click Save Settings</span>}
                   {' · '}{env === 'sandbox' ? 'Sandbox (test)' : 'Production (live)'}
                 </div>
               </div>
@@ -1007,7 +1013,22 @@ function FleetSettings({ oilInterval, setOilInterval, statuses, onSettingsChange
               <option value="production">Production — your actual live shop</option>
             </select>
           </div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
+
+          <div className="form-group">
+             <label className="form-label">Shop ID</label>
+             <input
+               type="text"
+               className="form-input"
+               value={connectedShopId}
+               onChange={e=>setConnectedShopId(e.target.value)}
+               placeholder="Enter your Tekmetric Shop ID"
+             />
+             <div style={{fontSize:11,color:'var(--gray-400)',marginTop:4}}>
+               If auto-detect fails, enter your Tekmetric Shop ID manually and click Save Settings.
+             </div>
+           </div>
+
+           <div style={{display
             <div className="form-group" style={{marginBottom:0}}>
               <label className="form-label">Shop Floor Refresh (seconds)</label>
               <input type="number" className="form-input" value={floorPollSecs} min={10} max={300}
