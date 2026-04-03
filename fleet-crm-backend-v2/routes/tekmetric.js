@@ -728,17 +728,21 @@ router.post('/connect', async (req, res) => {
     if (!shopId) {
       try {
         const base2 = env === 'sandbox' ? 'https://sandbox.tekmetric.com/api/v1' : 'https://shop.tekmetric.com/api/v1';
-        const shopsRes = await fetch(`${base2}/shops?size=10&page=0`, {
+        // /shops returns a plain array — no pagination params
+        const shopsRes = await fetch(`${base2}/shops`, {
           headers: { Authorization: `Bearer ${accessToken}` },
         });
+        const shopsText = await shopsRes.text();
+        console.log(`[Tekmetric /connect] GET /shops → ${shopsRes.status}: ${shopsText.slice(0, 300)}`);
         if (shopsRes.ok) {
-          const shopsData = await shopsRes.json();
-          const first = (shopsData.content || shopsData)[0];
-          if (first?.id) shopId = String(first.id);
+          const shopsData = JSON.parse(shopsText);
+          // Response is a plain array e.g. [{ id: 760, name: "Super Eagle", ... }]
+          const shops = Array.isArray(shopsData) ? shopsData : (shopsData.content || []);
+          if (shops[0]?.id) shopId = String(shops[0].id);
         }
-        console.log(`[Tekmetric /connect] Auto-discovered shop ID from /shops: ${shopId || 'none'}`);
+        console.log(`[Tekmetric /connect] Discovered shop ID: ${shopId || 'none'}`);
       } catch (e) {
-        console.warn('[Tekmetric /connect] Could not auto-discover shop ID:', e.message);
+        console.warn('[Tekmetric /connect] /shops error:', e.message);
       }
     }
 
