@@ -728,10 +728,13 @@ router.post('/connect', async (req, res) => {
       `INSERT INTO config_settings (key,value,label) VALUES ($1,$2,$3) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value`,
       ['tekmetric_token', accessToken, 'Tekmetric API Token']
     );
-    await pool.query(
-      `INSERT INTO config_settings (key,value,label) VALUES ($1,$2,$3) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value`,
-      ['tekmetric_shop_id', shopId, 'Tekmetric Shop ID']
-    );
+    // Only overwrite shop_id if Tekmetric returned one — never wipe a manually-saved ID with blank
+    if (shopId) {
+      await pool.query(
+        `INSERT INTO config_settings (key,value,label) VALUES ($1,$2,$3) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value`,
+        ['tekmetric_shop_id', shopId, 'Tekmetric Shop ID']
+      );
+    }
     await pool.query(
       `INSERT INTO config_settings (key,value,label) VALUES ($1,$2,$3) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value`,
       ['tekmetric_env', env || 'production', 'Tekmetric Environment']

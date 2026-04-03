@@ -934,15 +934,24 @@ function FleetSettings({ oilInterval, setOilInterval, statuses, onSettingsChange
     try {
       const result = await api.connectTekmetric({ clientId: clientId.trim(), clientSecret: clientSecret.trim(), env });
       setConnected(true);
-      const sid = result.shopId || '';
-      setConnectedShopId(sid);
-      setManualShopId(sid);
       setClientId('');
       setClientSecret('');
-      if (sid) {
-        showToast(`✅ Connected! Shop ID: ${sid}`);
+      // If Tekmetric returned a shopId use it; otherwise keep whatever is already saved
+      if (result.shopId) {
+        setConnectedShopId(result.shopId);
+        setManualShopId(result.shopId);
+        showToast(`✅ Connected! Shop ID: ${result.shopId}`);
       } else {
-        showToast('Connected — but Shop ID was empty. Enter it manually below and click Save.', 'error');
+        // Re-read from DB so we don't lose a previously saved Shop ID
+        const s = await api.tekmetricSettings().catch(() => ({}));
+        const existing = s.shopId || '';
+        setConnectedShopId(existing);
+        setManualShopId(existing);
+        if (existing) {
+          showToast(`✅ Connected! Using saved Shop ID: ${existing}`);
+        } else {
+          showToast('Connected — enter your Shop ID below and click Save.', 'error');
+        }
       }
     } catch(e) { showToast(e.message, 'error'); }
     finally { setConnecting(false); }
