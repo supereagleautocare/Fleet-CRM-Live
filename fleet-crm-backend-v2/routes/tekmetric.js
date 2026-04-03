@@ -1,10 +1,14 @@
 /**
- * TEKMETRIC PROXY ROUTE — PostgreSQL version
+ * TEKMETRIC PROXY ROUTE — Rewritten 2026-04-03
  *
- * Reviewed by Claude (claude-sonnet-4-6) on 2026-04-02.
- * Identified optimisations: parallel RO+vehicle fetch, shop-floor cache reuse,
- * getTekConfig() TTL cache, batched settings upsert, fetch() for /connect.
- * Awaiting approval before changes are applied.
+ * Architecture:
+ *  - Single global RateLimiter capped at 300 req/min (configurable via Settings UI)
+ *  - All data stored in Maps for O(1) lookup (customerMap, vehicleMap, roMap, employeeMap)
+ *  - Shop floor: 30s server-side response cache, status 1–4 only, status-change detection
+ *  - Fleet data: delta sync via updatedDateStart, 5-year initial limit
+ *  - AR: separate endpoint, 1-hour cache, status 6 only, balance + aging buckets
+ *  - Background scheduler: staggered offsets (+2 min fleet, +4 min AR, +6 min employees)
+ *  - Call logger: circular buffer (5000) + per-minute rollup Map (120 min)
  */
 
 const express = require('express');
@@ -14,29 +18,8 @@ const router = express.Router();
 
 router.use(requireAuth);
 
-// ── Config helpers ────────────────────────────────────────────────────────────
-// ── Server-side delta sync cache ──────────────────────────────────────────────
-let tekCache = {
-  customers:     [],
-  vehicles:      [],
-  ros:           [],
-  employees:     [],
-  statuses:      [],
-  lastFullSync:  null,
-  lastDeltaSync: null,
-};
-
-async function getTekConfig() {
-  const { rows } = await pool.query(
-    "SELECT key, value FROM config_settings WHERE key IN ('tekmetric_token','tekmetric_shop_id','tekmetric_env')"
-  );
-  const map = Object.fromEntries(rows.map(r => [r.key, r.value]));
-  return {
-    token:  map['tekmetric_token']  || null,
-    shopId: map['tekmetric_shop_id'] || null,
-    env:    map['tekmetric_env']    || 'production',
-  };
-}
+// ── Utilities ─────────────────────────────────────────────────────────────────
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 function baseUrl(env) {
   return env === 'sandbox'
@@ -44,96 +27,608 @@ function baseUrl(env) {
     : 'https://shop.tekmetric.com/api/v1';
 }
 
-function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+// ── Call Logger ───────────────────────────────────────────────────────────────
+const CALL_LOG_MAX = 5000;
+const callLog = [];                // { ts, url, status, ms }
+const callLogByMinute = new Map(); // "YYYY-MM-DDTHH:MM" → count
 
-// ── Global rate limiter — hard cap at 500 req/min across ALL Tekmetric calls ─
-class RateLimiter {
-  constructor(maxPerMinute) {
-    this.max = maxPerMinute;
-    this.log = [];
-    this.totalSinceStart = 0;
+function logCall(url, status, ms) {
+  const ts = Date.now();
+  if (callLog.length >= CALL_LOG_MAX) callLog.shift();
+  callLog.push({ ts, url, status, ms });
+
+  const key = new Date(ts).toISOString().slice(0, 16);
+  callLogByMinute.set(key, (callLogByMinute.get(key) || 0) + 1);
+
+  // Keep only last 120 minutes
+  const cutoff = new Date(ts - 120 * 60 * 1000).toISOString().slice(0, 16);
+  for (const k of callLogByMinute.keys()) {
+    if (k < cutoff) callLogByMinute.delete(k);
   }
+}
+
+// ── Global Rate Limiter ───────────────────────────────────────────────────────
+// Rolling 60-second window. Default 300/min; updated live from DB setting.
+let configuredRateLimit = 300;
+
+class RateLimiter {
+  constructor() { this.log = []; }
+
   async throttle() {
+    const max = configuredRateLimit;
     const now = Date.now();
     this.log = this.log.filter(t => now - t < 60000);
-    this.totalSinceStart++;
-    const pct = Math.round((this.log.length / this.max) * 100);
-    if (pct >= 80) {
-      console.warn(`[RateLimit] ⚠ ${this.log.length}/${this.max} req/min used (${pct}%)`);
-    }
-    if (this.log.length >= this.max) {
+    if (this.log.length >= max) {
       const wait = 60000 - (now - this.log[0]) + 50;
-      console.warn(`[RateLimit] Cap reached — waiting ${wait}ms`);
+      console.warn(`[RateLimit] Cap reached (${this.log.length}/${max}) — waiting ${wait}ms`);
       await sleep(wait);
       return this.throttle();
     }
+    const pct = Math.round((this.log.length / max) * 100);
+    if (pct >= 80) console.warn(`[RateLimit] ⚠ ${this.log.length}/${max} req/min (${pct}%)`);
     this.log.push(Date.now());
   }
+
   usage() {
     const now = Date.now();
     this.log = this.log.filter(t => now - t < 60000);
     return {
       thisMinute: this.log.length,
-      max: this.max,
-      pct: Math.round((this.log.length / this.max) * 100),
-      total: this.totalSinceStart,
+      max: configuredRateLimit,
+      pct: Math.round((this.log.length / configuredRateLimit) * 100),
     };
   }
 }
-const tekLimiter = new RateLimiter(500);
+const tekLimiter = new RateLimiter();
 
-async function tekFetchWithRetry(url, token, attempt = 1, env = 'production') {
-  tekLimiter.max = env === 'sandbox' ? 250 : 500;
+// ── tekFetch — rate-limited, logged, 429-retry ────────────────────────────────
+async function tekFetch(url, token, attempt = 1) {
   await tekLimiter.throttle();
+  const t0  = Date.now();
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  const ms  = Date.now() - t0;
+  logCall(url, res.status, ms);
+
   if (res.status === 429) {
-    if (attempt >= 3) throw new Error(`Tekmetric rate limit hit after 3 attempts for ${url}`);
-    const waitMs = Math.pow(2, attempt) * 1000;
-    console.warn(`[Tekmetric] 429 — waiting ${waitMs}ms before retry ${attempt + 1}`);
-    await sleep(waitMs);
-    return tekFetchWithRetry(url, token, attempt + 1);
+    if (attempt >= 3) throw new Error(`429 after 3 attempts: ${url}`);
+    const wait = Math.pow(2, attempt) * 1000;
+    console.warn(`[Tekmetric] 429 — waiting ${wait}ms (attempt ${attempt})`);
+    await sleep(wait);
+    return tekFetch(url, token, attempt + 1);
   }
   if (!res.ok) {
     const body = await res.text().catch(() => '');
-    throw new Error(`Tekmetric API ${res.status} for ${url}: ${body.slice(0, 200)}`);
+    throw new Error(`Tekmetric ${res.status} for ${url}: ${body.slice(0, 200)}`);
   }
   return res.json();
 }
 
+// ── fetchAllPages — paginate any Tekmetric list endpoint ──────────────────────
+async function fetchAllPages(endpoint, token, params = {}) {
+  const results = [];
+  let page = 0, totalPages = 1;
+  while (page < totalPages) {
+    const url = new URL(endpoint);
+    Object.entries({ ...params, size: 100, page }).forEach(([k, v]) => url.searchParams.set(k, v));
+    const data = await tekFetch(url.toString(), token);
+    results.push(...(data.content || []));
+    totalPages = data.totalPages || 1;
+    page++;
+    if (page < totalPages) await sleep(100);
+  }
+  return results;
+}
+
+// ── Config cache (60s TTL) ────────────────────────────────────────────────────
+let configCache   = null;
+let configCacheAt = 0;
+const CONFIG_TTL  = 60000;
+
+async function getTekConfig() {
+  if (configCache && Date.now() - configCacheAt < CONFIG_TTL) return configCache;
+  const keys = ['tekmetric_token', 'tekmetric_shop_id', 'tekmetric_env', 'tekmetric_api_rate_limit'];
+  const { rows } = await pool.query('SELECT key, value FROM config_settings WHERE key = ANY($1)', [keys]);
+  const map = Object.fromEntries(rows.map(r => [r.key, r.value]));
+
+  const rl = parseInt(map['tekmetric_api_rate_limit'] || '300');
+  if (rl >= 1 && rl <= 600) configuredRateLimit = rl;
+
+  configCache = {
+    token:     map['tekmetric_token']   || null,
+    shopId:    map['tekmetric_shop_id'] || null,
+    env:       map['tekmetric_env']     || 'production',
+    rateLimit: configuredRateLimit,
+  };
+  configCacheAt = Date.now();
+  return configCache;
+}
+
+function invalidateConfigCache() { configCache = null; configCacheAt = 0; }
+
+// ── In-memory data cache (Maps for O(1) lookup) ───────────────────────────────
+const tekCache = {
+  customerMap:      new Map(), // id → normalized customer
+  vehicleMap:       new Map(), // id → normalized vehicle
+  roMap:            new Map(), // id → normalized RO (all non-deleted)
+  employeeMap:      new Map(), // id → normalized employee
+  arRos:            [],        // normalized AR ROs (status 6)
+  lastCustomerSync: null,
+  lastRoSync:       null,
+  lastEmployeeSync: null,
+  lastArSync:       null,
+};
+
+// ── Response caches ───────────────────────────────────────────────────────────
+let shopFloorCache   = null;
+let shopFloorCacheAt = 0;
+const SHOP_FLOOR_TTL = 30000;      // 30 seconds — all users share this result
+
+let arCache   = null;
+let arCacheAt = 0;
+const AR_TTL  = 60 * 60 * 1000;   // 1 hour
+
+// ── Status change tracking ────────────────────────────────────────────────────
+let prevShopFloorStatuses = new Map(); // roId → statusId
+
+// ── Status color palette (cycles for unlimited custom statuses) ───────────────
+const STATUS_COLORS = ['#6366f1','#d97706','#16a34a','#7c3aed','#1d4ed8','#dc2626','#0891b2','#059669','#7c2d12'];
+const STATUS_BGS    = ['#eef2ff','#fffbeb','#f0fdf4','#faf5ff','#eff6ff','#fef2f2','#ecfeff','#d1fae5','#fff7ed'];
+
+function buildStatuses(ros) {
+  const seen = new Map();
+  ros.forEach(ro => {
+    if (ro.sid && !seen.has(ro.sid))
+      seen.set(ro.sid, { id: ro.sid, name: ro.statusName, code: ro.statusCode });
+  });
+  return Array.from(seen.values()).map((s, i) => ({
+    ...s,
+    color: STATUS_COLORS[i % STATUS_COLORS.length],
+    bg:    STATUS_BGS[i % STATUS_BGS.length],
+  }));
+}
+
+// ── Normalizers ───────────────────────────────────────────────────────────────
+function normCustomer(c) {
+  return {
+    id:      c.id,
+    name:    [c.firstName, c.lastName].filter(Boolean).join(' ') || `Customer ${c.id}`,
+    contact: c.contactFirstName
+      ? [c.contactFirstName, c.contactLastName].filter(Boolean).join(' ')
+      : null,
+    phone: c.phone?.[0]?.number || null,
+    email: Array.isArray(c.email) ? c.email[0] : c.email || null,
+  };
+}
+
+function normVehicle(v) {
+  return {
+    id: v.id, cid: v.customerId,
+    year: v.year, make: v.make, model: v.model,
+    plate: v.licensePlate, vin: v.vin, color: v.color,
+  };
+}
+
+function normRo(ro) {
+  return {
+    id:         ro.id,
+    rn:         ro.repairOrderNumber,
+    cid:        ro.customerId,
+    vid:        ro.vehicleId,
+    sid:        ro.repairOrderStatus?.id,
+    statusName: ro.repairOrderStatus?.name,
+    statusCode: ro.repairOrderStatus?.code,
+    techId:     ro.technicianId,
+    saId:       ro.serviceWriterId,
+    labor:      ro.laborSales    || 0,
+    parts:      ro.partsSales    || 0,
+    disc:       ro.discountTotal || 0,
+    total:      ro.totalSales    || 0,
+    paid:       ro.amountPaid    || 0,
+    created:     ro.createdDate,
+    updated:     ro.updatedDate,
+    promiseTime: ro.customerTimeOut || null,
+    milesIn:     ro.milesIn        || null,
+    jobs: (ro.jobs || []).map(j => ({
+      name:  j.name,
+      auth:  j.authorized,
+      labor: j.laborTotal || 0,
+      parts: j.partsTotal || 0,
+    })),
+  };
+}
+
+function normEmployee(e) {
+  return {
+    id:   e.id,
+    name: [e.firstName, e.lastName].filter(Boolean).join(' '),
+    role: e.employeeRole?.name || 'Employee',
+  };
+}
+
+// ── Sync helpers ──────────────────────────────────────────────────────────────
+
+async function syncEmployees(token, base, shopId) {
+  console.log('[Tekmetric] Syncing employees…');
+  const rows = await fetchAllPages(`${base}/employees`, token, { shop: shopId });
+  rows.forEach(e => tekCache.employeeMap.set(e.id, normEmployee(e)));
+  tekCache.lastEmployeeSync = new Date().toISOString();
+  console.log(`[Tekmetric] Employees cached: ${tekCache.employeeMap.size}`);
+}
+
+async function syncCustomers(token, base, shopId) {
+  const since  = tekCache.lastCustomerSync;
+  const params = { shop: shopId, customerTypeId: 2 };
+  if (since) params.updatedDateStart = since;
+  console.log(`[Tekmetric] Syncing customers (${since ? 'delta' : 'full'})…`);
+  const rows = await fetchAllPages(`${base}/customers`, token, params);
+  rows.forEach(c => tekCache.customerMap.set(c.id, normCustomer(c)));
+  tekCache.lastCustomerSync = new Date().toISOString();
+  console.log(`[Tekmetric] Customers cached: ${tekCache.customerMap.size} (+${rows.length} updated)`);
+}
+
+async function syncVehicles(token, base, shopId) {
+  // Only fetch vehicles for customers that have none cached yet
+  const covered = new Set(Array.from(tekCache.vehicleMap.values()).map(v => v.cid));
+  const missing = Array.from(tekCache.customerMap.keys()).filter(id => !covered.has(id));
+  if (missing.length === 0) return;
+  console.log(`[Tekmetric] Fetching vehicles for ${missing.length} new customers…`);
+  for (let i = 0; i < missing.length; i += 8) {
+    await Promise.allSettled(missing.slice(i, i + 8).map(async cid => {
+      const rows = await fetchAllPages(`${base}/vehicles`, token, { shop: shopId, customerId: cid });
+      rows.forEach(v => tekCache.vehicleMap.set(v.id, normVehicle(v)));
+    }));
+    if (i + 8 < missing.length) await sleep(150);
+  }
+  console.log(`[Tekmetric] Vehicles cached: ${tekCache.vehicleMap.size}`);
+}
+
+async function syncRos(token, base, shopId) {
+  // 5-year initial limit to avoid pulling ancient history on first run
+  const fiveYearsAgo = new Date();
+  fiveYearsAgo.setFullYear(fiveYearsAgo.getFullYear() - 5);
+  const since  = tekCache.lastRoSync || fiveYearsAgo.toISOString();
+  const params = { shop: shopId, updatedDateStart: since };
+  console.log(`[Tekmetric] Syncing ROs (delta from ${since.slice(0, 10)})…`);
+  const rows = await fetchAllPages(`${base}/repair-orders`, token, params);
+  // Store all non-deleted ROs; AR (status 6) lives here too so fleet history is complete
+  rows.filter(ro => ro.repairOrderStatus?.id !== 7).forEach(ro => tekCache.roMap.set(ro.id, normRo(ro)));
+  tekCache.lastRoSync = new Date().toISOString();
+  console.log(`[Tekmetric] ROs cached: ${tekCache.roMap.size} (+${rows.length} updated)`);
+}
+
+async function syncAR(token, base, shopId) {
+  console.log('[Tekmetric] Syncing AR (status 6)…');
+  const params = { shop: shopId, repairOrderStatusId: 6 };
+  if (tekCache.lastArSync) params.updatedDateStart = tekCache.lastArSync;
+  const rows = await fetchAllPages(`${base}/repair-orders`, token, params);
+  const now  = Date.now();
+  const normalized = rows.map(ro => {
+    const n = normRo(ro);
+    return {
+      ...n,
+      balance:         n.total - n.paid,
+      daysOutstanding: n.created ? Math.floor((now - new Date(n.created)) / 86400000) : null,
+    };
+  });
+  const updatedIds = new Set(normalized.map(r => r.id));
+  tekCache.arRos = [
+    ...tekCache.arRos.filter(r => !updatedIds.has(r.id)),
+    ...normalized,
+  ];
+  tekCache.lastArSync = new Date().toISOString();
+  arCache = null; arCacheAt = 0; // bust AR response cache
+  console.log(`[Tekmetric] AR ROs cached: ${tekCache.arRos.length}`);
+}
+
+// ── Background scheduler ──────────────────────────────────────────────────────
+let bgTimers = [];
+
+function stopBackgroundSync() {
+  bgTimers.forEach(clearTimeout);
+  bgTimers = [];
+  console.log('[Tekmetric] Background sync stopped');
+}
+
+function scheduleRepeating(fn, delayMs, intervalMs) {
+  const tick = async () => {
+    try {
+      const { token, shopId, env } = await getTekConfig();
+      if (token && shopId) await fn(token, baseUrl(env), shopId);
+    } catch (e) {
+      console.error('[BgSync]', e.message);
+    }
+    bgTimers.push(setTimeout(tick, intervalMs));
+  };
+  bgTimers.push(setTimeout(tick, delayMs));
+}
+
+function startBackgroundSync() {
+  stopBackgroundSync();
+
+  // Fleet: customers + vehicles + ROs every 5 min, first fire at +2 min
+  scheduleRepeating(async (token, base, shopId) => {
+    await syncCustomers(token, base, shopId);
+    await syncVehicles(token, base, shopId);
+    await syncRos(token, base, shopId);
+    shopFloorCache = null; shopFloorCacheAt = 0; // next shop-floor poll gets fresh data
+  }, 2 * 60 * 1000, 5 * 60 * 1000);
+
+  // AR: every 1 hour, first fire at +4 min
+  scheduleRepeating(syncAR, 4 * 60 * 1000, 60 * 60 * 1000);
+
+  // Employees: every 30 min, first fire at +6 min
+  scheduleRepeating(syncEmployees, 6 * 60 * 1000, 30 * 60 * 1000);
+
+  console.log('[Tekmetric] Background sync scheduled (fleet +2m/5m · AR +4m/1h · employees +6m/30m)');
+}
+
+// ── upsertSetting ─────────────────────────────────────────────────────────────
 async function upsertSetting(key, value, label) {
   await pool.query(
     `INSERT INTO config_settings (key, value, label) VALUES ($1,$2,$3)
-     ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value`,
+     ON CONFLICT(key) DO UPDATE SET value = EXCLUDED.value`,
     [key, value, label]
   );
 }
 
-// ── Save Tekmetric settings ───────────────────────────────────────────────────
-router.post('/settings', async (req, res) => {
+// ─────────────────────────────────────────────────────────────────────────────
+// ROUTES
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── GET /tekmetric/shop-floor ─────────────────────────────────────────────────
+// Statuses 1–4 only. 30s server-side cache (all users share one result).
+// Returns statusChanges[] so the frontend can fire toast notifications.
+router.get('/shop-floor', async (req, res) => {
   try {
-    const { token, shopId, env, pollInterval, oilInterval, carfaxKey, carfaxEnabled } = req.body;
+    if (shopFloorCache && Date.now() - shopFloorCacheAt < SHOP_FLOOR_TTL) {
+      return res.json({ ...shopFloorCache, fromCache: true });
+    }
 
-    if (token        != null) await upsertSetting('tekmetric_token',         token,                       'Tekmetric API Token');
-    if (shopId       != null) await upsertSetting('tekmetric_shop_id',       shopId,                      'Tekmetric Shop ID');
-    if (env          != null) await upsertSetting('tekmetric_env',           env,                         'Tekmetric Environment');
-    if (pollInterval != null) await upsertSetting('tekmetric_poll_interval', String(pollInterval),        'Tekmetric Poll Interval (minutes)');
-    if (oilInterval  != null) await upsertSetting('tekmetric_oil_interval',  String(oilInterval),         'Tekmetric Oil Interval (days)');
-    if (carfaxKey    != null) await upsertSetting('carfax_api_key',          carfaxKey || '',              'Carfax API Key');
-    if (carfaxEnabled != null) await upsertSetting('carfax_enabled',         carfaxEnabled ? '1' : '0',   'Carfax Enabled');
-    if (req.body.bizHoursStart    != null) await upsertSetting('biz_hours_start',    String(req.body.bizHoursStart),    'Business Hours Start (24h)');
-    if (req.body.bizHoursEnd      != null) await upsertSetting('biz_hours_end',      String(req.body.bizHoursEnd),      'Business Hours End (24h)');
-    if (req.body.floorPollSeconds != null) await upsertSetting('floor_poll_seconds', String(req.body.floorPollSeconds), 'Shop Floor Refresh (seconds)');
+    const { token, shopId, env } = await getTekConfig();
+    if (!token || !shopId) return res.status(400).json({ error: 'Tekmetric not configured.' });
+    const base = baseUrl(env);
 
-    res.json({ ok: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+    // Active ROs only — no AR (6), no deleted (7)
+    const rawRos = await fetchAllPages(`${base}/repair-orders`, token, {
+      shop: shopId,
+      repairOrderStatusId: '1,2,3,4',
+    });
+    const ros = rawRos.map(normRo);
+
+    // ── Status change detection ───────────────────────────────────────────────
+    const statusChanges = [];
+    const currentIds = new Set(ros.map(r => r.id));
+
+    for (const ro of ros) {
+      const prev = prevShopFloorStatuses.get(ro.id);
+      if (prev === undefined) {
+        statusChanges.push({ type: 'new', ro });
+      } else if (prev !== ro.sid) {
+        statusChanges.push({ type: 'changed', ro, prevSid: prev });
+      }
+    }
+    for (const [roId] of prevShopFloorStatuses) {
+      if (!currentIds.has(roId)) statusChanges.push({ type: 'removed', roId });
+    }
+    prevShopFloorStatuses = new Map(ros.map(r => [r.id, r.sid]));
+
+    // ── Cache-first lookups — only hit Tekmetric for genuinely new IDs ────────
+    const missingCids = [...new Set(ros.map(r => r.cid).filter(id => id && !tekCache.customerMap.has(id)))];
+    const missingVids = [...new Set(ros.map(r => r.vid).filter(id => id && !tekCache.vehicleMap.has(id)))];
+
+    if (missingCids.length > 0) {
+      await Promise.allSettled(missingCids.map(async id => {
+        const data = await tekFetch(`${base}/customers/${id}`, token).catch(() => null);
+        if (data) tekCache.customerMap.set(data.id, normCustomer(data));
+      }));
+    }
+    if (missingVids.length > 0) {
+      await Promise.allSettled(missingVids.map(async id => {
+        const data = await tekFetch(`${base}/vehicles/${id}`, token).catch(() => null);
+        if (data) tekCache.vehicleMap.set(data.id, normVehicle(data));
+      }));
+    }
+    if (tekCache.employeeMap.size === 0) {
+      await syncEmployees(token, base, shopId).catch(() => {});
+    }
+
+    const companies = [...new Set(ros.map(r => r.cid))].map(id => tekCache.customerMap.get(id)).filter(Boolean);
+    const vehicles  = [...new Set(ros.map(r => r.vid))].map(id => tekCache.vehicleMap.get(id)).filter(Boolean);
+    const employees = Array.from(tekCache.employeeMap.values());
+    const statuses  = buildStatuses(ros);
+
+    shopFloorCache   = { ros, statuses, companies, vehicles, employees, statusChanges, syncedAt: new Date().toISOString() };
+    shopFloorCacheAt = Date.now();
+    res.json(shopFloorCache);
+
+  } catch (err) {
+    console.error('[Tekmetric] /shop-floor error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// ── Get Tekmetric settings ────────────────────────────────────────────────────
+// ── GET /tekmetric/fleet-data ─────────────────────────────────────────────────
+// Returns full Maps contents (businesses, vehicles, ROs, employees).
+// Blocks on first load; returns current cache + fires background delta on subsequent calls.
+router.get('/fleet-data', async (req, res) => {
+  try {
+    const { token, shopId, env } = await getTekConfig();
+    if (!token || !shopId) return res.status(400).json({ error: 'Tekmetric not configured.' });
+    const base         = baseUrl(env);
+    const forceRefresh = req.query.full === '1';
+    const cacheEmpty   = tekCache.customerMap.size === 0;
+
+    if (cacheEmpty || forceRefresh) {
+      await syncCustomers(token, base, shopId);
+      await syncVehicles(token, base, shopId);
+      await syncRos(token, base, shopId);
+      await syncEmployees(token, base, shopId);
+    } else {
+      // Serve stale immediately, refresh in the background
+      setImmediate(async () => {
+        try {
+          await syncCustomers(token, base, shopId);
+          await syncVehicles(token, base, shopId);
+          await syncRos(token, base, shopId);
+          shopFloorCache = null; shopFloorCacheAt = 0;
+        } catch (e) { console.error('[BgSync delta]', e.message); }
+      });
+    }
+
+    const companies = Array.from(tekCache.customerMap.values());
+    const vehicles  = Array.from(tekCache.vehicleMap.values());
+    // Exclude AR (6) and Deleted (7) from fleet-data — AR has its own tab
+    const ros       = Array.from(tekCache.roMap.values()).filter(r => r.sid !== 6 && r.sid !== 7);
+    const employees = Array.from(tekCache.employeeMap.values());
+    const statuses  = buildStatuses(ros);
+
+    res.json({
+      statuses, companies, vehicles, ros, employees,
+      syncedAt: new Date().toISOString(),
+      syncedStats: {
+        syncType:         cacheEmpty || forceRefresh ? 'full' : 'returning-cache',
+        customers:        companies.length,
+        ros:              ros.length,
+        vehicles:         vehicles.length,
+        employees:        employees.length,
+        statuses:         statuses.length,
+        lastCustomerSync: tekCache.lastCustomerSync,
+        lastRoSync:       tekCache.lastRoSync,
+        rateLimiter:      tekLimiter.usage(),
+      },
+    });
+  } catch (err) {
+    console.error('[Tekmetric] /fleet-data error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /tekmetric/ar ─────────────────────────────────────────────────────────
+// Accounts Receivable — status 6 only, 1-hour server-side cache.
+// Add ?refresh=1 to force an immediate re-sync.
+router.get('/ar', async (req, res) => {
+  try {
+    const forceRefresh = req.query.refresh === '1';
+    if (arCache && !forceRefresh && Date.now() - arCacheAt < AR_TTL) {
+      return res.json({ ...arCache, fromCache: true });
+    }
+
+    const { token, shopId, env } = await getTekConfig();
+    if (!token || !shopId) return res.status(400).json({ error: 'Tekmetric not configured.' });
+    const base = baseUrl(env);
+
+    await syncAR(token, base, shopId);
+
+    // Fetch any customers missing from cache
+    const missingCids = [...new Set(
+      tekCache.arRos.map(r => r.cid).filter(id => id && !tekCache.customerMap.has(id))
+    )];
+    if (missingCids.length > 0) {
+      await Promise.allSettled(missingCids.map(async id => {
+        const data = await tekFetch(`${base}/customers/${id}`, token).catch(() => null);
+        if (data) tekCache.customerMap.set(data.id, normCustomer(data));
+      }));
+    }
+
+    // Group by customer with totals + aging buckets
+    const byCustomer = new Map();
+    for (const ro of tekCache.arRos) {
+      if (!byCustomer.has(ro.cid)) {
+        byCustomer.set(ro.cid, {
+          customer:     tekCache.customerMap.get(ro.cid) || { id: ro.cid, name: `Customer ${ro.cid}` },
+          ros:          [],
+          totalBalance: 0,
+          oldestDays:   0,
+        });
+      }
+      const entry = byCustomer.get(ro.cid);
+      entry.ros.push(ro);
+      entry.totalBalance += ro.balance || 0;
+      if ((ro.daysOutstanding || 0) > entry.oldestDays) entry.oldestDays = ro.daysOutstanding;
+    }
+
+    const summary = Array.from(byCustomer.values())
+      .map(s => ({
+        ...s,
+        flag: s.oldestDays > 90 ? '90+' : s.oldestDays > 60 ? '60+' : s.oldestDays > 30 ? '30+' : 'current',
+      }))
+      .sort((a, b) => b.totalBalance - a.totalBalance);
+
+    const companies = [...new Set(tekCache.arRos.map(r => r.cid))]
+      .map(id => tekCache.customerMap.get(id)).filter(Boolean);
+
+    arCache   = { ros: tekCache.arRos, companies, summary, syncedAt: new Date().toISOString() };
+    arCacheAt = Date.now();
+    res.json(arCache);
+
+  } catch (err) {
+    console.error('[Tekmetric] /ar error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /tekmetric/call-log ───────────────────────────────────────────────────
+router.get('/call-log', async (req, res) => {
+  try {
+    const todayPrefix = new Date().toISOString().slice(0, 10);
+    let todayTotal = 0;
+    const perMinute = [];
+    for (const [minute, count] of callLogByMinute.entries()) {
+      if (minute.startsWith(todayPrefix)) todayTotal += count;
+      perMinute.push({ minute, count });
+    }
+    perMinute.sort((a, b) => a.minute.localeCompare(b.minute));
+
+    res.json({
+      perMinute,
+      recent:      callLog.slice(-100).reverse(),
+      todayTotal,
+      rateLimiter: tekLimiter.usage(),
+      cap:         configuredRateLimit,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /tekmetric/notification-settings ─────────────────────────────────────
+router.get('/notification-settings', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      "SELECT value FROM config_settings WHERE key = 'tekmetric_notification_settings'"
+    );
+    const raw = rows[0]?.value;
+    res.json(raw ? JSON.parse(raw) : {});
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /tekmetric/notification-settings ────────────────────────────────────
+router.post('/notification-settings', async (req, res) => {
+  try {
+    await upsertSetting(
+      'tekmetric_notification_settings',
+      JSON.stringify(req.body),
+      'Tekmetric Notification Settings'
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /tekmetric/settings ───────────────────────────────────────────────────
 router.get('/settings', async (req, res) => {
   try {
-    const cfg = await getTekConfig();
-    const keys = ['tekmetric_poll_interval','tekmetric_oil_interval','carfax_api_key','carfax_enabled','biz_hours_start','biz_hours_end','floor_poll_seconds'];
-    const { rows } = await pool.query(`SELECT key, value FROM config_settings WHERE key = ANY($1)`, [keys]);
+    const cfg  = await getTekConfig();
+    const keys = [
+      'tekmetric_poll_interval', 'tekmetric_oil_interval',
+      'carfax_api_key', 'carfax_enabled',
+      'biz_hours_start', 'biz_hours_end',
+      'floor_poll_seconds', 'tekmetric_api_rate_limit',
+    ];
+    const { rows } = await pool.query('SELECT key, value FROM config_settings WHERE key = ANY($1)', [keys]);
     const map = Object.fromEntries(rows.map(r => [r.key, r.value]));
 
     res.json({
@@ -142,52 +637,79 @@ router.get('/settings', async (req, res) => {
       env:              cfg.env,
       pollInterval:     parseInt(map['tekmetric_poll_interval'] || '5'),
       oilInterval:      parseInt(map['tekmetric_oil_interval']  || '90'),
-      carfaxKey:        map['carfax_api_key']   || '',
-      carfaxEnabled:    (map['carfax_enabled']  || '0') === '1',
-      bizHoursStart:    parseInt(map['biz_hours_start']    || '7'),
-      bizHoursEnd:      parseInt(map['biz_hours_end']      || '19'),
-      floorPollSeconds: parseInt(map['floor_poll_seconds'] || '60'),
+      carfaxKey:        map['carfax_api_key']  || '',
+      carfaxEnabled:    (map['carfax_enabled'] || '0') === '1',
+      bizHoursStart:    parseInt(map['biz_hours_start']     || '7'),
+      bizHoursEnd:      parseInt(map['biz_hours_end']       || '19'),
+      floorPollSeconds: parseInt(map['floor_poll_seconds']  || '30'),
+      apiRateLimit:     parseInt(map['tekmetric_api_rate_limit'] || '300'),
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// ── Exchange Client ID + Secret for bearer token ──────────────────────────────
+// ── POST /tekmetric/settings ──────────────────────────────────────────────────
+router.post('/settings', async (req, res) => {
+  try {
+    const {
+      token, shopId, env, pollInterval, oilInterval,
+      carfaxKey, carfaxEnabled, apiRateLimit,
+    } = req.body;
+
+    if (token         != null) await upsertSetting('tekmetric_token',         token,                      'Tekmetric API Token');
+    if (shopId        != null) await upsertSetting('tekmetric_shop_id',       shopId,                     'Tekmetric Shop ID');
+    if (env           != null) await upsertSetting('tekmetric_env',           env,                        'Tekmetric Environment');
+    if (pollInterval  != null) await upsertSetting('tekmetric_poll_interval', String(pollInterval),       'Tekmetric Poll Interval (minutes)');
+    if (oilInterval   != null) await upsertSetting('tekmetric_oil_interval',  String(oilInterval),        'Tekmetric Oil Interval (days)');
+    if (carfaxKey     != null) await upsertSetting('carfax_api_key',          carfaxKey || '',            'Carfax API Key');
+    if (carfaxEnabled != null) await upsertSetting('carfax_enabled',          carfaxEnabled ? '1' : '0', 'Carfax Enabled');
+
+    if (req.body.bizHoursStart    != null) await upsertSetting('biz_hours_start',    String(req.body.bizHoursStart),    'Business Hours Start');
+    if (req.body.bizHoursEnd      != null) await upsertSetting('biz_hours_end',      String(req.body.bizHoursEnd),      'Business Hours End');
+    if (req.body.floorPollSeconds != null) await upsertSetting('floor_poll_seconds', String(req.body.floorPollSeconds), 'Shop Floor Refresh (seconds)');
+
+    if (apiRateLimit != null) {
+      const rl = Math.min(600, Math.max(1, parseInt(apiRateLimit) || 300));
+      await upsertSetting('tekmetric_api_rate_limit', String(rl), 'Tekmetric API Rate Limit (req/min)');
+      configuredRateLimit = rl; // Apply immediately, no restart needed
+    }
+
+    invalidateConfigCache();
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── POST /tekmetric/connect ───────────────────────────────────────────────────
 router.post('/connect', async (req, res) => {
   try {
     const { clientId, clientSecret, env } = req.body;
-    if (!clientId || !clientSecret) {
+    if (!clientId || !clientSecret)
       return res.status(400).json({ error: 'Client ID and Client Secret are required.' });
-    }
 
-    const baseUrl = env === 'sandbox'
-      ? 'https://sandbox.tekmetric.com'
-      : 'https://shop.tekmetric.com';
-
+    const hostname    = env === 'sandbox' ? 'sandbox.tekmetric.com' : 'shop.tekmetric.com';
     const credentials = Buffer.from(`${clientId.trim()}:${clientSecret.trim()}`).toString('base64');
 
     const tokenData = await new Promise((resolve, reject) => {
-      const https = require('https');
+      const https    = require('https');
       const postBody = 'grant_type=client_credentials';
-      const hostname = env === 'sandbox' ? 'sandbox.tekmetric.com' : 'shop.tekmetric.com';
-      const options = {
+      const options  = {
         hostname,
-        path: '/api/v1/oauth/token',
+        path:   '/api/v1/oauth/token',
         method: 'POST',
         headers: {
-          'Authorization': `Basic ${credentials}`,
-          'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+          'Authorization':  `Basic ${credentials}`,
+          'Content-Type':   'application/x-www-form-urlencoded;charset=UTF-8',
           'Content-Length': Buffer.byteLength(postBody),
         },
       };
-      const request = https.request(options, (response) => {
+      const request = https.request(options, response => {
         let data = '';
         response.on('data', chunk => data += chunk);
         response.on('end', () => {
           if (response.statusCode >= 400) {
-            reject(new Error(`Tekmetric rejected your credentials (${response.statusCode}). Double-check your Client ID and Client Secret.`));
+            reject(new Error(`Tekmetric rejected credentials (${response.statusCode})`));
           } else {
             try { resolve(JSON.parse(data)); }
-            catch(e) { reject(new Error('Invalid response from Tekmetric')); }
+            catch (e) { reject(new Error('Invalid response from Tekmetric')); }
           }
         });
       });
@@ -195,16 +717,41 @@ router.post('/connect', async (req, res) => {
       request.write(postBody);
       request.end();
     });
+
     const accessToken = tokenData.access_token;
+    const shopIds     = (tokenData.scope || '').trim().split(' ').filter(Boolean);
+    const shopId      = shopIds[0] || '';
 
-    // scope comes back as space-separated shop IDs e.g. "1 2"
-    const shopIds = (tokenData.scope || '').trim().split(' ').filter(Boolean);
-    const shopId  = shopIds[0] || '';
+    await pool.query(
+      `INSERT INTO config_settings (key,value,label) VALUES ($1,$2,$3) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value`,
+      ['tekmetric_token', accessToken, 'Tekmetric API Token']
+    );
+    await pool.query(
+      `INSERT INTO config_settings (key,value,label) VALUES ($1,$2,$3) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value`,
+      ['tekmetric_shop_id', shopId, 'Tekmetric Shop ID']
+    );
+    await pool.query(
+      `INSERT INTO config_settings (key,value,label) VALUES ($1,$2,$3) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value`,
+      ['tekmetric_env', env || 'production', 'Tekmetric Environment']
+    );
 
-    // Store the token and shop ID — the client secret is NEVER stored
-    await pool.query(`INSERT INTO config_settings (key,value,label) VALUES ($1,$2,$3) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value`, ['tekmetric_token',   accessToken,          'Tekmetric API Token']);
-    await pool.query(`INSERT INTO config_settings (key,value,label) VALUES ($1,$2,$3) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value`, ['tekmetric_shop_id', shopId,               'Tekmetric Shop ID']);
-    await pool.query(`INSERT INTO config_settings (key,value,label) VALUES ($1,$2,$3) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value`, ['tekmetric_env',     env || 'production',  'Tekmetric Environment']);
+    invalidateConfigCache();
+
+    // Clear stale data and kick off background sync
+    tekCache.customerMap.clear();
+    tekCache.vehicleMap.clear();
+    tekCache.roMap.clear();
+    tekCache.employeeMap.clear();
+    tekCache.arRos            = [];
+    tekCache.lastCustomerSync = null;
+    tekCache.lastRoSync       = null;
+    tekCache.lastEmployeeSync = null;
+    tekCache.lastArSync       = null;
+    shopFloorCache = null; shopFloorCacheAt = 0;
+    arCache        = null; arCacheAt        = 0;
+    prevShopFloorStatuses.clear();
+
+    startBackgroundSync();
 
     res.json({ ok: true, shopId, shopIds, message: `Connected! Shop ID: ${shopId}` });
   } catch (err) {
@@ -213,335 +760,25 @@ router.post('/connect', async (req, res) => {
   }
 });
 
-// ── Main fleet-data endpoint ──────────────────────────────────────────────────
-// ── Main fleet-data endpoint ──────────────────────────────────────────────────
-router.get('/fleet-data', async (req, res) => {
-  try {
-    const { token, shopId, env } = await getTekConfig();
-
-    if (!token || !shopId) {
-      return res.status(400).json({
-        error: 'Tekmetric not configured. Go to Active Fleet → Settings and add your token.'
-      });
-    }
-
-    const base = baseUrl(env);
-    const forceFullSync = req.query.full === '1';
-    const cacheAge = tekCache.lastFullSync
-      ? (Date.now() - new Date(tekCache.lastFullSync).getTime()) / 3600000
-      : 999;
-    const doFullSync = forceFullSync || !tekCache.lastFullSync || cacheAge > 24;
-    const deltaFrom  = tekCache.lastDeltaSync || tekCache.lastFullSync;
-
-    console.log(`[Tekmetric] Starting ${doFullSync ? 'FULL' : 'DELTA'} sync...`);
-    if (!doFullSync) console.log(`[Tekmetric] Fetching changes since ${deltaFrom}`);
-
-    // ── Customers (businesses only) ───────────────────────────────────────────
-    let fetchedCustomers = [], page = 0, totalPages = 1;
-    while (page < totalPages) {
-      const url = doFullSync
-        ? `${base}/customers?shop=${shopId}&customerTypeId=2&size=100&page=${page}`
-        : `${base}/customers?shop=${shopId}&customerTypeId=2&updatedDateStart=${encodeURIComponent(deltaFrom)}&size=100&page=${page}`;
-      const data = await tekFetchWithRetry(url, token, 1, env);
-      fetchedCustomers = [...fetchedCustomers, ...(data.content || [])];
-      totalPages = data.totalPages || 1;
-      page++;
-      if (page < totalPages) await sleep(100);
-    }
-    console.log(`[Tekmetric] Fetched ${fetchedCustomers.length} ${doFullSync ? 'total' : 'updated'} customers`);
-
-    if (doFullSync) {
-      tekCache.customers = fetchedCustomers;
-    } else {
-      const updatedIds = new Set(fetchedCustomers.map(c => c.id));
-      tekCache.customers = [
-        ...tekCache.customers.filter(c => !updatedIds.has(c.id)),
-        ...fetchedCustomers,
-      ];
-    }
-    const customers = tekCache.customers;
-
-    async function batchFetch(items, fn, batchSize = 8) {
-      const results = [], failures = [];
-      for (let i = 0; i < items.length; i += batchSize) {
-        const batch = items.slice(i, i + batchSize);
-        const settled = await Promise.allSettled(batch.map(fn));
-        settled.forEach((r, idx) => {
-          if (r.status === 'fulfilled') results.push(...r.value);
-          else failures.push({ item: batch[idx], error: r.reason?.message });
-        });
-        if (i + batchSize < items.length) await sleep(150);
-      }
-      return { results, failures };
-    }
-
-    // ── Repair Orders ─────────────────────────────────────────────────────────
-    const customersToFetchRos = doFullSync ? customers : fetchedCustomers;
-    let roFailures = 0;
-    if (customersToFetchRos.length > 0) {
-      console.log(`[Tekmetric] Fetching ROs for ${customersToFetchRos.length} customers...`);
-      const roFetch = await batchFetch(customersToFetchRos, async c => {
-        const d = await tekFetchWithRetry(`${base}/repair-orders?shop=${shopId}&customerId=${c.id}&size=100`, token, 1, env);
-        return d.content || [];
-      });
-      roFailures = roFetch.failures.length;
-      if (doFullSync) {
-        tekCache.ros = roFetch.results;
-      } else {
-        const changedCids = new Set(customersToFetchRos.map(c => c.id));
-        tekCache.ros = [
-          ...tekCache.ros.filter(r => !changedCids.has(r.customerId)),
-          ...roFetch.results,
-        ];
-      }
-    } else {
-      console.log('[Tekmetric] No customer changes — skipping RO fetch');
-    }
-    const allRos = tekCache.ros;
-
-    // ── Vehicles ──────────────────────────────────────────────────────────────
-    const customersToFetchVehicles = doFullSync ? customers : fetchedCustomers;
-    let vehicleFailures = 0;
-    if (customersToFetchVehicles.length > 0) {
-      console.log(`[Tekmetric] Fetching vehicles for ${customersToFetchVehicles.length} customers...`);
-      const vFetch = await batchFetch(customersToFetchVehicles, async c => {
-        const d = await tekFetchWithRetry(`${base}/vehicles?shop=${shopId}&customerId=${c.id}&size=100`, token, 1, env);
-        return d.content || [];
-      });
-      vehicleFailures = vFetch.failures.length;
-      if (doFullSync) {
-        tekCache.vehicles = vFetch.results;
-      } else {
-        const changedCids = new Set(customersToFetchVehicles.map(c => c.id));
-        tekCache.vehicles = [
-          ...tekCache.vehicles.filter(v => !changedCids.has(v.customerId)),
-          ...vFetch.results,
-        ];
-      }
-    }
-    const allVehicles = tekCache.vehicles;
-
-    // ── Employees (always fetch — tiny endpoint) ──────────────────────────────
-    console.log('[Tekmetric] Fetching employees...');
-    const empData = await tekFetchWithRetry(`${base}/employees?shop=${shopId}&size=100`, token, 1, env);
-    tekCache.employees = empData.content || [];
-
-    // ── Update timestamps ─────────────────────────────────────────────────────
-    const syncedAt = new Date().toISOString();
-    if (doFullSync) {
-      tekCache.lastFullSync  = syncedAt;
-      tekCache.lastDeltaSync = null;
-    } else {
-      tekCache.lastDeltaSync = syncedAt;
-    }
-
-    // ── Normalize and return ──────────────────────────────────────────────────
-    const statusMap = {};
-    allRos.forEach(ro => {
-      if (ro.repairOrderStatus) {
-        const s = ro.repairOrderStatus;
-        if (!statusMap[s.id]) statusMap[s.id] = { id: s.id, name: s.name, code: s.code };
-      }
-    });
-    const STATUS_COLORS = ['#6366f1','#d97706','#16a34a','#7c3aed','#1d4ed8','#dc2626','#0891b2','#059669','#7c2d12'];
-    const STATUS_BGS    = ['#eef2ff','#fffbeb','#f0fdf4','#faf5ff','#eff6ff','#fef2f2','#ecfeff','#d1fae5','#fff7ed'];
-    const statuses = Object.values(statusMap).map((s, i) => ({
-      ...s,
-      color: STATUS_COLORS[i % STATUS_COLORS.length],
-      bg:    STATUS_BGS[i % STATUS_BGS.length],
-    }));
-
-    const normalizedCompanies = customers.map(c => ({
-      id:      c.id,
-      name:    c.firstName && c.lastName ? `${c.firstName} ${c.lastName}` : c.firstName || c.lastName || `Customer ${c.id}`,
-      contact: c.contactFirstName ? `${c.contactFirstName} ${c.contactLastName || ''}`.trim() : null,
-      phone:   c.phone?.[0]?.number || null,
-      email:   Array.isArray(c.email) ? c.email[0] : c.email || null,
-    }));
-
-    const normalizedVehicles = allVehicles.map(v => ({
-      id: v.id, cid: v.customerId, year: v.year, make: v.make, model: v.model,
-      plate: v.licensePlate, vin: v.vin, color: v.color, oilElsewhere: false, sold: false,
-    }));
-
-    const normalizedRos = allRos.map(ro => ({
-      id: ro.id, rn: ro.repairOrderNumber, cid: ro.customerId, vid: ro.vehicleId,
-      sid: ro.repairOrderStatus?.id, techId: ro.technicianId, saId: ro.serviceWriterId,
-      labor: ro.laborSales||0, parts: ro.partsSales||0, disc: ro.discountTotal||0,
-      total: ro.totalSales||0, paid: ro.amountPaid||0,
-      created: ro.createdDate, updated: ro.updatedDate,
-      lastContact: null, contactMethod: null,
-      jobs: (ro.jobs||[]).map(j => ({ name:j.name, auth:j.authorized, labor:j.laborTotal||0, parts:j.partsTotal||0 })),
-    }));
-
-    const normalizedEmployees = tekCache.employees.map(e => ({
-      id: e.id, name: `${e.firstName} ${e.lastName}`.trim(), role: e.employeeRole?.name || 'Employee',
-    }));
-
-    console.log(`[Tekmetric] ${doFullSync ? 'Full' : 'Delta'} sync complete. ${customers.length} businesses, ${allRos.length} ROs, ${allVehicles.length} vehicles.`);
-
-    res.json({
-      statuses, companies: normalizedCompanies, vehicles: normalizedVehicles,
-      ros: normalizedRos, employees: normalizedEmployees, syncedAt,
-      syncedStats: {
-        syncType:       doFullSync ? 'full' : 'delta',
-        changedRecords: fetchedCustomers.length,
-        customers:      customers.length,
-        ros:            allRos.length,
-        vehicles:       allVehicles.length,
-        employees:      tekCache.employees.length,
-        statuses:       statuses.length,
-        roFailures, vehicleFailures,
-        rateLimiter:    tekLimiter.usage(),
-        lastFullSync:   tekCache.lastFullSync,
-        lastDeltaSync:  tekCache.lastDeltaSync,
-      },
-    });
-  } catch (err) {
-    console.error('[Tekmetric] Sync error:', err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ── Lightweight shop floor poll — active ROs only ─────────────────────────────
-router.get('/shop-floor', async (req, res) => {
-  try {
-    const { token, shopId, env } = await getTekConfig();
-    if (!token || !shopId) return res.status(400).json({ error: 'Tekmetric not configured.' });
-
-    const base = baseUrl(env);
-
-    // Single paginated call — only active statuses, skip Posted(5) and Deleted(7)
-    let allRos = [], page = 0, totalPages = 1;
-    while (page < totalPages) {
-      const data = await tekFetchWithRetry(
-        `${base}/repair-orders?shop=${shopId}&repairOrderStatusId=1,2,3,4,6&size=100&page=${page}`,
-        token
-      );
-      allRos = [...allRos, ...(data.content || [])];
-      totalPages = data.totalPages || 1;
-      page++;
-      if (page < totalPages) await sleep(200);
-    }
-
-    const ros = allRos.map(ro => ({
-      id:    ro.id,
-      rn:    ro.repairOrderNumber,
-      cid:   ro.customerId,
-      vid:   ro.vehicleId,
-      sid:   ro.repairOrderStatus?.id,
-      techId: ro.technicianId,
-      saId:  ro.serviceWriterId,
-      labor: ro.laborSales  || 0,
-      parts: ro.partsSales  || 0,
-      total: ro.totalSales  || 0,
-      paid:  ro.amountPaid  || 0,
-      created:     ro.createdDate,
-      updated:     ro.updatedDate,
-      promiseTime: ro.customerTimeOut || null,
-      milesIn:     ro.milesIn        || null,
-      lastContact:   null,
-      contactMethod: null,
-      jobs: (ro.jobs || []).map(j => ({
-        name:  j.name,
-        auth:  j.authorized,
-        labor: j.laborTotal || 0,
-        parts: j.partsTotal || 0,
-      })),
-      // embed status info directly so frontend doesn't need a separate sync
-      status: ro.repairOrderStatus ? {
-        id:   ro.repairOrderStatus.id,
-        name: ro.repairOrderStatus.name,
-        code: ro.repairOrderStatus.code,
-      } : null,
-    }));
-
-    // ── Fetch companies, vehicles, employees for just these active ROs ────────
-    const customerIds = [...new Set(allRos.map(r => r.customerId).filter(Boolean))];
-    const vehicleIds  = [...new Set(allRos.map(r => r.vehicleId).filter(Boolean))];
-    const techIds     = [...new Set([
-      ...allRos.map(r => r.technicianId),
-      ...allRos.map(r => r.serviceWriterId),
-    ].filter(Boolean))];
-
-    async function fetchMany(ids, urlFn) {
-      const results = [];
-      for (let i = 0; i < ids.length; i += 8) {
-        const batch = ids.slice(i, i + 8);
-        const settled = await Promise.allSettled(batch.map(id =>
-          tekFetchWithRetry(urlFn(id), token).catch(() => null)
-        ));
-        settled.forEach(r => { if (r.status === 'fulfilled' && r.value) results.push(r.value); });
-        if (i + 8 < ids.length) await sleep(100);
-      }
-      return results;
-    }
-
-    const [rawCustomers, rawVehicles, empData] = await Promise.all([
-      fetchMany(customerIds, id => `${base}/customers/${id}`),
-      fetchMany(vehicleIds,  id => `${base}/vehicles/${id}`),
-      tekFetchWithRetry(`${base}/employees?shop=${shopId}&size=100`, token).catch(() => ({ content: [] })),
-    ]);
-
-    const STATUS_COLORS = ['#6366f1','#d97706','#16a34a','#7c3aed','#1d4ed8','#dc2626','#0891b2','#059669','#7c2d12'];
-    const STATUS_BGS    = ['#eef2ff','#fffbeb','#f0fdf4','#faf5ff','#eff6ff','#fef2f2','#ecfeff','#d1fae5','#fff7ed'];
-    const statusMap = {};
-    allRos.forEach(ro => {
-      if (ro.repairOrderStatus && !statusMap[ro.repairOrderStatus.id]) {
-        statusMap[ro.repairOrderStatus.id] = ro.repairOrderStatus;
-      }
-    });
-    const statuses = Object.values(statusMap).map((s, i) => ({
-      id: s.id, name: s.name, code: s.code,
-      color: STATUS_COLORS[i % STATUS_COLORS.length],
-      bg:    STATUS_BGS[i % STATUS_BGS.length],
-    }));
-
-    const companies = rawCustomers.map(c => ({
-      id:      c.id,
-      name:    c.firstName && c.lastName ? `${c.firstName} ${c.lastName}` : c.firstName || c.lastName || `Customer ${c.id}`,
-      phone:   c.phone?.[0]?.number || null,
-      email:   Array.isArray(c.email) ? c.email[0] : c.email || null,
-    }));
-
-    const vehicles = rawVehicles.map(v => ({
-      id: v.id, cid: v.customerId, year: v.year, make: v.make, model: v.model,
-      plate: v.licensePlate, vin: v.vin, color: v.color,
-    }));
-
-    const employees = (empData.content || []).map(e => ({
-      id: e.id, name: `${e.firstName} ${e.lastName}`.trim(),
-    }));
-
-    res.json({ ros, statuses, companies, vehicles, employees, syncedAt: new Date().toISOString() });
-
-  } catch (err) {
-    console.error('[Tekmetric] Shop floor error:', err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ── Disconnect Tekmetric ──────────────────────────────────────────────────────
+// ── POST /tekmetric/disconnect ────────────────────────────────────────────────
 router.post('/disconnect', async (req, res) => {
   try {
-    const { token, shopId, env } = await getTekConfig();
+    stopBackgroundSync();
 
-    // Tell Tekmetric to revoke our access to this shop
-    if (token && shopId) {
-      try {
-        const base = baseUrl(env);
-        await fetch(`${base}/shops/${shopId}/scope`, {
-          method: 'DELETE',
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        console.log('[Tekmetric] Shop scope revoked');
-      } catch (_) {
-        // Non-fatal — token may already be expired
-        console.warn('[Tekmetric] Could not revoke scope — clearing locally anyway');
-      }
-    }
+    tekCache.customerMap.clear();
+    tekCache.vehicleMap.clear();
+    tekCache.roMap.clear();
+    tekCache.employeeMap.clear();
+    tekCache.arRos            = [];
+    tekCache.lastCustomerSync = null;
+    tekCache.lastRoSync       = null;
+    tekCache.lastEmployeeSync = null;
+    tekCache.lastArSync       = null;
+    shopFloorCache = null; shopFloorCacheAt = 0;
+    arCache        = null; arCacheAt        = 0;
+    prevShopFloorStatuses.clear();
+    invalidateConfigCache();
 
-    // Erase the token and shop ID from your database
     await pool.query(
       `UPDATE config_settings SET value = '' WHERE key IN ('tekmetric_token', 'tekmetric_shop_id')`
     );

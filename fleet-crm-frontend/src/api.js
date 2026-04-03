@@ -54,7 +54,12 @@ export const api = {
   tekmetricSettings:     ()     => req('GET',  '/tekmetric/settings'),
   saveTekmetricSettings: (data) => req('POST', '/tekmetric/settings', data),
   connectTekmetric:      (data) => req('POST', '/tekmetric/connect',  data),
-  disconnectTekmetric:   ()     => req('POST', '/tekmetric/disconnect'),
+  disconnectTekmetric:           ()     => req('POST', '/tekmetric/disconnect'),
+  tekmetricArData:               ()     => req('GET',  '/tekmetric/ar'),
+  tekmetricArRefresh:            ()     => req('GET',  '/tekmetric/ar?refresh=1'),
+  tekmetricCallLog:              ()     => req('GET',  '/tekmetric/call-log'),
+  tekmetricNotificationSettings: ()     => req('GET',  '/tekmetric/notification-settings'),
+  saveTekmetricNotifSettings:    (data) => req('POST', '/tekmetric/notification-settings', data),
 
   // ── Follow-ups ──────────────────────────────────────
   followups:         ()             => req('GET',  '/followups'),

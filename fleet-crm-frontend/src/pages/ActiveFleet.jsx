@@ -11,6 +11,9 @@
  */
 
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+// AR flag color helpers (used by ARTab)
+const AR_FLAG_COLOR = { '90+': '#dc2626', '60+': '#f59e0b', '30+': '#d97706', 'current': '#16a34a' };
+const AR_FLAG_BG    = { '90+': '#fef2f2', '60+': '#fffbeb', '30+': '#fffbeb', 'current': '#f0fdf4' };
 import { useApp } from '../App.jsx';
 import { api } from '../api.js';
 
@@ -56,15 +59,17 @@ function IdleTag({ updated }) {
 }
 
 // ── SHOP FLOOR ────────────────────────────────────────────────────────────────
-function ShopFloor() {
+function ShopFloor({ pollSeconds = 30, notifSettings = {} }) {
+  const { showToast } = useApp();
   const [ros,       setRos]       = useState([]);
   const [statuses,  setStatuses]  = useState([]);
   const [companies, setCompanies] = useState([]);
   const [vehicles,  setVehicles]  = useState([]);
   const [employees, setEmployees] = useState([]);
-  const [countdown, setCountdown] = useState(60);
+  const [countdown, setCountdown] = useState(pollSeconds);
   const [lastPoll,  setLastPoll]  = useState(null);
   const [polling,   setPolling]   = useState(false);
+  const isFirstPoll = useRef(true);
 
   async function pollShopFloor() {
     setPolling(true);
@@ -76,6 +81,22 @@ function ShopFloor() {
       setVehicles(data.vehicles   || []);
       setEmployees(data.employees || []);
       setLastPoll(new Date());
+
+      // ── Status change notifications ───────────────────────────────────────
+      // Skip toasts on the very first poll — would fire for every open RO
+      if (!isFirstPoll.current && data.statusChanges?.length > 0) {
+        const rules = notifSettings.rules || [];
+        for (const change of data.statusChanges) {
+          if (change.type === 'new') {
+            const rule = rules.find(r => r.id === change.ro.sid);
+            if (rule?.onEnter) showToast(`🆕 New RO #${change.ro.rn} — ${change.ro.statusName}`);
+          } else if (change.type === 'changed') {
+            const rule = rules.find(r => r.id === change.ro.sid);
+            if (rule?.onEnter) showToast(`🔄 RO #${change.ro.rn} moved to ${change.ro.statusName}`);
+          }
+        }
+      }
+      isFirstPoll.current = false;
     } catch(e) {
       console.error('[ShopFloor]', e.message);
     } finally {
@@ -83,20 +104,22 @@ function ShopFloor() {
     }
   }
 
-  // Poll on mount and every 60 seconds
+  // Re-create interval whenever pollSeconds changes
   useEffect(() => {
+    setCountdown(pollSeconds);
+    isFirstPoll.current = true;
     pollShopFloor();
     const tick = setInterval(() => {
       setCountdown(prev => {
         if (prev <= 1) {
           pollShopFloor();
-          return 60;
+          return pollSeconds;
         }
         return prev - 1;
       });
     }, 1000);
     return () => clearInterval(tick);
-  }, []);
+  }, [pollSeconds]);
   const [sel,       setSel]       = useState(null);
   const [exp,       setExp]       = useState(null);
   const [dateField, setDateField] = useState('created');
@@ -703,8 +726,146 @@ function SalesTab({ ros, companies, vehicles, employees, statuses }) {
   );
 }
 
+// ── AR TAB ────────────────────────────────────────────────────────────────────
+function ARTab() {
+  const { showToast } = useApp();
+  const [summary,   setSummary]   = useState([]);
+  const [ros,       setRos]       = useState([]);
+  const [companies, setCompanies] = useState([]);
+  const [syncedAt,  setSyncedAt]  = useState(null);
+  const [loading,   setLoading]   = useState(false);
+  const [expanded,  setExpanded]  = useState(null);
+
+  async function load(refresh = false) {
+    setLoading(true);
+    try {
+      const data = refresh ? await api.tekmetricArRefresh() : await api.tekmetricArData();
+      setSummary(data.summary   || []);
+      setRos(data.ros           || []);
+      setCompanies(data.companies || []);
+      setSyncedAt(data.syncedAt || null);
+      if (refresh) showToast('AR data refreshed');
+    } catch (e) {
+      showToast('AR load failed: ' + e.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { load(); }, []);
+
+  const totalBalance = summary.reduce((s, c) => s + c.totalBalance, 0);
+  const over30       = summary.filter(c => ['30+','60+','90+'].includes(c.flag)).length;
+  const over90       = summary.filter(c => c.flag === '90+').length;
+
+  return (
+    <>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14,flexWrap:'wrap',gap:8}}>
+        <div style={{fontSize:11,color:'var(--gray-400)'}}>
+          {syncedAt ? `Last sync: ${new Date(syncedAt).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})} · Updates hourly` : 'Not yet synced'}
+          {loading && <span style={{marginLeft:8,color:'var(--gold-500)'}}>⏳ Loading…</span>}
+        </div>
+        <button onClick={() => load(true)} disabled={loading} className="btn btn-ghost btn-sm" style={{fontSize:11}}>
+          Refresh Now
+        </button>
+      </div>
+
+      <div className="stat-grid" style={{gridTemplateColumns:'repeat(4,1fr)',marginBottom:16}}>
+        {[
+          {l:'Total AR Balance', v:`$${(totalBalance/100).toLocaleString('en-US',{minimumFractionDigits:2})}`, c:'urgent'},
+          {l:'Accounts',         v:summary.length,  c:''},
+          {l:'Over 30 Days',     v:over30,           c:over30>0?'gold':''},
+          {l:'Over 90 Days',     v:over90,           c:over90>0?'urgent':''},
+        ].map(s=>(
+          <div key={s.l} className="stat-card">
+            <div className="stat-label">{s.l}</div>
+            <div className={`stat-value ${s.c}`}>{s.v}</div>
+          </div>
+        ))}
+      </div>
+
+      {summary.length === 0 && !loading && (
+        <div className="empty-state">
+          <div className="icon">✅</div>
+          <div className="title">No AR accounts</div>
+          <div className="desc">No open status-6 repair orders</div>
+        </div>
+      )}
+
+      <div style={{display:'flex',flexDirection:'column',gap:10}}>
+        {summary.map(entry => {
+          const isEx = expanded === entry.customer.id;
+          const fc   = AR_FLAG_COLOR[entry.flag];
+          const fb   = AR_FLAG_BG[entry.flag];
+          return (
+            <div key={entry.customer.id} className="table-card" style={{overflow:'hidden'}}>
+              <div
+                onClick={() => setExpanded(isEx ? null : entry.customer.id)}
+                style={{padding:'14px 18px',cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:10}}
+              >
+                <div>
+                  <div style={{fontWeight:700,fontSize:14,color:'var(--gray-900)'}}>{entry.customer.name}</div>
+                  <div style={{fontSize:11,color:'var(--gray-400)',marginTop:2}}>
+                    {entry.ros.length} open RO{entry.ros.length !== 1 ? 's' : ''} · oldest {entry.oldestDays} days
+                  </div>
+                </div>
+                <div style={{display:'flex',alignItems:'center',gap:12}}>
+                  <span style={{padding:'3px 10px',borderRadius:'var(--r-sm)',background:fb,color:fc,fontWeight:700,fontSize:11,border:`1px solid ${fc}33`}}>
+                    {entry.flag === 'current' ? 'Current' : `${entry.flag} days`}
+                  </span>
+                  <span style={{fontFamily:'var(--font-mono)',fontWeight:800,fontSize:15,color:fc}}>
+                    ${(entry.totalBalance/100).toLocaleString('en-US',{minimumFractionDigits:2})}
+                  </span>
+                  <span style={{fontSize:16,color:'var(--gray-300)'}}>{isEx ? '▲' : '▼'}</span>
+                </div>
+              </div>
+              {isEx && (
+                <div style={{borderTop:'1px solid var(--gray-100)'}}>
+                  <table style={{width:'100%',borderCollapse:'collapse'}}>
+                    <thead>
+                      <tr style={{background:'var(--gray-50)'}}>
+                        <th style={{padding:'8px 18px',textAlign:'left',fontSize:11,fontWeight:700,color:'var(--gray-500)',textTransform:'uppercase',letterSpacing:'.06em'}}>RO #</th>
+                        <th style={{padding:'8px 18px',textAlign:'left',fontSize:11,fontWeight:700,color:'var(--gray-500)',textTransform:'uppercase',letterSpacing:'.06em'}}>Created</th>
+                        <th style={{padding:'8px 18px',textAlign:'right',fontSize:11,fontWeight:700,color:'var(--gray-500)',textTransform:'uppercase',letterSpacing:'.06em'}}>Total</th>
+                        <th style={{padding:'8px 18px',textAlign:'right',fontSize:11,fontWeight:700,color:'var(--gray-500)',textTransform:'uppercase',letterSpacing:'.06em'}}>Paid</th>
+                        <th style={{padding:'8px 18px',textAlign:'right',fontSize:11,fontWeight:700,color:'var(--gray-500)',textTransform:'uppercase',letterSpacing:'.06em'}}>Balance</th>
+                        <th style={{padding:'8px 18px',textAlign:'right',fontSize:11,fontWeight:700,color:'var(--gray-500)',textTransform:'uppercase',letterSpacing:'.06em'}}>Days Out</th>
+                        <th style={{padding:'8px 6px'}}></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {entry.ros.map(ro => (
+                        <tr key={ro.id} style={{borderTop:'1px solid var(--gray-100)'}}>
+                          <td style={{padding:'10px 18px',fontFamily:'var(--font-mono)',fontWeight:700,color:'var(--navy-800)',fontSize:13}}>#{ro.rn}</td>
+                          <td style={{padding:'10px 18px',fontSize:12,color:'var(--gray-500)'}}>{ro.created ? new Date(ro.created).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—'}</td>
+                          <td style={{padding:'10px 18px',textAlign:'right',fontFamily:'var(--font-mono)',fontWeight:600}}>${(ro.total/100).toLocaleString('en-US',{minimumFractionDigits:2})}</td>
+                          <td style={{padding:'10px 18px',textAlign:'right',fontFamily:'var(--font-mono)',color:'var(--green-600)'}}>${(ro.paid/100).toLocaleString('en-US',{minimumFractionDigits:2})}</td>
+                          <td style={{padding:'10px 18px',textAlign:'right',fontFamily:'var(--font-mono)',fontWeight:700,color:ro.balance>0?'var(--red-500)':'var(--green-600)'}}>${(ro.balance/100).toLocaleString('en-US',{minimumFractionDigits:2})}</td>
+                          <td style={{padding:'10px 18px',textAlign:'right'}}>
+                            <span style={{fontFamily:'var(--font-mono)',fontWeight:700,fontSize:12,color:ro.daysOutstanding>90?'#dc2626':ro.daysOutstanding>60?'#f59e0b':ro.daysOutstanding>30?'#d97706':'var(--gray-500)'}}>
+                              {ro.daysOutstanding ?? '—'}d
+                            </span>
+                          </td>
+                          <td style={{padding:'10px 6px',paddingRight:18}}>
+                            <a href={`https://shop.tekmetric.com/repair-orders/${ro.id}`} target="_blank" rel="noreferrer"
+                              style={{color:'var(--blue-500)',fontSize:11,fontWeight:600,textDecoration:'none'}}>Open ↗</a>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
 // ── FLEET SETTINGS ────────────────────────────────────────────────────────────
-function FleetSettings({ oilInterval, setOilInterval, statuses }) {
+function FleetSettings({ oilInterval, setOilInterval, statuses, onSettingsChange }) {
   const { showToast } = useApp();
   const [clientId,        setClientId]        = useState('');
   const [clientSecret,    setClientSecret]    = useState('');
@@ -716,30 +877,51 @@ function FleetSettings({ oilInterval, setOilInterval, statuses }) {
   const [cfxEnabled,      setCfxEnabled]      = useState(false);
   const [bizStart,        setBizStart]        = useState(7);
   const [bizEnd,          setBizEnd]          = useState(19);
-  const [floorPollSecs,   setFloorPollSecs]   = useState(60);
+  const [floorPollSecs,   setFloorPollSecs]   = useState(30);
+  const [apiRateLimit,    setApiRateLimit]    = useState(300);
   const [settingsLoaded,  setSettingsLoaded]  = useState(false);
 
   useEffect(() => {
     api.tekmetricSettings().then(s => {
-      if (s.shopId)       setConnectedShopId(s.shopId);
-      if (s.connected)    setConnected(true);
-      if (s.env)          setEnv(s.env);
-      if (s.oilInterval)  setOilInterval(s.oilInterval);
-      if (s.carfaxKey)    setCfxKey(s.carfaxKey);
+      if (s.shopId)            setConnectedShopId(s.shopId);
+      if (s.connected)         setConnected(true);
+      if (s.env)               setEnv(s.env);
+      if (s.oilInterval)       setOilInterval(s.oilInterval);
+      if (s.carfaxKey)         setCfxKey(s.carfaxKey);
       setCfxEnabled(!!s.carfaxEnabled);
-      if (s.bizHoursStart != null) setBizStart(s.bizHoursStart);
-      if (s.bizHoursEnd   != null) setBizEnd(s.bizHoursEnd);
+      if (s.bizHoursStart   != null) setBizStart(s.bizHoursStart);
+      if (s.bizHoursEnd     != null) setBizEnd(s.bizHoursEnd);
       if (s.floorPollSeconds != null) setFloorPollSecs(s.floorPollSeconds);
+      if (s.apiRateLimit    != null) setApiRateLimit(s.apiRateLimit);
       setSettingsLoaded(true);
     }).catch(() => setSettingsLoaded(true));
   }, []);
-  const [contacts,   setContacts]   = useState([{id:1,name:'Owner',email:'',phone:'',sms:true,emailOn:true}]);
-  const [rules,      setRules]      = useState(statuses.map(s=>({...s,onEnter:s.id===2||s.id===5,onIdle:s.id===2||s.id===6,hours:s.id===6?48:24})));
-  const add = () => setContacts(c=>[...c,{id:Date.now(),name:'',email:'',phone:'',sms:true,emailOn:true}]);
-  const upd = (id,k,v) => setContacts(c=>c.map(x=>x.id===id?{...x,[k]:v}:x));
-  const del = id => setContacts(c=>c.filter(x=>x.id!==id));
-  const togR = (i,k) => setRules(r=>r.map((x,j)=>j===i?{...x,[k]:!x[k]}:x));
-  const setH = (i,v) => setRules(r=>r.map((x,j)=>j===i?{...x,hours:parseInt(v)||1}:x));
+
+  const [contacts, setContacts] = useState([{id:1,name:'Owner',email:'',phone:'',sms:true,emailOn:true}]);
+  const [rules,    setRules]    = useState([]);
+
+  // Load saved notification settings and merge with current statuses
+  useEffect(() => {
+    if (!statuses.length) return;
+    api.tekmetricNotificationSettings().then(saved => {
+      const savedRules = saved.rules || [];
+      setRules(statuses.map(s => {
+        const existing = savedRules.find(r => r.id === s.id);
+        return existing
+          ? { ...s, ...existing }
+          : { ...s, onEnter: s.id === 2, onIdle: false, hours: 24 };
+      }));
+      if (saved.contacts?.length) setContacts(saved.contacts);
+    }).catch(() => {
+      setRules(statuses.map(s => ({ ...s, onEnter: s.id === 2, onIdle: false, hours: 24 })));
+    });
+  }, [statuses.length]);
+
+  const add  = () => setContacts(c => [...c, {id:Date.now(),name:'',email:'',phone:'',sms:true,emailOn:true}]);
+  const upd  = (id,k,v) => setContacts(c => c.map(x => x.id===id ? {...x,[k]:v} : x));
+  const del  = id => setContacts(c => c.filter(x => x.id!==id));
+  const togR = (i,k) => setRules(r => r.map((x,j) => j===i ? {...x,[k]:!x[k]} : x));
+  const setH = (i,v) => setRules(r => r.map((x,j) => j===i ? {...x,hours:parseInt(v)||1} : x));
   const connect = async () => {
     if (!clientId.trim() || !clientSecret.trim()) {
       showToast('Enter both your Client ID and Client Secret first', 'error'); return;
@@ -758,13 +940,19 @@ function FleetSettings({ oilInterval, setOilInterval, statuses }) {
 
   const save = async () => {
     try {
-      await api.saveTekmetricSettings({
-        env, oilInterval,
-        carfaxKey: cfxKey, carfaxEnabled: cfxEnabled,
-        bizHoursStart: bizStart, bizHoursEnd: bizEnd,
-        floorPollSeconds: floorPollSecs,
-      });
+      await Promise.all([
+        api.saveTekmetricSettings({
+          env, oilInterval,
+          carfaxKey: cfxKey, carfaxEnabled: cfxEnabled,
+          bizHoursStart: bizStart, bizHoursEnd: bizEnd,
+          floorPollSeconds: floorPollSecs,
+          apiRateLimit,
+        }),
+        api.saveTekmetricNotifSettings({ rules, contacts }),
+      ]);
       showToast('Settings saved');
+      // Notify parent so ShopFloor gets fresh pollSeconds + notifSettings
+      if (onSettingsChange) onSettingsChange({ floorPollSeconds: floorPollSecs, rules, contacts });
     } catch(e) { showToast('Failed to save: ' + e.message, 'error'); }
   };
   return (
@@ -811,8 +999,20 @@ function FleetSettings({ oilInterval, setOilInterval, statuses }) {
               <option value="production">Production — your actual live shop</option>
             </select>
           </div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
+            <div className="form-group" style={{marginBottom:0}}>
+              <label className="form-label">Shop Floor Refresh (seconds)</label>
+              <input type="number" className="form-input" value={floorPollSecs} min={10} max={300}
+                onChange={e=>setFloorPollSecs(parseInt(e.target.value)||30)}/>
+            </div>
+            <div className="form-group" style={{marginBottom:0}}>
+              <label className="form-label">API Rate Limit (req/min, max 300)</label>
+              <input type="number" className="form-input" value={apiRateLimit} min={10} max={300}
+                onChange={e=>setApiRateLimit(Math.min(300,Math.max(10,parseInt(e.target.value)||300)))}/>
+            </div>
+          </div>
           <div style={{padding:'10px 14px',background:'var(--gray-50)',border:'1px solid var(--gray-200)',borderRadius:8,fontSize:12,color:'var(--gray-600)'}}>
-            🔄 <strong>Refresh behavior:</strong> Shop Floor updates every 60 seconds automatically. Vehicles, Sales, and Employees sync when you click <strong>Sync Now</strong> in the header.
+            🔄 <strong>Refresh behavior:</strong> Shop Floor polls every {floorPollSecs}s. Background sync runs automatically — fleet every 5 min, AR every 1 hr, employees every 30 min.
           </div>
 
           {/* Connect button lives here — always visible next to the credentials */}
@@ -949,6 +1149,7 @@ const INNER_TABS = [
   { id:'shopfloor', label:'🔧 Shop Floor' },
   { id:'vehicles',  label:'🚛 Vehicles'   },
   { id:'sales',     label:'💰 Sales'      },
+  { id:'ar',        label:'💳 AR'         },
   { id:'settings',  label:'⚙️ Settings'   },
 ];
 
@@ -966,7 +1167,8 @@ export default function ActiveFleet() {
   const [isDemo,          setIsDemo]          = useState(false);
   const [bizHoursStart,   setBizHoursStart]   = useState(7);
   const [bizHoursEnd,     setBizHoursEnd]     = useState(19);
-  const [floorPollSecs,   setFloorPollSecs]   = useState(60);
+  const [floorPollSecs,   setFloorPollSecs]   = useState(30);
+  const [notifSettings,   setNotifSettings]   = useState({});
 
 
   const [statuses,  setStatuses]  = useState([]);
@@ -976,14 +1178,16 @@ export default function ActiveFleet() {
   const [ros,       setRos]       = useState([]);
   const [carfax,    setCarfax]    = useState([]);
 
-  // Load saved settings on mount so biz hours + floor poll are respected
+  // Load saved settings + notification rules on mount
   useEffect(() => {
     api.tekmetricSettings().then(s => {
-      if (s.bizHoursStart != null) setBizHoursStart(s.bizHoursStart);
-      if (s.bizHoursEnd   != null) setBizHoursEnd(s.bizHoursEnd);
+      if (s.bizHoursStart    != null) setBizHoursStart(s.bizHoursStart);
+      if (s.bizHoursEnd      != null) setBizHoursEnd(s.bizHoursEnd);
       if (s.floorPollSeconds != null) setFloorPollSecs(s.floorPollSeconds);
-      if (s.oilInterval   != null) setOilInterval(s.oilInterval);
-      if (s.pollInterval != null) setPollMinutes(s.pollInterval);
+      if (s.oilInterval      != null) setOilInterval(s.oilInterval);
+    }).catch(() => {});
+    api.tekmetricNotificationSettings().then(ns => {
+      if (ns && Object.keys(ns).length) setNotifSettings(ns);
     }).catch(() => {});
   }, []);
   
@@ -1159,10 +1363,27 @@ export default function ActiveFleet() {
 
       {/* ── Tab content ── */}
       <div className="page-body">
-        {tab==='shopfloor' && <ShopFloor />}
-        {tab==='vehicles' && <VehiclesTab ros={ros} companies={companies} vehicles={vehicles} carfax={carfax} oilInterval={oilInterval} statuses={statuses}/>}
+        {tab==='shopfloor' && (
+          <ShopFloor
+            pollSeconds={floorPollSecs}
+            notifSettings={notifSettings}
+          />
+        )}
+        {tab==='vehicles'  && <VehiclesTab ros={ros} companies={companies} vehicles={vehicles} carfax={carfax} oilInterval={oilInterval} statuses={statuses}/>}
         {tab==='sales'     && <SalesTab ros={ros} companies={companies} vehicles={vehicles} employees={employees} statuses={statuses}/>}
-        {tab==='settings'  && <FleetSettings oilInterval={oilInterval} setOilInterval={setOilInterval} statuses={statuses}/>}
+        {tab==='ar'        && <ARTab />}
+        {tab==='settings'  && (
+          <FleetSettings
+            oilInterval={oilInterval}
+            setOilInterval={setOilInterval}
+            statuses={statuses}
+            onSettingsChange={({ floorPollSeconds, rules, contacts }) => {
+              if (floorPollSeconds != null) setFloorPollSecs(floorPollSeconds);
+              if (rules != null) setNotifSettings(prev => ({ ...prev, rules }));
+              if (contacts != null) setNotifSettings(prev => ({ ...prev, contacts }));
+            }}
+          />
+        )}
       </div>
     </>
   );
