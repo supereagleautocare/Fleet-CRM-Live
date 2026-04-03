@@ -385,7 +385,8 @@ router.get('/shop-floor', async (req, res) => {
     }
 
     const { token, shopId, env } = await getTekConfig();
-    if (!token || !shopId) return res.status(400).json({ error: 'Tekmetric not configured.' });
+    if (!token)   return res.status(400).json({ error: 'Tekmetric not configured — no token. Go to Active Fleet → Settings and click Connect.' });
+    if (!shopId)  return res.status(400).json({ error: 'Tekmetric not configured — Shop ID missing. Go to Active Fleet → Settings, enter your Shop ID, and click Save.' });
     const base = baseUrl(env);
 
     // Active ROs only — no AR (6), no deleted (7)
@@ -453,7 +454,8 @@ router.get('/shop-floor', async (req, res) => {
 router.get('/fleet-data', async (req, res) => {
   try {
     const { token, shopId, env } = await getTekConfig();
-    if (!token || !shopId) return res.status(400).json({ error: 'Tekmetric not configured.' });
+    if (!token)  return res.status(400).json({ error: 'Tekmetric not configured — no token. Go to Active Fleet → Settings and click Connect.' });
+    if (!shopId) return res.status(400).json({ error: 'Tekmetric not configured — Shop ID missing. Go to Active Fleet → Settings, enter your Shop ID, and click Save.' });
     const base         = baseUrl(env);
     const forceRefresh = req.query.full === '1';
     const cacheEmpty   = tekCache.customerMap.size === 0;

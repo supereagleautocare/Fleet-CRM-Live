@@ -879,11 +879,11 @@ function FleetSettings({ oilInterval, setOilInterval, statuses, onSettingsChange
   const [bizEnd,          setBizEnd]          = useState(19);
   const [floorPollSecs,   setFloorPollSecs]   = useState(30);
   const [apiRateLimit,    setApiRateLimit]    = useState(300);
+  const [manualShopId,    setManualShopId]    = useState('');
   const [settingsLoaded,  setSettingsLoaded]  = useState(false);
 
   useEffect(() => {
     api.tekmetricSettings().then(s => {
-      if (s.shopId)            setConnectedShopId(s.shopId);
       if (s.connected)         setConnected(true);
       if (s.env)               setEnv(s.env);
       if (s.oilInterval)       setOilInterval(s.oilInterval);
@@ -893,6 +893,10 @@ function FleetSettings({ oilInterval, setOilInterval, statuses, onSettingsChange
       if (s.bizHoursEnd     != null) setBizEnd(s.bizHoursEnd);
       if (s.floorPollSeconds != null) setFloorPollSecs(s.floorPollSeconds);
       if (s.apiRateLimit    != null) setApiRateLimit(s.apiRateLimit);
+      // Load shopId regardless — user can edit it manually if blank
+      const sid = s.shopId || '';
+      setConnectedShopId(sid);
+      setManualShopId(sid);
       setSettingsLoaded(true);
     }).catch(() => setSettingsLoaded(true));
   }, []);
@@ -930,10 +934,16 @@ function FleetSettings({ oilInterval, setOilInterval, statuses, onSettingsChange
     try {
       const result = await api.connectTekmetric({ clientId: clientId.trim(), clientSecret: clientSecret.trim(), env });
       setConnected(true);
-      setConnectedShopId(result.shopId);
+      const sid = result.shopId || '';
+      setConnectedShopId(sid);
+      setManualShopId(sid);
       setClientId('');
       setClientSecret('');
-      showToast(`✅ Connected to Tekmetric! Shop ID: ${result.shopId}`);
+      if (sid) {
+        showToast(`✅ Connected! Shop ID: ${sid}`);
+      } else {
+        showToast('Connected — but Shop ID was empty. Enter it manually below and click Save.', 'error');
+      }
     } catch(e) { showToast(e.message, 'error'); }
     finally { setConnecting(false); }
   };
@@ -943,6 +953,7 @@ function FleetSettings({ oilInterval, setOilInterval, statuses, onSettingsChange
       await Promise.all([
         api.saveTekmetricSettings({
           env, oilInterval,
+          shopId: manualShopId.trim() || undefined,
           carfaxKey: cfxKey, carfaxEnabled: cfxEnabled,
           bizHoursStart: bizStart, bizHoursEnd: bizEnd,
           floorPollSeconds: floorPollSecs,
@@ -961,13 +972,17 @@ function FleetSettings({ oilInterval, setOilInterval, statuses, onSettingsChange
         <div className="table-card" style={{padding:18}}>
           <div style={{fontWeight:700,fontSize:13,color:'var(--gray-800)',marginBottom:14}}>🔌 Tekmetric Connection</div>
 
-          {connected && connectedShopId ? (
+          {connected ? (
             <div style={{padding:'12px 14px',background:'#f0fdf4',border:'1.5px solid #bbf7d0',borderRadius:8,marginBottom:14,display:'flex',alignItems:'center',justifyContent:'space-between',gap:10}}>
               <div>
-                <div style={{fontWeight:700,fontSize:13,color:'#15803d'}}>✅ Connected to Tekmetric</div>
-                <div style={{fontSize:11,color:'#166534',marginTop:2}}>Shop ID: <strong>{connectedShopId}</strong> · {env === 'sandbox' ? 'Sandbox (test)' : 'Production (live)'}</div>
+                <div style={{fontWeight:700,fontSize:13,color:'#15803d'}}>✅ Token saved</div>
+                <div style={{fontSize:11,color:'#166534',marginTop:2}}>
+                  {connectedShopId ? <>Shop ID: <strong>{connectedShopId}</strong></> : <span style={{color:'#dc2626',fontWeight:700}}>⚠ Shop ID missing — enter it below</span>}
+                  {' · '}{env === 'sandbox' ? 'Sandbox (test)' : 'Production (live)'}
+                </div>
               </div>
-              <button type="button" className="btn btn-ghost btn-sm" style={{color:'#dc2626',border:'1px solid #fca5a5',flexShrink:0}} onClick={() => api.disconnectTekmetric().then(() => { setConnected(false); setConnectedShopId(''); }).catch(e => showToast(e.message, 'error'))}>
+              <button type="button" className="btn btn-ghost btn-sm" style={{color:'#dc2626',border:'1px solid #fca5a5',flexShrink:0}}
+                onClick={() => api.disconnectTekmetric().then(() => { setConnected(false); setConnectedShopId(''); setManualShopId(''); }).catch(e => showToast(e.message, 'error'))}>
                 Disconnect
               </button>
             </div>
@@ -992,12 +1007,19 @@ function FleetSettings({ oilInterval, setOilInterval, statuses, onSettingsChange
               <input type="password" className="form-input" value={clientSecret} onChange={e=>setClientSecret(e.target.value)} placeholder="Your Tekmetric Client Secret" autoComplete="new-password"/>
             </div>
           </div>
-          <div className="form-group">
-            <label className="form-label">Environment</label>
-            <select className="form-select" value={env} onChange={e=>setEnv(e.target.value)}>
-              <option value="sandbox">Sandbox — test environment, safe to experiment</option>
-              <option value="production">Production — your actual live shop</option>
-            </select>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+            <div className="form-group">
+              <label className="form-label">Environment</label>
+              <select className="form-select" value={env} onChange={e=>setEnv(e.target.value)}>
+                <option value="sandbox">Sandbox — test environment, safe to experiment</option>
+                <option value="production">Production — your actual live shop</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Shop ID <span style={{fontWeight:400,color:'var(--gray-400)'}}>(auto-filled on connect, or enter manually)</span></label>
+              <input type="text" className="form-input" value={manualShopId} onChange={e=>{ setManualShopId(e.target.value); setConnectedShopId(e.target.value); }}
+                placeholder="e.g. 12345"/>
+            </div>
           </div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
             <div className="form-group" style={{marginBottom:0}}>
