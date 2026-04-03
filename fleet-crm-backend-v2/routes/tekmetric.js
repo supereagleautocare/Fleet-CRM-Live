@@ -767,7 +767,7 @@ try {
 }
 
 if (!shopId) {
-  throw new Error('Connected to Tekmetric, but could not determine a Shop ID from /shops or token scope.');
+  console.warn('[Tekmetric /connect] No Shop ID found from /shops or token scope. User must enter it manually in Settings.');
 }
 
     await pool.query(
@@ -804,7 +804,14 @@ if (!shopId) {
 
     startBackgroundSync();
 
-    res.json({ ok: true, shopId, message: `Connected! Shop ID: ${shopId}` });
+    res.json({
+     ok: true,
+     shopId,
+     needsManualShopId: !shopId,
+     message: shopId
+      ? `Connected! Shop ID: ${shopId}`
+      : 'Connected, but Shop ID could not be auto-detected. Enter it manually in Settings and click Save.',
+   });
   } catch (err) {
     console.error('[Tekmetric /connect]', err.message);
     res.status(500).json({ error: 'Connection failed: ' + err.message });
