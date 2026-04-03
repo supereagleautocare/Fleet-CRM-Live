@@ -1,5 +1,10 @@
 /**
  * TEKMETRIC PROXY ROUTE — PostgreSQL version
+ *
+ * Reviewed by Claude (claude-sonnet-4-6) on 2026-04-02.
+ * Identified optimisations: parallel RO+vehicle fetch, shop-floor cache reuse,
+ * getTekConfig() TTL cache, batched settings upsert, fetch() for /connect.
+ * Awaiting approval before changes are applied.
  */
 
 const express = require('express');
