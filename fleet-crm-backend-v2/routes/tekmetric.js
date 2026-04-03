@@ -721,30 +721,54 @@ router.post('/connect', async (req, res) => {
     });
 
     const accessToken = tokenData.access_token;
+if (!accessToken) {
+  throw new Error('Tekmetric did not return an access token.');
+}
 
-    // Try scope first, then auto-discover via /shops endpoint
-    let shopId = (tokenData.scope || '').trim().split(' ').filter(Boolean)[0] || '';
+// Do NOT trust scope alone. Prefer /shops.
+let shopId = '';
+const base2 = env === 'sandbox'
+  ? 'https://sandbox.tekmetric.com/api/v1'
+  : 'https://shop.tekmetric.com/api/v1';
 
-    if (!shopId) {
-      try {
-        const base2 = env === 'sandbox' ? 'https://sandbox.tekmetric.com/api/v1' : 'https://shop.tekmetric.com/api/v1';
-        // /shops returns a plain array — no pagination params
-        const shopsRes = await fetch(`${base2}/shops`, {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        });
-        const shopsText = await shopsRes.text();
-        console.log(`[Tekmetric /connect] GET /shops → ${shopsRes.status}: ${shopsText.slice(0, 300)}`);
-        if (shopsRes.ok) {
-          const shopsData = JSON.parse(shopsText);
-          // Response is a plain array e.g. [{ id: 760, name: "Super Eagle", ... }]
-          const shops = Array.isArray(shopsData) ? shopsData : (shopsData.content || []);
-          if (shops[0]?.id) shopId = String(shops[0].id);
-        }
-        console.log(`[Tekmetric /connect] Discovered shop ID: ${shopId || 'none'}`);
-      } catch (e) {
-        console.warn('[Tekmetric /connect] /shops error:', e.message);
-      }
-    }
+try {
+  const shopsRes = await fetch(`${base2}/shops`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  const shopsText = await shopsRes.text();
+  console.log(`[Tekmetric /connect] GET /shops → ${shopsRes.status}: ${shopsText.slice(0, 300)}`);
+
+  if (!shopsRes.ok) {
+    throw new Error(`/shops failed (${shopsRes.status})`);
+  }
+
+  const shopsData = JSON.parse(shopsText);
+  const shops = Array.isArray(shopsData) ? shopsData : (shopsData.content || []);
+
+  if (!shops.length || !shops[0]?.id) {
+    throw new Error('No shops were returned for this token.');
+  }
+
+  shopId = String(shops[0].id);
+  console.log(`[Tekmetric /connect] Discovered shop ID from /shops: ${shopId}`);
+} catch (e) {
+  console.warn('[Tekmetric /connect] /shops error:', e.message);
+
+  const scopeIds = String(tokenData.scope || '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (scopeIds.length) {
+    shopId = String(scopeIds[0]);
+    console.log(`[Tekmetric /connect] Falling back to scope shop ID: ${shopId}`);
+  }
+}
+
+if (!shopId) {
+  throw new Error('Connected to Tekmetric, but could not determine a Shop ID from /shops or token scope.');
+}
 
     await pool.query(
       `INSERT INTO config_settings (key,value,label) VALUES ($1,$2,$3) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value`,
@@ -804,12 +828,13 @@ router.post('/disconnect', async (req, res) => {
     shopFloorCache = null; shopFloorCacheAt = 0;
     arCache        = null; arCacheAt        = 0;
     prevShopFloorStatuses.clear();
-    invalidateConfigCache();
 
     await pool.query(
       `UPDATE config_settings SET value = '' WHERE key IN ('tekmetric_token', 'tekmetric_shop_id')`
     );
-
+    
+    invalidateConfigCache();
+    
     res.json({ ok: true });
   } catch (err) {
     console.error('[Tekmetric /disconnect]', err.message);
