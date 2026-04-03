@@ -776,7 +776,7 @@ router.post('/connect', async (req, res) => {
 
     startBackgroundSync();
 
-    res.json({ ok: true, shopId, shopIds, message: `Connected! Shop ID: ${shopId}` });
+    res.json({ ok: true, shopId, message: `Connected! Shop ID: ${shopId}` });
   } catch (err) {
     console.error('[Tekmetric /connect]', err.message);
     res.status(500).json({ error: 'Connection failed: ' + err.message });
