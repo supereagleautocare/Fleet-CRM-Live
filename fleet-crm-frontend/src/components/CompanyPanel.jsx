@@ -26,6 +26,9 @@ function distMiles(a, b) {
 }
 
 // ── Fetch actual route distance + time from OSRM ─────────────────────────────
+// Session cache — no re-fetch when reopening the same company
+const _routeCache = new Map();
+
 async function fetchRouteFromOSRM(from, to) {
   try {
     const url = `https://router.project-osrm.org/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}?overview=false`;
@@ -145,13 +148,20 @@ export default function CompanyPanel({ row, sourceType, contactTypes, onComplete
     if (myPos && data?.compLat) {
       const d = distMiles(myPos, { lat: data.compLat, lng: data.compLng });
       setDist(d);
-      // Fetch actual route distance/time from OSRM
+      const cacheKey = `${myPos.lat.toFixed(4)},${myPos.lng.toFixed(4)}->${data.compLat.toFixed(4)},${data.compLng.toFixed(4)}`;
+      if (_routeCache.has(cacheKey)) {
+        const cached = _routeCache.get(cacheKey);
+        setRouteDist(cached.miles);
+        setRouteTime(cached.minutes);
+        return;
+      }
       setRouteLoading(true);
       setRouteDist(null);
       setRouteTime(null);
       fetchRouteFromOSRM(myPos, { lat: data.compLat, lng: data.compLng })
         .then(result => {
           if (result) {
+            _routeCache.set(cacheKey, result);
             setRouteDist(result.miles);
             setRouteTime(result.minutes);
           }
@@ -246,6 +256,12 @@ export default function CompanyPanel({ row, sourceType, contactTypes, onComplete
             </div>
             {data?.full?.address && (
               <div style={{ fontSize:11, color:'rgba(255,255,255,.35)', marginTop:6 }}>📍 {data.full.address}{data.full.city ? ', '+data.full.city : ''}</div>
+            )}
+            {displayMiles && (
+              <div style={{ marginTop:6, display:'flex', gap:10, fontSize:11 }}>
+                <span style={{ color:'var(--gold-400)', fontWeight:700 }}>📏 {displayMiles.toFixed(1)} mi from shop</span>
+                {displayTime && <span style={{ color:'rgba(255,255,255,.45)' }}>🚗 {displayTime}</span>}
+              </div>
             )}
             {displayMiles && (
               <div style={{ marginTop:6, display:'flex', gap:10, fontSize:11 }}>
