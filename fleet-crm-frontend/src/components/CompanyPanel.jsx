@@ -33,7 +33,7 @@ const MAPBOX_TOKEN = 'pk.eyJ1Ijoic3VwZXJlYWdsZSIsImEiOiJjbW5razA0eG0wenhiMnNxNGM
 
 async function fetchRouteFromOSRM(from, to) {
   try {
-    const url = `https://api.mapbox.com/directions/v5/mapbox/driving-traffic/${from.lng},${from.lat};${to.lng},${to.lat}?overview=false&access_token=${MAPBOX_TOKEN}`;
+    const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${from.lng},${from.lat};${to.lng},${to.lat}?overview=false&access_token=${MAPBOX_TOKEN}`;
     const r = await fetch(url);
     if (!r.ok) return null;
     const d = await r.json();
