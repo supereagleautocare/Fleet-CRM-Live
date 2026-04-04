@@ -413,7 +413,7 @@ export default function CompanyPanel({ row, sourceType, contactTypes, onComplete
               ) : null}
 
               <button type="button"
-                onClick={() => window.open(`${window.location.origin}/script-popup`
+                onClick={() => window.open(`${window.location.origin}/script-popup`, 'fleet-crm-script', 'width=1100,height=820,menubar=no,toolbar=no,scrollbars=yes')}
                 style={{ padding:'5px 13px', borderRadius:'var(--r-md)', border:'1px solid #fde68a', background:'#fffbeb', color:'#92400e', cursor:'pointer', fontSize:12, fontWeight:700 }}>
                 📋 Script
               </button>
