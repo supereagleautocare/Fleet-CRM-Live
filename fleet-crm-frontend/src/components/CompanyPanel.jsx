@@ -259,12 +259,6 @@ export default function CompanyPanel({ row, sourceType, contactTypes, onComplete
             )}
             {displayMiles && (
               <div style={{ marginTop:6, display:'flex', gap:10, fontSize:11 }}>
-                <span style={{ color:'var(--gold-400)', fontWeight:700 }}>📏 {displayMiles.toFixed(1)} mi from shop</span>
-                {displayTime && <span style={{ color:'rgba(255,255,255,.45)' }}>🚗 {displayTime}</span>}
-              </div>
-            )}
-            {displayMiles && (
-              <div style={{ marginTop:6, display:'flex', gap:10, fontSize:11 }}>
                 <span style={{ color:'var(--gold-400)', fontWeight:700 }}>
                   📏 {displayMiles.toFixed(1)} mi {myPos?.isShop ? 'from shop' : 'away'}
                   {isActualRoute && <span style={{ fontSize:9, marginLeft:3, opacity:.6 }}>route</span>}
@@ -387,47 +381,7 @@ export default function CompanyPanel({ row, sourceType, contactTypes, onComplete
               </div>
             </div>
             <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-
-              {/* Route distance + drive time badge */}
-              {displayMiles ? (
-                <div style={{
-                  display:'flex', alignItems:'center', gap:0,
-                  background:'var(--navy-950)', borderRadius:10, overflow:'hidden',
-                  border:'1px solid rgba(255,255,255,.08)',
-                  boxShadow:'0 2px 8px rgba(6,13,31,.25)',
-                }}>
-                  <div style={{ padding:'7px 12px', borderRight:'1px solid rgba(255,255,255,.08)', textAlign:'center', minWidth:64 }}>
-                    <div style={{ fontSize:16, fontWeight:900, color:'var(--gold-400)', lineHeight:1 }}>
-                      {displayMiles.toFixed(1)}
-                    </div>
-                    <div style={{ fontSize:9, fontWeight:700, color:'rgba(255,255,255,.35)', textTransform:'uppercase', letterSpacing:'.07em', marginTop:2 }}>
-                      {isActualRoute ? 'route mi' : 'est mi'}
-                    </div>
-                  </div>
-                  {displayTime && (
-                    <div style={{ padding:'7px 12px', textAlign:'center', minWidth:58 }}>
-                      {routeLoading && !routeTime ? (
-                        <div style={{ display:'flex', alignItems:'center', justifyContent:'center' }}>
-                          <div style={{ width:10, height:10, border:'2px solid rgba(255,255,255,.15)', borderTopColor:'var(--gold-400)', borderRadius:'50%', animation:'spin .7s linear infinite' }}/>
-                        </div>
-                      ) : (
-                        <>
-                          <div style={{ fontSize:14, fontWeight:800, color:'white', lineHeight:1 }}>{displayTime}</div>
-                          <div style={{ fontSize:9, fontWeight:700, color:'rgba(255,255,255,.35)', textTransform:'uppercase', letterSpacing:'.07em', marginTop:2 }}>drive</div>
-                        </>
-                      )}
-                    </div>
-                  )}
-                  <div style={{ padding:'0 8px', borderLeft:'1px solid rgba(255,255,255,.06)', fontSize:9, color: isActualRoute ? '#86efac' : 'rgba(255,255,255,.2)', fontWeight:700 }}>
-                    {isActualRoute ? '🗺 GPS' : '📐 est'}
-                  </div>
-                </div>
-              ) : myPos && !displayMiles ? (
-                <div style={{ padding:'7px 14px', background:'var(--gray-100)', borderRadius:8, fontSize:11, color:'var(--gray-400)' }}>
-                  📏 Locating…
-                </div>
-              ) : null}
-
+              
               <button type="button"
                 onClick={() => window.open(`${window.location.origin}/script-popup`, 'fleet-crm-script', 'width=1100,height=820,menubar=no,toolbar=no,scrollbars=yes')}
                 style={{ padding:'5px 13px', borderRadius:'var(--r-md)', border:'1px solid #fde68a', background:'#fffbeb', color:'#92400e', cursor:'pointer', fontSize:12, fontWeight:700 }}>
