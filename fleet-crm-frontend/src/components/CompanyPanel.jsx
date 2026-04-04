@@ -25,6 +25,29 @@ function distMiles(a, b) {
   return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
 }
 
+// ── Fetch actual route distance + time from OSRM ─────────────────────────────
+async function fetchRouteFromOSRM(from, to) {
+  try {
+    const url = `https://router.project-osrm.org/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}?overview=false`;
+    const r = await fetch(url, { headers: { 'User-Agent': 'SuperEagleFleetCRM/1.0' } });
+    if (!r.ok) return null;
+    const d = await r.json();
+    if (d.routes?.[0]) {
+      return {
+        miles: d.routes[0].distance / 1609.34,
+        minutes: Math.round(d.routes[0].duration / 60),
+      };
+    }
+  } catch(_) {}
+  return null;
+}
+
+function fmtDrive(minutes) {
+  if (!minutes && minutes !== 0) return null;
+  if (minutes < 60) return `${minutes} min`;
+  return `${Math.floor(minutes / 60)}h ${minutes % 60 > 0 ? minutes % 60 + 'm' : ''}`.trim();
+}
+
 async function geocode(address) {
   try {
     const r = await fetch(
@@ -41,7 +64,10 @@ export default function CompanyPanel({ row, sourceType, contactTypes, onComplete
   const [data, setData]   = useState(null);
   const [busy, setBusy]   = useState(true);
   const [myPos, setMyPos] = useState(null);
-  const [dist, setDist]   = useState(null);   // miles
+  const [dist, setDist]         = useState(null);   // straight-line miles (fallback)
+  const [routeDist, setRouteDist] = useState(null); // actual route miles via OSRM
+  const [routeTime, setRouteTime] = useState(null); // actual drive minutes via OSRM
+  const [routeLoading, setRouteLoading] = useState(false);
   const [form, setForm]   = useState({
     contact_name: '', role_title: '',
     referral_name: '', referral_role: '', referral_phone: '', referral_email: '',
@@ -114,11 +140,23 @@ export default function CompanyPanel({ row, sourceType, contactTypes, onComplete
       .finally(() => setBusy(false));
   }, [row.id]);
 
-  // Calculate distance once we have both positions
+  /// Calculate distance once we have both positions
   useEffect(() => {
     if (myPos && data?.compLat) {
       const d = distMiles(myPos, { lat: data.compLat, lng: data.compLng });
       setDist(d);
+      // Fetch actual route distance/time from OSRM
+      setRouteLoading(true);
+      setRouteDist(null);
+      setRouteTime(null);
+      fetchRouteFromOSRM(myPos, { lat: data.compLat, lng: data.compLng })
+        .then(result => {
+          if (result) {
+            setRouteDist(result.miles);
+            setRouteTime(result.minutes);
+          }
+        })
+        .finally(() => setRouteLoading(false));
     }
   }, [myPos, data?.compLat]);
 
@@ -168,11 +206,16 @@ export default function CompanyPanel({ row, sourceType, contactTypes, onComplete
   const STAGE_COLORS = { new:'#64748b', call:'#1e40af', mail:'#065f46', email:'#6b21a8', visit:'#92400e', dead:'#6b7280' };
   const stage = data?.full?.pipeline_stage;
 
-  // Drive time estimate: assume 25 mph average urban speed
-  const driveMin = dist ? Math.round((dist / 25) * 60) : null;
-  const driveStr = driveMin
-    ? driveMin < 60 ? `~${driveMin} min` : `~${Math.floor(driveMin/60)}h ${driveMin%60}m`
+  // Drive time from straight-line as fallback (25mph avg)
+  const straightMin = dist ? Math.round((dist / 25) * 60) : null;
+  const straightStr = straightMin
+    ? straightMin < 60 ? `~${straightMin} min` : `~${Math.floor(straightMin/60)}h ${straightMin%60}m`
     : null;
+
+  // Use actual route when available, otherwise show straight-line estimate
+  const displayMiles = routeDist ?? dist;
+  const displayTime  = routeTime != null ? fmtDrive(routeTime) : straightStr;
+  const isActualRoute = routeDist != null;
 
   return (
     <div className="call-modal-overlay" onClick={e => { if (e.target === e.currentTarget) handleClose(); }}>
@@ -204,11 +247,13 @@ export default function CompanyPanel({ row, sourceType, contactTypes, onComplete
             {data?.full?.address && (
               <div style={{ fontSize:11, color:'rgba(255,255,255,.35)', marginTop:6 }}>📍 {data.full.address}{data.full.city ? ', '+data.full.city : ''}</div>
             )}
-            {/* Distance + drive time */}
-            {dist && (
+            {displayMiles && (
               <div style={{ marginTop:6, display:'flex', gap:10, fontSize:11 }}>
-                <span style={{ color:'var(--gold-400)', fontWeight:700 }}>📏 {dist.toFixed(1)} mi {myPos?.isShop ? 'from shop' : 'away'}</span>
-                <span style={{ color:'rgba(255,255,255,.4)' }}>🚗 {driveStr}</span>
+                <span style={{ color:'var(--gold-400)', fontWeight:700 }}>
+                  📏 {displayMiles.toFixed(1)} mi {myPos?.isShop ? 'from shop' : 'away'}
+                  {isActualRoute && <span style={{ fontSize:9, marginLeft:3, opacity:.6 }}>route</span>}
+                </span>
+                {displayTime && <span style={{ color:'rgba(255,255,255,.4)' }}>🚗 {displayTime}</span>}
               </div>
             )}
             {/* Multi-location badge */}
@@ -323,12 +368,52 @@ export default function CompanyPanel({ row, sourceType, contactTypes, onComplete
               <div style={{ fontSize:15, fontWeight:700, color:'var(--gray-900)' }}>Log Call — {companyName}</div>
               <div style={{ fontSize:11, color:'var(--gray-400)', marginTop:2 }}>
                 Fill in what happened and what's next
-                {dist && <span style={{ marginLeft:8, color:'var(--navy-700)', fontWeight:600 }}>📏 {dist.toFixed(1)} mi {myPos?.isShop ? 'from shop' : ''} · 🚗 ~{driveStr}</span>}
               </div>
             </div>
             <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+
+              {/* Route distance + drive time badge */}
+              {displayMiles ? (
+                <div style={{
+                  display:'flex', alignItems:'center', gap:0,
+                  background:'var(--navy-950)', borderRadius:10, overflow:'hidden',
+                  border:'1px solid rgba(255,255,255,.08)',
+                  boxShadow:'0 2px 8px rgba(6,13,31,.25)',
+                }}>
+                  <div style={{ padding:'7px 12px', borderRight:'1px solid rgba(255,255,255,.08)', textAlign:'center', minWidth:64 }}>
+                    <div style={{ fontSize:16, fontWeight:900, color:'var(--gold-400)', lineHeight:1 }}>
+                      {displayMiles.toFixed(1)}
+                    </div>
+                    <div style={{ fontSize:9, fontWeight:700, color:'rgba(255,255,255,.35)', textTransform:'uppercase', letterSpacing:'.07em', marginTop:2 }}>
+                      {isActualRoute ? 'route mi' : 'est mi'}
+                    </div>
+                  </div>
+                  {displayTime && (
+                    <div style={{ padding:'7px 12px', textAlign:'center', minWidth:58 }}>
+                      {routeLoading && !routeTime ? (
+                        <div style={{ display:'flex', alignItems:'center', justifyContent:'center' }}>
+                          <div style={{ width:10, height:10, border:'2px solid rgba(255,255,255,.15)', borderTopColor:'var(--gold-400)', borderRadius:'50%', animation:'spin .7s linear infinite' }}/>
+                        </div>
+                      ) : (
+                        <>
+                          <div style={{ fontSize:14, fontWeight:800, color:'white', lineHeight:1 }}>{displayTime}</div>
+                          <div style={{ fontSize:9, fontWeight:700, color:'rgba(255,255,255,.35)', textTransform:'uppercase', letterSpacing:'.07em', marginTop:2 }}>drive</div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                  <div style={{ padding:'0 8px', borderLeft:'1px solid rgba(255,255,255,.06)', fontSize:9, color: isActualRoute ? '#86efac' : 'rgba(255,255,255,.2)', fontWeight:700 }}>
+                    {isActualRoute ? '🗺 GPS' : '📐 est'}
+                  </div>
+                </div>
+              ) : myPos && !displayMiles ? (
+                <div style={{ padding:'7px 14px', background:'var(--gray-100)', borderRadius:8, fontSize:11, color:'var(--gray-400)' }}>
+                  📏 Locating…
+                </div>
+              ) : null}
+
               <button type="button"
-                onClick={() => window.open(`${window.location.origin}/script-popup`,'fleet-crm-script','width=1100,height=820,menubar=no,toolbar=no,scrollbars=yes')}
+                onClick={() => window.open(`${window.location.origin}/script-popup`
                 style={{ padding:'5px 13px', borderRadius:'var(--r-md)', border:'1px solid #fde68a', background:'#fffbeb', color:'#92400e', cursor:'pointer', fontSize:12, fontWeight:700 }}>
                 📋 Script
               </button>
