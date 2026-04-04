@@ -29,10 +29,12 @@ function distMiles(a, b) {
 // Session cache — no re-fetch when reopening the same company
 const _routeCache = new Map();
 
+const MAPBOX_TOKEN = 'pk.eyJ1Ijoic3VwZXJlYWdsZSIsImEiOiJjbW5razA0eG0wenhiMnNxNGM2N3J5Nm5rIn0.N5S0ONYavIOfHa_p3sMF7Q';
+
 async function fetchRouteFromOSRM(from, to) {
   try {
-    const url = `https://router.project-osrm.org/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}?overview=false`;
-    const r = await fetch(url, { headers: { 'User-Agent': 'SuperEagleFleetCRM/1.0' } });
+    const url = `https://api.mapbox.com/directions/v5/mapbox/driving-traffic/${from.lng},${from.lat};${to.lng},${to.lat}?overview=false&access_token=${MAPBOX_TOKEN}`;
+    const r = await fetch(url);
     if (!r.ok) return null;
     const d = await r.json();
     if (d.routes?.[0]) {
