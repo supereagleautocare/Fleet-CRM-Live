@@ -134,7 +134,7 @@ async function appendCallLog(data) {
     data.referral_phone    || null,
     data.referral_email    || null,
     data.log_category      || 'call',
-    data.counts_as_attempt !== undefined ? data.counts_as_attempt : 1,
+    countsAsAttempt,
   ]);
   return result.rows[0];
 }
