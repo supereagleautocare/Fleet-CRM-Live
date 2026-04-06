@@ -78,6 +78,16 @@ function today() {
 
 // ─── Append a row to call_log ─────────────────────────────────────────────────
 async function appendCallLog(data) {
+  // Auto-lookup counts_as_attempt from config_rules if not explicitly set
+  let countsAsAttempt = data.counts_as_attempt !== undefined ? data.counts_as_attempt : 1;
+  if (data.counts_as_attempt === undefined && data.contact_type && data.action_type === 'Call') {
+    const rule = await queryOne(
+      'SELECT counts_as_attempt FROM config_rules WHERE contact_type = $1 AND action_type = $2 AND enabled = 1 LIMIT 1',
+      [data.contact_type, 'call']
+    );
+    if (rule !== null) countsAsAttempt = rule.counts_as_attempt;
+  }
+
   const result = await pool.query(`
     INSERT INTO call_log (
       log_type, entity_id, company_id_str, entity_name, phone,
