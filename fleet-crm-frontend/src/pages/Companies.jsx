@@ -361,7 +361,10 @@ export default function Companies() {
   }
 
   useEffect(() => { load(); }, [search, filterStatus, filterStage, filterContacted]);
-
+  useEffect(() => {
+    if (search) setSelected(null);
+  }, [search]);
+  
   async function selectCompany(c) {
     setSelected(c);
     setShowAddContact(false);
