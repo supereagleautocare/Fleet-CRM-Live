@@ -9,6 +9,25 @@ const { requireAuth } = require('../middleware/auth');
 const router = express.Router();
 router.use(requireAuth);
 
+router.post('/fix-counts-as-attempt', async (req, res) => {
+  try {
+    const { rows: rules } = await pool.query(
+      "SELECT contact_type, counts_as_attempt FROM config_rules WHERE action_type = 'call'"
+    );
+    let fixed = 0;
+    for (const rule of rules) {
+      const { rowCount } = await pool.query(
+        `UPDATE call_log SET counts_as_attempt = $1
+         WHERE contact_type = $2 AND action_type = 'Call'
+           AND counts_as_attempt != $1`,
+        [rule.counts_as_attempt, rule.contact_type]
+      );
+      fixed += rowCount;
+    }
+    res.json({ fixed });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.get('/', async (req, res) => {
   try {
     const today        = new Date().toISOString().split('T')[0];
