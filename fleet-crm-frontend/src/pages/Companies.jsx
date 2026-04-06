@@ -362,7 +362,10 @@ export default function Companies() {
 
   useEffect(() => { load(); }, [search, filterStatus, filterStage, filterContacted]);
   useEffect(() => {
-    if (search) setSelected(null);
+    if (search) {
+       setSelected(null);
+       navigate('/companies'); // clears the ?company= param from the URL too
+     }
   }, [search]);
   
   async function selectCompany(c) {
