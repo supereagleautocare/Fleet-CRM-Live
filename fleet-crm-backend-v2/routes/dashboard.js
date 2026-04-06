@@ -16,53 +16,68 @@ router.get('/', async (req, res) => {
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
     const [
-      followupResult,
-      visitResult,
-      queueResult,
-      callsTodayResult,
-      callsWeekResult,
-      callsMonthResult,
-      contactsMonthResult,
-      contactsTodayResult,
-      contactsWeekResult,
-      byTypeResult,
-      byOutcomeResult,
-      byRepResult,
-      totalsResult,
-    ] = await Promise.all([
-      pool.query(`
-        SELECT
-          COUNT(*) as total,
-          SUM(CASE WHEN due_date < current_date THEN 1 ELSE 0 END) as overdue,
-          SUM(CASE WHEN due_date = current_date THEN 1 ELSE 0 END) as due_today,
-          SUM(CASE WHEN source_type = 'company' THEN 1 ELSE 0 END) as company_followups
-        FROM follow_ups WHERE due_date <= current_date
-      `),
-      pool.query(`
-        SELECT
-          COUNT(*) as total,
-          SUM(CASE WHEN scheduled_date < current_date THEN 1 ELSE 0 END) as overdue,
-          SUM(CASE WHEN scheduled_date = current_date THEN 1 ELSE 0 END) as due_today
-        FROM visit_queue WHERE scheduled_date <= current_date
-      `),
-      pool.query(`SELECT COUNT(*) as total_in_queue FROM calling_queue WHERE queue_type = 'company'`),
-      pool.query(`SELECT COUNT(*) as cnt FROM call_log WHERE logged_at::date = current_date AND action_type = 'Call'`),
-      pool.query(`SELECT COUNT(*) as cnt FROM call_log WHERE logged_at::date >= $1 AND action_type = 'Call'`, [sevenDaysAgo]),
-      pool.query(`SELECT COUNT(*) as cnt FROM call_log WHERE logged_at::date >= $1 AND action_type = 'Call'`, [thirtyDaysAgo]),
-      pool.query(`SELECT COUNT(*) as cnt FROM call_log WHERE logged_at::date >= $1 AND action_type != 'Move'`, [thirtyDaysAgo]),
-      pool.query(`SELECT COUNT(*) as cnt FROM call_log WHERE logged_at::date = current_date AND action_type != 'Move'`),
-      pool.query(`SELECT COUNT(*) as cnt FROM call_log WHERE logged_at::date >= $1 AND action_type != 'Move'`, [sevenDaysAgo]),
-      pool.query(`SELECT log_type, COUNT(*) as cnt FROM call_log WHERE logged_at::date >= $1 GROUP BY log_type`, [thirtyDaysAgo]),
-      pool.query(`SELECT contact_type, COUNT(*) as cnt FROM call_log WHERE logged_at::date >= $1 GROUP BY contact_type ORDER BY cnt DESC LIMIT 10`, [thirtyDaysAgo]),
-      pool.query(`SELECT logged_by_name, COUNT(*) as cnt FROM call_log WHERE logged_at::date >= $1 GROUP BY logged_by_name ORDER BY cnt DESC`, [thirtyDaysAgo]),
-      pool.query(`
-        SELECT
-          (SELECT COUNT(*) FROM companies WHERE status = 'active') as total_companies,
-          (SELECT COUNT(*) FROM call_log WHERE log_type = 'company') as total_company_calls,
-          (SELECT COUNT(*) FROM call_log WHERE action_type = 'Visit') as total_visits
-      `),
-    ]);
-
+  followupResult,
+  visitResult,
+  queueResult,
+  callsTodayResult,
+  callsWeekResult,
+  callsMonthResult,
+  contactsMonthResult,
+  contactsTodayResult,
+  contactsWeekResult,
+  byTypeResult,
+  byOutcomeResult,
+  byRepResult,
+  totalsResult,
+] = await Promise.all([
+  pool.query(`
+    SELECT
+      COUNT(*) as total,
+      SUM(CASE WHEN due_date < current_date THEN 1 ELSE 0 END) as overdue,
+      SUM(CASE WHEN due_date = current_date THEN 1 ELSE 0 END) as due_today,
+      SUM(CASE WHEN source_type = 'company' THEN 1 ELSE 0 END) as company_followups
+    FROM follow_ups WHERE due_date <= current_date
+  `),
+  pool.query(`
+    SELECT
+      COUNT(*) as total,
+      SUM(CASE WHEN scheduled_date < current_date THEN 1 ELSE 0 END) as overdue,
+      SUM(CASE WHEN scheduled_date = current_date THEN 1 ELSE 0 END) as due_today
+    FROM visit_queue WHERE scheduled_date <= current_date
+  `),
+  pool.query(`SELECT COUNT(*) as total_in_queue FROM calling_queue WHERE queue_type = 'company'`),
+  // ── Calls = only contact_types where counts_as_attempt = 1 ──
+  pool.query(`
+    SELECT COUNT(*) as cnt FROM call_log cl
+    WHERE substring(cl.logged_at,1,10) = current_date::text
+      AND cl.action_type = 'Call'
+      AND cl.counts_as_attempt = 1
+  `),
+  pool.query(`
+    SELECT COUNT(*) as cnt FROM call_log cl
+    WHERE substring(cl.logged_at,1,10) >= $1
+      AND cl.action_type = 'Call'
+      AND cl.counts_as_attempt = 1
+  `, [sevenDaysAgo]),
+  pool.query(`
+    SELECT COUNT(*) as cnt FROM call_log cl
+    WHERE substring(cl.logged_at,1,10) >= $1
+      AND cl.action_type = 'Call'
+      AND cl.counts_as_attempt = 1
+  `, [thirtyDaysAgo]),
+  pool.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND action_type != 'Move'`, [thirtyDaysAgo]),
+  pool.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) = current_date::text AND action_type != 'Move'`),
+  pool.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND action_type != 'Move'`, [sevenDaysAgo]),
+  pool.query(`SELECT log_type, COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 GROUP BY log_type`, [thirtyDaysAgo]),
+  pool.query(`SELECT contact_type, COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND counts_as_attempt=1 GROUP BY contact_type ORDER BY cnt DESC LIMIT 10`, [thirtyDaysAgo]),
+  pool.query(`SELECT logged_by_name, COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND counts_as_attempt=1 GROUP BY logged_by_name ORDER BY cnt DESC`, [thirtyDaysAgo]),
+  pool.query(`
+    SELECT
+      (SELECT COUNT(*) FROM companies WHERE status = 'active') as total_companies,
+      (SELECT COUNT(*) FROM call_log WHERE log_type = 'company' AND counts_as_attempt=1) as total_company_calls,
+      (SELECT COUNT(*) FROM call_log WHERE action_type = 'Visit') as total_visits
+  `),
+]);
     res.json({
       follow_ups: followupResult.rows[0],
       visits:     visitResult.rows[0],
