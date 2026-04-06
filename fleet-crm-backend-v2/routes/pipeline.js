@@ -59,10 +59,11 @@ router.get('/board', async (req, res) => {
       counts[stage] = parseInt(rows[0].cnt);
     }));
 
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     const [starredRes, recentCallsRes, recentContactsRes, totalContactsRes] = await Promise.all([
       pool.query("SELECT COUNT(*) as cnt FROM companies WHERE is_starred=1 AND status='active'"),
-      pool.query("SELECT COUNT(*) as cnt FROM call_log WHERE log_type='company' AND action_type='Call' AND logged_at >= now() - interval '7 days'"),
-      pool.query("SELECT COUNT(*) as cnt FROM call_log WHERE log_type='company' AND action_type!='Move' AND logged_at >= now() - interval '7 days'"),
+      pool.query("SELECT COUNT(*) as cnt FROM call_log WHERE log_type='company' AND action_type='Call' AND counts_as_attempt=1 AND substring(logged_at,1,10) >= $1", [sevenDaysAgo]),
+      pool.query("SELECT COUNT(*) as cnt FROM call_log WHERE log_type='company' AND action_type!='Move' AND substring(logged_at,1,10) >= $1", [sevenDaysAgo]),
       pool.query("SELECT COUNT(*) as cnt FROM call_log WHERE log_type='company' AND action_type!='Move'"),
     ]);
 
