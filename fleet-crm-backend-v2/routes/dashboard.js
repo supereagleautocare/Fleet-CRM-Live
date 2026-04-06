@@ -31,20 +31,20 @@ router.get('/', async (req, res) => {
   totalsResult,
 ] = await Promise.all([
   pool.query(`
-    SELECT
-      COUNT(*) as total,
-      SUM(CASE WHEN due_date < current_date THEN 1 ELSE 0 END) as overdue,
-      SUM(CASE WHEN due_date = current_date THEN 1 ELSE 0 END) as due_today,
-      SUM(CASE WHEN source_type = 'company' THEN 1 ELSE 0 END) as company_followups
-    FROM follow_ups WHERE due_date <= current_date
-  `),
-  pool.query(`
-    SELECT
-      COUNT(*) as total,
-      SUM(CASE WHEN scheduled_date < current_date THEN 1 ELSE 0 END) as overdue,
-      SUM(CASE WHEN scheduled_date = current_date THEN 1 ELSE 0 END) as due_today
-    FROM visit_queue WHERE scheduled_date <= current_date
-  `),
+  SELECT
+    COUNT(*) as total,
+    SUM(CASE WHEN due_date < $1 THEN 1 ELSE 0 END) as overdue,
+    SUM(CASE WHEN due_date = $1 THEN 1 ELSE 0 END) as due_today,
+    SUM(CASE WHEN source_type = 'company' THEN 1 ELSE 0 END) as company_followups
+  FROM follow_ups WHERE due_date <= $1
+`, [today]),
+pool.query(`
+  SELECT
+    COUNT(*) as total,
+    SUM(CASE WHEN scheduled_date < $1 THEN 1 ELSE 0 END) as overdue,
+    SUM(CASE WHEN scheduled_date = $1 THEN 1 ELSE 0 END) as due_today
+  FROM visit_queue WHERE scheduled_date <= $1
+`, [today]),
   pool.query(`SELECT COUNT(*) as total_in_queue FROM calling_queue WHERE queue_type = 'company'`),
   // ── Calls = only contact_types where counts_as_attempt = 1 ──
   pool.query(`
