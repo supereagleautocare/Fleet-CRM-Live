@@ -9,6 +9,17 @@ const { requireAuth } = require('../middleware/auth');
 const router = express.Router();
 router.use(requireAuth);
 
+router.get('/check-skipped', async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT contact_type, counts_as_attempt, COUNT(*) as cnt
+      FROM call_log
+      WHERE contact_type IN ('Skipped', 'Do Not Call')
+      GROUP BY contact_type, counts_as_attempt
+    `);
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
 
 router.get('/', async (req, res) => {
   try {
