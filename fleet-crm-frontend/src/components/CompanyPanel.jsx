@@ -62,6 +62,16 @@ async function geocode(address) {
     const d = await r.json();
     if (d.length > 0) return { lat: parseFloat(d[0].lat), lng: parseFloat(d[0].lon) };
   } catch(_) {}
+  try {
+    const r = await fetch(
+      `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(address)}.json?country=us&limit=1&access_token=${MAPBOX_TOKEN}`
+    );
+    const d = await r.json();
+    if (d.features?.length > 0) {
+      const [lng, lat] = d.features[0].center;
+      return { lat, lng };
+    }
+  } catch(_) {}
   return null;
 }
 
