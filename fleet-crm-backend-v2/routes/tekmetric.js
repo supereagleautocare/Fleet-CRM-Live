@@ -419,23 +419,25 @@ router.get('/shop-floor', async (req, res) => {
     }
     prevShopFloorStatuses = new Map(ros.map(r => [r.id, r.sid]));
 
-    // ── Cache-first lookups — only hit Tekmetric for genuinely new IDs ────────
+    // ── Cache-first lookups — only fetch missing IDs after the first background sync ──
+    // If lastCustomerSync is null the cache is still building — skip individual lookups
+    // to avoid firing hundreds of calls at once. Background sync populates within 2 min.
     const missingCids = [...new Set(ros.map(r => r.cid).filter(id => id && !tekCache.customerMap.has(id)))];
     const missingVids = [...new Set(ros.map(r => r.vid).filter(id => id && !tekCache.vehicleMap.has(id)))];
 
-    if (missingCids.length > 0) {
+    if (tekCache.lastCustomerSync && missingCids.length > 0) {
       await Promise.allSettled(missingCids.map(async id => {
         const data = await tekFetch(`${base}/customers/${id}`, token).catch(() => null);
         if (data) tekCache.customerMap.set(data.id, normCustomer(data));
       }));
     }
-    if (missingVids.length > 0) {
+    if (tekCache.lastVehicleSync && missingVids.length > 0) {
       await Promise.allSettled(missingVids.map(async id => {
         const data = await tekFetch(`${base}/vehicles/${id}`, token).catch(() => null);
         if (data) tekCache.vehicleMap.set(data.id, normVehicle(data));
       }));
     }
-    if (tekCache.employeeMap.size === 0) {
+    if (tekCache.employeeMap.size === 0 && tekCache.lastCustomerSync) {
       await syncEmployees(token, base, shopId).catch(() => {});
     }
 
