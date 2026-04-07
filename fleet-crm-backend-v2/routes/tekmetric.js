@@ -55,6 +55,7 @@ class RateLimiter {
   constructor() { this.log = []; }
 
   async throttle() {
+    if (syncAborted) throw new Error('Sync aborted — Tekmetric disconnected');
     const max = configuredRateLimit;
     const now = Date.now();
     this.log = this.log.filter(t => now - t < 60000);
@@ -88,6 +89,7 @@ let syncAborted = false;
 async function tekFetch(url, token, attempt = 1) {
   if (syncAborted) throw new Error('Sync aborted — Tekmetric disconnected');
   await tekLimiter.throttle();
+  if (syncAborted) throw new Error('Sync aborted — Tekmetric disconnected');
   const t0  = Date.now();
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
   const ms  = Date.now() - t0;
@@ -430,13 +432,13 @@ router.get('/shop-floor', async (req, res) => {
     const missingVids = [...new Set(ros.map(r => r.vid).filter(id => id && !tekCache.vehicleMap.has(id)))];
 
     if (tekCache.lastCustomerSync && missingCids.length > 0) {
-      await Promise.allSettled(missingCids.map(async id => {
+      await Promise.allSettled(missingCids.slice(0, 20).map(async id => {
         const data = await tekFetch(`${base}/customers/${id}`, token).catch(() => null);
         if (data) tekCache.customerMap.set(data.id, normCustomer(data));
       }));
     }
     if (tekCache.lastVehicleSync && missingVids.length > 0) {
-      await Promise.allSettled(missingVids.map(async id => {
+      await Promise.allSettled(missingVids.slice(0, 20).map(async id => {
         const data = await tekFetch(`${base}/vehicles/${id}`, token).catch(() => null);
         if (data) tekCache.vehicleMap.set(data.id, normVehicle(data));
       }));
@@ -544,12 +546,12 @@ router.get('/ar', async (req, res) => {
 
     await syncAR(token, base, shopId);
 
-    // Fetch any customers missing from cache
+    // Fetch any customers missing from cache — cap at 20 to prevent burst
     const missingCids = [...new Set(
       tekCache.arRos.map(r => r.cid).filter(id => id && !tekCache.customerMap.has(id))
     )];
-    if (missingCids.length > 0) {
-      await Promise.allSettled(missingCids.map(async id => {
+    if (tekCache.lastCustomerSync && missingCids.length > 0) {
+      await Promise.allSettled(missingCids.slice(0, 20).map(async id => {
         const data = await tekFetch(`${base}/customers/${id}`, token).catch(() => null);
         if (data) tekCache.customerMap.set(data.id, normCustomer(data));
       }));
