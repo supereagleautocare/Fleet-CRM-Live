@@ -525,6 +525,39 @@ async function handleImport(e) {
               showToast(`Exported ${enriched.length} companies`);
             } catch(err) { showToast('Export failed: ' + err.message, 'error'); }
           }}>⬇️ Export CSV</button>
+          <button className="btn btn-ghost" onClick={async()=>{
+            showToast('Pulling all emails…');
+            try {
+              const enriched = await Promise.all(
+                companies.map(async (c) => {
+                  try { const full = await api.company(c.id); return { ...c, contacts: full.contacts || [] }; }
+                  catch (_) { return { ...c, contacts: [] }; }
+                })
+              );
+              const rows = [['Email','Contact Name','Role','Company','Company Phone']];
+              for (const c of enriched) {
+                for (const contact of c.contacts) {
+                  if (contact.email?.trim()) {
+                    rows.push([
+                      contact.email.trim(),
+                      contact.name || '',
+                      contact.role_title || '',
+                      c.name || '',
+                      c.main_phone || '',
+                    ]);
+                  }
+                }
+              }
+              if (rows.length === 1) { showToast('No contact emails found', 'error'); return; }
+              const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+              const blob = new Blob([csv], {type:'text/csv'});
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url; a.download = `emails-${new Date().toISOString().slice(0,10)}.csv`;
+              a.click(); URL.revokeObjectURL(url);
+              showToast(`Exported ${rows.length - 1} emails`);
+            } catch(err) { showToast('Export failed: ' + err.message, 'error'); }
+          }}>📧 Export Emails</button>
           <button className="btn btn-primary" onClick={()=>setShowAddForm(true)}>+ Add Company</button>
         </div>
       </div>
