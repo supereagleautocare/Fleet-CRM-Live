@@ -782,21 +782,11 @@ if (!shopId) {
 
     invalidateConfigCache();
 
-    // Clear stale data and kick off background sync
-    tekCache.customerMap.clear();
-    tekCache.vehicleMap.clear();
-    tekCache.roMap.clear();
-    tekCache.employeeMap.clear();
-    tekCache.arRos            = [];
-    tekCache.lastCustomerSync = null;
-    tekCache.lastVehicleSync  = null;
-    tekCache.lastRoSync       = null;
-    tekCache.lastEmployeeSync = null;
-    tekCache.lastArSync       = null;
+    // Resume sync from where it left off — existing cache + timestamps are
+    // preserved so the background sync does a fast delta (only what changed).
     shopFloorCache = null; shopFloorCacheAt = 0;
     arCache        = null; arCacheAt        = 0;
     syncInProgress = false;
-    prevShopFloorStatuses.clear();
 
     syncAborted = false;
     startBackgroundSync();
@@ -820,26 +810,15 @@ router.post('/disconnect', async (req, res) => {
   try {
     syncAborted = true;
     stopBackgroundSync();
-
-    tekCache.customerMap.clear();
-    tekCache.vehicleMap.clear();
-    tekCache.roMap.clear();
-    tekCache.employeeMap.clear();
-    tekCache.arRos            = [];
-    tekCache.lastCustomerSync = null;
-    tekCache.lastVehicleSync  = null;
-    tekCache.lastRoSync       = null;
-    tekCache.lastEmployeeSync = null;
-    tekCache.lastArSync       = null;
-    shopFloorCache = null; shopFloorCacheAt = 0;
-    arCache        = null; arCacheAt        = 0;
     syncInProgress = false;
-    prevShopFloorStatuses.clear();
 
+    // Preserve all cached data and sync timestamps so the UI stays populated
+    // while disconnected. On reconnect, background sync picks up from the last
+    // timestamp and only fetches what changed since then.
     await pool.query(
       `UPDATE config_settings SET value = '' WHERE key IN ('tekmetric_token', 'tekmetric_shop_id')`
     );
-    
+
     invalidateConfigCache();
     
     res.json({ ok: true });
