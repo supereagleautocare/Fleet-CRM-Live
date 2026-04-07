@@ -288,7 +288,7 @@ async function syncVehicles(token, base, shopId) {
   const rows = await fetchAllPages(`${base}/vehicles`, token, params);
   rows.forEach(v => {
     if (v.deletedDate) tekCache.vehicleMap.delete(v.id);
-    else tekCache.vehicleMap.set(v.id, normVehicle(v));
+    else if (tekCache.customerMap.has(v.customerId)) tekCache.vehicleMap.set(v.id, normVehicle(v));
   });
   tekCache.lastVehicleSync = new Date().toISOString();
   console.log(`[Tekmetric] Vehicles cached: ${tekCache.vehicleMap.size} (+${rows.length} updated)`);
@@ -303,7 +303,8 @@ async function syncRos(token, base, shopId) {
   console.log(`[Tekmetric] Syncing ROs (delta from ${since.slice(0, 10)})…`);
   const rows = await fetchAllPages(`${base}/repair-orders`, token, params);
   // Store all non-deleted ROs; AR (status 6) lives here too so fleet history is complete
-  rows.filter(ro => ro.repairOrderStatus?.id !== 7).forEach(ro => tekCache.roMap.set(ro.id, normRo(ro)));
+  rows.filter(ro => ro.repairOrderStatus?.id !== 7 && tekCache.customerMap.has(ro.customerId))
+      .forEach(ro => tekCache.roMap.set(ro.id, normRo(ro)));
   tekCache.lastRoSync = new Date().toISOString();
   console.log(`[Tekmetric] ROs cached: ${tekCache.roMap.size} (+${rows.length} updated)`);
 }
@@ -314,14 +315,16 @@ async function syncAR(token, base, shopId) {
   if (tekCache.lastArSync) params.updatedDateStart = tekCache.lastArSync;
   const rows = await fetchAllPages(`${base}/repair-orders`, token, params);
   const now  = Date.now();
-  const normalized = rows.map(ro => {
-    const n = normRo(ro);
-    return {
-      ...n,
-      balance:         n.total - n.paid,
-      daysOutstanding: n.created ? Math.floor((now - new Date(n.created)) / 86400000) : null,
-    };
-  });
+  const normalized = rows
+    .filter(ro => tekCache.customerMap.has(ro.customerId))
+    .map(ro => {
+      const n = normRo(ro);
+      return {
+        ...n,
+        balance:         n.total - n.paid,
+        daysOutstanding: n.created ? Math.floor((now - new Date(n.created)) / 86400000) : null,
+      };
+    });
   const updatedIds = new Set(normalized.map(r => r.id));
   tekCache.arRos = [
     ...tekCache.arRos.filter(r => !updatedIds.has(r.id)),
@@ -406,7 +409,8 @@ router.get('/shop-floor', async (req, res) => {
       shop: shopId,
       repairOrderStatusId: [1, 2, 3, 4],
     });
-    const ros = rawRos.map(normRo);
+    // Only keep ROs belonging to business customers — this is a fleet CRM
+    const ros = rawRos.map(normRo).filter(ro => tekCache.customerMap.has(ro.cid));
 
     // ── Status change detection ───────────────────────────────────────────────
     const statusChanges = [];
@@ -424,28 +428,6 @@ router.get('/shop-floor', async (req, res) => {
       if (!currentIds.has(roId)) statusChanges.push({ type: 'removed', roId });
     }
     prevShopFloorStatuses = new Map(ros.map(r => [r.id, r.sid]));
-
-    // ── Cache-first lookups — only fetch missing IDs after the first background sync ──
-    // If lastCustomerSync is null the cache is still building — skip individual lookups
-    // to avoid firing hundreds of calls at once. Background sync populates within 2 min.
-    const missingCids = [...new Set(ros.map(r => r.cid).filter(id => id && !tekCache.customerMap.has(id)))];
-    const missingVids = [...new Set(ros.map(r => r.vid).filter(id => id && !tekCache.vehicleMap.has(id)))];
-
-    if (tekCache.lastCustomerSync && missingCids.length > 0) {
-      await Promise.allSettled(missingCids.slice(0, 20).map(async id => {
-        const data = await tekFetch(`${base}/customers/${id}`, token).catch(() => null);
-        if (data) tekCache.customerMap.set(data.id, normCustomer(data));
-      }));
-    }
-    if (tekCache.lastVehicleSync && missingVids.length > 0) {
-      await Promise.allSettled(missingVids.slice(0, 20).map(async id => {
-        const data = await tekFetch(`${base}/vehicles/${id}`, token).catch(() => null);
-        if (data) tekCache.vehicleMap.set(data.id, normVehicle(data));
-      }));
-    }
-    if (tekCache.employeeMap.size === 0 && tekCache.lastCustomerSync) {
-      await syncEmployees(token, base, shopId).catch(() => {});
-    }
 
     const companies = [...new Set(ros.map(r => r.cid))].map(id => tekCache.customerMap.get(id)).filter(Boolean);
     const vehicles  = [...new Set(ros.map(r => r.vid))].map(id => tekCache.vehicleMap.get(id)).filter(Boolean);
@@ -545,17 +527,6 @@ router.get('/ar', async (req, res) => {
     const base = baseUrl(env);
 
     await syncAR(token, base, shopId);
-
-    // Fetch any customers missing from cache — cap at 20 to prevent burst
-    const missingCids = [...new Set(
-      tekCache.arRos.map(r => r.cid).filter(id => id && !tekCache.customerMap.has(id))
-    )];
-    if (tekCache.lastCustomerSync && missingCids.length > 0) {
-      await Promise.allSettled(missingCids.slice(0, 20).map(async id => {
-        const data = await tekFetch(`${base}/customers/${id}`, token).catch(() => null);
-        if (data) tekCache.customerMap.set(data.id, normCustomer(data));
-      }));
-    }
 
     // Group by customer with totals + aging buckets
     const byCustomer = new Map();
