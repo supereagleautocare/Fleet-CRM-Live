@@ -720,10 +720,12 @@ router.post('/connect', async (req, res) => {
           'Content-Length': Buffer.byteLength(postBody),
         },
       };
+      const t0 = Date.now();
       const request = https.request(options, response => {
         let data = '';
         response.on('data', chunk => data += chunk);
         response.on('end', () => {
+          logCall(`https://${hostname}/api/v1/oauth/token`, response.statusCode, Date.now() - t0);
           if (response.statusCode >= 400) {
             reject(new Error(`Tekmetric rejected credentials (${response.statusCode})`));
           } else {
@@ -749,18 +751,8 @@ const base2 = env === 'sandbox'
   : 'https://shop.tekmetric.com/api/v1';
 
 try {
-  const shopsRes = await fetch(`${base2}/shops`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-
-  const shopsText = await shopsRes.text();
-  console.log(`[Tekmetric /connect] GET /shops → ${shopsRes.status}: ${shopsText.slice(0, 300)}`);
-
-  if (!shopsRes.ok) {
-    throw new Error(`/shops failed (${shopsRes.status})`);
-  }
-
-  const shopsData = JSON.parse(shopsText);
+  const shopsData = await tekFetch(`${base2}/shops`, accessToken);
+  console.log(`[Tekmetric /connect] GET /shops response received`);
   const shops = Array.isArray(shopsData) ? shopsData : (shopsData.content || []);
 
   if (!shops.length || !shops[0]?.id) {
