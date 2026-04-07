@@ -81,8 +81,12 @@ class RateLimiter {
 }
 const tekLimiter = new RateLimiter();
 
+// ── Abort flag — set on disconnect, cleared on connect ───────────────────────
+let syncAborted = false;
+
 // ── tekFetch — rate-limited, logged, 429-retry ────────────────────────────────
 async function tekFetch(url, token, attempt = 1) {
+  if (syncAborted) throw new Error('Sync aborted — Tekmetric disconnected');
   await tekLimiter.throttle();
   const t0  = Date.now();
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
@@ -815,6 +819,7 @@ if (!shopId) {
     syncInProgress = false;
     prevShopFloorStatuses.clear();
 
+    syncAborted = false;
     startBackgroundSync();
 
     res.json({
@@ -834,6 +839,7 @@ if (!shopId) {
 // ── POST /tekmetric/disconnect ────────────────────────────────────────────────
 router.post('/disconnect', async (req, res) => {
   try {
+    syncAborted = true;
     stopBackgroundSync();
 
     tekCache.customerMap.clear();
