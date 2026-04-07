@@ -235,6 +235,11 @@ function normRo(ro) {
     saId:       ro.serviceWriterId,
     labor:      ro.laborSales    || 0,
     parts:      ro.partsSales    || 0,
+    sublets:    ro.subletSales   || 0,
+    tires:      ro.tireSales     || 0,
+    batteries:  ro.batterySales  || 0,
+    tax:        ro.taxTotal      || 0,
+    fees:       ro.feesTotal     || ro.fees || 0,
     disc:       ro.discountTotal || 0,
     total:      ro.totalSales    || 0,
     paid:       ro.amountPaid    || 0,
@@ -245,8 +250,9 @@ function normRo(ro) {
     jobs: (ro.jobs || []).map(j => ({
       name:  j.name,
       auth:  j.authorized,
-      labor: j.laborTotal || 0,
-      parts: j.partsTotal || 0,
+      labor: j.laborTotal  || 0,
+      parts: j.partsTotal  || 0,
+      hours: j.laborHours  || 0,
     })),
   };
 }

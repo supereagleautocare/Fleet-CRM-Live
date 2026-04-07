@@ -596,51 +596,287 @@ function filterRange(ros, range, customStart, customEnd, dateField = 'created') 
   return ros.filter(r => new Date(r[dateField] || r.created) >= s);
 }
 function SalesTab({ ros, companies, vehicles, employees, statuses }) {
-  const [range,       setRange]       = useState('ytd');
+  const [range,       setRange]       = useState('mtd');
   const [customStart, setCustomStart] = useState('');
   const [customEnd,   setCustomEnd]   = useState('');
-  const [selCo, setSelCo] = useState(null);
-  const gv = id => vehicles.find(v=>v.id===id);
-  const ge = id => employees.find(e=>e.id===id);
-  const filt = useMemo(()=>filterRange(ros,range,customStart,customEnd),[ros,range,customStart,customEnd]);
-  const byco = useMemo(()=>companies.map(c=>{
-    const cr=filt.filter(r=>r.cid===c.id), p=cr.filter(r=>r.sid===5);
-    const dec=cr.flatMap(r=>r.jobs.filter(j=>!j.auth));
-    return {...c,rev:p.reduce((s,r)=>s+r.total,0),labor:p.reduce((s,r)=>s+r.labor,0),parts:p.reduce((s,r)=>s+r.parts,0),open:cr.filter(r=>[1,2,3].includes(r.sid)).reduce((s,r)=>s+r.total,0),declined:dec.reduce((s,j)=>s+j.labor+j.parts,0),cnt:cr.length,avg:p.length?p.reduce((s,r)=>s+r.total,0)/p.length:0,allRos:cr};
-  }).sort((a,b)=>b.rev-a.rev),[companies,filt]);
-  const tot = byco.reduce((a,c)=>({rev:a.rev+c.rev,labor:a.labor+c.labor,parts:a.parts+c.parts,open:a.open+c.open,dec:a.dec+c.declined}),{rev:0,labor:0,parts:0,open:0,dec:0});
-  const mx  = Math.max(...byco.map(c=>c.rev),1);
-  const scd = byco.find(c=>c.id===selCo);
+  const [selCo,       setSelCo]       = useState(null);
+  const [selTech,     setSelTech]     = useState('all');
+  const [reportOpen,  setReportOpen]  = useState(true);
+
+  const gv = id => vehicles.find(v => v.id === id);
+  const ge = id => employees.find(e => e.id === id);
+
+  // All ROs in date range, optionally filtered by tech
+  const filt = useMemo(() => {
+    let r = filterRange(ros, range, customStart, customEnd);
+    if (selTech !== 'all') r = r.filter(ro => String(ro.techId) === selTech);
+    return r;
+  }, [ros, range, customStart, customEnd, selTech]);
+
+  // Posted (closed) ROs only
+  const posted = useMemo(() => filt.filter(r => r.sid === 5), [filt]);
+
+  // End of Day metrics derived from posted ROs
+  const eod = useMemo(() => {
+    const n  = posted.length;
+    const hp = filt.reduce((s, ro) => s + ro.jobs.reduce((js, j) => js + (j.hours || 0), 0), 0);
+    const hs = posted.reduce((s, ro) => s + ro.jobs.filter(j => j.auth).reduce((js, j) => js + (j.hours || 0), 0), 0);
+    const labor    = posted.reduce((s, r) => s + r.labor,    0);
+    const parts    = posted.reduce((s, r) => s + r.parts,    0);
+    const sublets  = posted.reduce((s, r) => s + r.sublets,  0);
+    const tires    = posted.reduce((s, r) => s + r.tires,    0);
+    const batteries= posted.reduce((s, r) => s + r.batteries,0);
+    const disc     = posted.reduce((s, r) => s + r.disc,     0);
+    const tax      = posted.reduce((s, r) => s + r.tax,      0);
+    const fees     = posted.reduce((s, r) => s + r.fees,     0);
+    const total    = posted.reduce((s, r) => s + r.total,    0);
+    const open     = filt.filter(r => [1,2,3,4].includes(r.sid)).reduce((s, r) => s + r.total, 0);
+    const declined = filt.flatMap(r => r.jobs.filter(j => !j.auth)).reduce((s, j) => s + j.labor + j.parts, 0);
+    const elr      = hs > 0 ? labor / hs : 0;
+    const avgTicket= n > 0  ? total / n  : 0;
+    const closeRatio = hp > 0 ? hs / hp : 0;
+    return { n, hp, hs, elr, avgTicket, closeRatio, labor, parts, sublets, tires, batteries, disc, tax, fees, total, open, declined };
+  }, [posted, filt]);
+
+  // By-technician breakdown
+  const byTech = useMemo(() => {
+    const map = new Map();
+    posted.forEach(ro => {
+      const key = ro.techId ?? 0;
+      if (!map.has(key)) {
+        const emp = employees.find(e => e.id === key);
+        map.set(key, { id: key, name: emp?.name || 'Unassigned', ros: 0, labor: 0, parts: 0, total: 0, hs: 0 });
+      }
+      const t = map.get(key);
+      t.ros++;
+      t.labor += ro.labor;
+      t.parts += ro.parts;
+      t.total += ro.total;
+      t.hs    += ro.jobs.filter(j => j.auth).reduce((s, j) => s + (j.hours || 0), 0);
+    });
+    return [...map.values()].sort((a, b) => b.total - a.total);
+  }, [posted, employees]);
+
+  // By-company breakdown
+  const byco = useMemo(() => companies.map(c => {
+    const cr  = filt.filter(r => r.cid === c.id);
+    const p   = cr.filter(r => r.sid === 5);
+    const dec = cr.flatMap(r => r.jobs.filter(j => !j.auth));
+    return {
+      ...c,
+      rev:     p.reduce((s, r) => s + r.total,  0),
+      labor:   p.reduce((s, r) => s + r.labor,  0),
+      parts:   p.reduce((s, r) => s + r.parts,  0),
+      open:    cr.filter(r => [1,2,3,4].includes(r.sid)).reduce((s, r) => s + r.total, 0),
+      declined:dec.reduce((s, j) => s + j.labor + j.parts, 0),
+      cnt:     cr.length,
+      avg:     p.length ? p.reduce((s, r) => s + r.total, 0) / p.length : 0,
+      allRos:  cr,
+    };
+  }).sort((a, b) => b.rev - a.rev), [companies, filt]);
+
+  const mx  = Math.max(...byco.map(c => c.rev), 1);
+  const scd = byco.find(c => c.id === selCo);
+
+  const techOptions = useMemo(() => {
+    const seen = new Set(ros.map(r => r.techId).filter(Boolean));
+    return [...seen].map(id => ({ id, name: employees.find(e => e.id === id)?.name || `Tech ${id}` }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [ros, employees]);
+
+  const fmtHrs = h => h > 0 ? h.toFixed(2) : '—';
+  const fmtPct = p => p > 0 ? `${(p * 100).toFixed(1)}%` : '—';
+  const thS = { textAlign: 'right', fontSize: 11, fontWeight: 700, color: 'var(--gray-500)', padding: '8px 12px', background: 'var(--gray-50)', borderBottom: '1px solid var(--gray-200)' };
+  const tdS = { textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 12, padding: '7px 12px', borderBottom: '1px solid var(--gray-100)' };
+  const tdL = { fontSize: 12, fontWeight: 600, padding: '7px 12px', borderBottom: '1px solid var(--gray-100)' };
+  const tdTot = { ...tdS, fontWeight: 800, background: 'var(--gray-50)' };
+  const tdTotL = { ...tdL, fontWeight: 800, background: 'var(--gray-50)' };
+
   return (
     <>
-      <div style={{display:'flex',gap:5,marginBottom:range==='custom'?8:16,flexWrap:'wrap',alignItems:'center'}}>
-        {selCo&&<button onClick={()=>setSelCo(null)} className="btn btn-ghost btn-sm">← All Companies</button>}
-        {DATE_RANGES.map(r=>(
-          <button key={r.key} onClick={()=>setRange(r.key)} className="btn btn-sm"
+      {/* ── Filter bar ── */}
+      <div style={{display:'flex',gap:5,marginBottom:8,flexWrap:'wrap',alignItems:'center'}}>
+        {selCo && <button onClick={() => setSelCo(null)} className="btn btn-ghost btn-sm">← All Companies</button>}
+        {DATE_RANGES.map(r => (
+          <button key={r.key} onClick={() => setRange(r.key)} className="btn btn-sm"
             style={{background:range===r.key?'var(--navy-800)':'white',color:range===r.key?'white':'var(--gray-600)',border:'1px solid var(--gray-200)'}}>
             {r.label}
           </button>
         ))}
+        <div style={{width:1,height:18,background:'var(--gray-200)',margin:'0 4px'}}/>
+        <select value={selTech} onChange={e => setSelTech(e.target.value)}
+          style={{padding:'4px 10px',border:'1.5px solid var(--gray-200)',borderRadius:6,fontSize:12,background:'white',color:'var(--gray-700)',cursor:'pointer'}}>
+          <option value="all">All Technicians</option>
+          {techOptions.map(t => <option key={t.id} value={String(t.id)}>{t.name}</option>)}
+        </select>
       </div>
-      {range==='custom'&&(
-        <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:16,padding:'10px 14px',background:'var(--gray-50)',border:'1px solid var(--gray-200)',borderRadius:8,flexWrap:'wrap'}}>
+      {range === 'custom' && (
+        <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:8,padding:'10px 14px',background:'var(--gray-50)',border:'1px solid var(--gray-200)',borderRadius:8,flexWrap:'wrap'}}>
           <span style={{fontSize:12,fontWeight:600,color:'var(--gray-600)'}}>From</span>
-          <input type="date" value={customStart} onChange={e=>setCustomStart(e.target.value)}
+          <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)}
             style={{padding:'5px 10px',border:'1.5px solid var(--gray-200)',borderRadius:6,fontSize:12}}/>
           <span style={{fontSize:12,fontWeight:600,color:'var(--gray-600)'}}>To</span>
-          <input type="date" value={customEnd} onChange={e=>setCustomEnd(e.target.value)}
+          <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)}
             style={{padding:'5px 10px',border:'1.5px solid var(--gray-200)',borderRadius:6,fontSize:12}}/>
-          {(customStart||customEnd)&&(
-            <button onClick={()=>{setCustomStart('');setCustomEnd('');}} className="btn btn-ghost btn-sm" style={{fontSize:11}}>Clear</button>
+          {(customStart || customEnd) && (
+            <button onClick={() => { setCustomStart(''); setCustomEnd(''); }} className="btn btn-ghost btn-sm" style={{fontSize:11}}>Clear</button>
           )}
         </div>
       )}
-      {selCo&&scd?(
+
+      {/* ── End of Day Report ── */}
+      <div style={{marginBottom:16,border:'1px solid var(--gray-200)',borderRadius:'var(--r-lg)',overflow:'hidden'}}>
+        <button onClick={() => setReportOpen(o => !o)}
+          style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'space-between',padding:'11px 16px',background:'var(--navy-800)',border:'none',cursor:'pointer',color:'white'}}>
+          <span style={{fontWeight:700,fontSize:13,letterSpacing:'.03em'}}>End of Day Report</span>
+          <span style={{fontSize:11,opacity:.7}}>{reportOpen ? '▲ Collapse' : '▼ Expand'}</span>
+        </button>
+        {reportOpen && (
+          <div style={{background:'white',padding:'16px'}}>
+
+            {/* KPI row 1 — shop effectiveness */}
+            <div style={{fontSize:10,fontWeight:800,letterSpacing:'.08em',textTransform:'uppercase',color:'var(--gray-400)',marginBottom:8}}>Shop Effectiveness</div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:10,marginBottom:16}}>
+              {[
+                { l:'Total ROs',        v: eod.n,               fmt: v => v },
+                { l:'Hours Presented',  v: eod.hp,              fmt: fmtHrs },
+                { l:'Hours Sold',       v: eod.hs,              fmt: fmtHrs },
+                { l:'Close Ratio',      v: eod.closeRatio,      fmt: fmtPct },
+                { l:'Effective LR',     v: eod.elr,             fmt: v => v > 0 ? f$(v) : '—' },
+              ].map(s => (
+                <div key={s.l} style={{padding:'12px 14px',background:'var(--gray-50)',borderRadius:'var(--r-md)',border:'1px solid var(--gray-100)'}}>
+                  <div style={{fontSize:9.5,fontWeight:700,letterSpacing:'.07em',textTransform:'uppercase',color:'var(--gray-400)',marginBottom:5}}>{s.l}</div>
+                  <div style={{fontFamily:'var(--font-mono)',fontWeight:800,fontSize:18,color:'var(--navy-800)'}}>{s.fmt(s.v)}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* KPI row 2 — overall metrics */}
+            <div style={{fontSize:10,fontWeight:800,letterSpacing:'.08em',textTransform:'uppercase',color:'var(--gray-400)',marginBottom:8}}>Overall Metrics</div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:10,marginBottom:16}}>
+              {[
+                { l:'Avg Ticket',   v: eod.avgTicket, fmt: v => v > 0 ? f$(v) : '—',  c:'var(--navy-800)' },
+                { l:'Total Revenue',v: eod.total,     fmt: f$,                          c:'var(--green-600)' },
+                { l:'Labor',        v: eod.labor,     fmt: f$,                          c:'var(--navy-700)' },
+                { l:'Parts',        v: eod.parts,     fmt: f$,                          c:'var(--gray-700)' },
+                { l:'Discounts',    v: eod.disc,      fmt: v => v > 0 ? `-${f$(v)}` : '—', c:'var(--red-500)' },
+              ].map(s => (
+                <div key={s.l} style={{padding:'12px 14px',background:'var(--gray-50)',borderRadius:'var(--r-md)',border:'1px solid var(--gray-100)'}}>
+                  <div style={{fontSize:9.5,fontWeight:700,letterSpacing:'.07em',textTransform:'uppercase',color:'var(--gray-400)',marginBottom:5}}>{s.l}</div>
+                  <div style={{fontFamily:'var(--font-mono)',fontWeight:800,fontSize:18,color:s.c}}>{s.fmt(s.v)}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Sales Breakdown + By Technician side by side */}
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
+
+              {/* Sales Breakdown table */}
+              <div>
+                <div style={{fontSize:10,fontWeight:800,letterSpacing:'.08em',textTransform:'uppercase',color:'var(--gray-400)',marginBottom:8}}>Sales Breakdown</div>
+                <table style={{width:'100%',borderCollapse:'collapse',border:'1px solid var(--gray-200)',borderRadius:'var(--r-md)',overflow:'hidden'}}>
+                  <thead>
+                    <tr>
+                      <th style={{...thS,textAlign:'left'}}>Category</th>
+                      <th style={thS}>Sales</th>
+                      <th style={thS}>Discounts</th>
+                      <th style={thS}>Net</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[
+                      { l:'Labor',    sales: eod.labor,     disc: 0 },
+                      { l:'Parts',    sales: eod.parts,     disc: 0 },
+                      { l:'Sublets',  sales: eod.sublets,   disc: 0 },
+                      { l:'Tires',    sales: eod.tires,     disc: 0 },
+                      { l:'Batteries',sales: eod.batteries, disc: 0 },
+                      { l:'Fees',     sales: eod.fees,      disc: 0 },
+                    ].map(row => (
+                      <tr key={row.l}>
+                        <td style={tdL}>{row.l}</td>
+                        <td style={tdS}>{row.sales > 0 ? f$(row.sales) : <span style={{color:'var(--gray-300)'}}>—</span>}</td>
+                        <td style={{...tdS,color:'var(--red-500)'}}>{row.disc > 0 ? `-${f$(row.disc)}` : <span style={{color:'var(--gray-300)'}}>—</span>}</td>
+                        <td style={{...tdS,fontWeight:600}}>{row.sales > 0 ? f$(row.sales - row.disc) : <span style={{color:'var(--gray-300)'}}>—</span>}</td>
+                      </tr>
+                    ))}
+                    <tr>
+                      <td style={tdTotL}>Total</td>
+                      <td style={tdTot}>{f$(eod.labor + eod.parts + eod.sublets + eod.tires + eod.batteries + eod.fees)}</td>
+                      <td style={{...tdTot,color:'var(--red-500)'}}>{eod.disc > 0 ? `-${f$(eod.disc)}` : '—'}</td>
+                      <td style={{...tdTot,color:'var(--green-600)'}}>{f$(eod.total)}</td>
+                    </tr>
+                    {(eod.tax > 0) && (
+                      <tr>
+                        <td style={{...tdL,color:'var(--gray-500)',fontWeight:400}}>Sales Tax</td>
+                        <td colSpan={2}/>
+                        <td style={{...tdS,color:'var(--gray-500)'}}>{f$(eod.tax)}</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* By Technician table */}
+              <div>
+                <div style={{fontSize:10,fontWeight:800,letterSpacing:'.08em',textTransform:'uppercase',color:'var(--gray-400)',marginBottom:8}}>By Technician</div>
+                <table style={{width:'100%',borderCollapse:'collapse',border:'1px solid var(--gray-200)',borderRadius:'var(--r-md)',overflow:'hidden'}}>
+                  <thead>
+                    <tr>
+                      <th style={{...thS,textAlign:'left'}}>Technician</th>
+                      <th style={thS}>ROs</th>
+                      <th style={thS}>Hrs Sold</th>
+                      <th style={thS}>Labor</th>
+                      <th style={thS}>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {byTech.length === 0 ? (
+                      <tr><td colSpan={5} style={{padding:'20px',textAlign:'center',color:'var(--gray-400)',fontSize:12}}>No posted ROs in range</td></tr>
+                    ) : byTech.map(t => (
+                      <tr key={t.id} onClick={() => setSelTech(selTech === String(t.id) ? 'all' : String(t.id))}
+                        style={{cursor:'pointer',background:selTech===String(t.id)?'var(--navy-50)':''}}>
+                        <td style={{...tdL,color:selTech===String(t.id)?'var(--navy-800)':'inherit'}}>{t.name}</td>
+                        <td style={tdS}>{t.ros}</td>
+                        <td style={tdS}>{fmtHrs(t.hs)}</td>
+                        <td style={{...tdS,color:'var(--navy-700)'}}>{f$(t.labor)}</td>
+                        <td style={{...tdS,fontWeight:700,color:'var(--green-600)'}}>{f$(t.total)}</td>
+                      </tr>
+                    ))}
+                    {byTech.length > 0 && (
+                      <tr>
+                        <td style={tdTotL}>Total</td>
+                        <td style={tdTot}>{eod.n}</td>
+                        <td style={tdTot}>{fmtHrs(eod.hs)}</td>
+                        <td style={tdTot}>{f$(eod.labor)}</td>
+                        <td style={{...tdTot,color:'var(--green-600)'}}>{f$(eod.total)}</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+                <div style={{marginTop:10,display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                  {[
+                    {l:'Open Value',  v:f$(eod.open),    c:'var(--gold-600)'},
+                    {l:'Declined',    v:f$(eod.declined), c:eod.declined>0?'var(--red-500)':'var(--gray-400)'},
+                  ].map(s=>(
+                    <div key={s.l} style={{padding:'10px 14px',background:'var(--gray-50)',borderRadius:'var(--r-md)',border:'1px solid var(--gray-100)'}}>
+                      <div style={{fontSize:9.5,fontWeight:700,letterSpacing:'.07em',textTransform:'uppercase',color:'var(--gray-400)',marginBottom:4}}>{s.l}</div>
+                      <div style={{fontFamily:'var(--font-mono)',fontWeight:800,fontSize:16,color:s.c}}>{s.v}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Company drill-down or summary table ── */}
+      {selCo && scd ? (
         <>
           <div style={{marginBottom:14,padding:'12px 16px',background:'white',border:'1px solid var(--gray-200)',borderRadius:'var(--r-lg)',display:'flex',alignItems:'center',gap:14,flexWrap:'wrap'}}>
             <div>
               <div style={{fontSize:16,fontWeight:800}}>{scd.name}</div>
-              <div style={{fontSize:12,color:'var(--gray-400)',marginTop:2}}>{scd.cnt} orders · {DATE_RANGES.find(r=>r.key===range)?.label}</div>
+              <div style={{fontSize:12,color:'var(--gray-400)',marginTop:2}}>{scd.cnt} orders · {DATE_RANGES.find(r => r.key === range)?.label}</div>
             </div>
             <div style={{display:'flex',gap:16,marginLeft:'auto',flexWrap:'wrap'}}>
               {[{l:'Revenue',v:f$(scd.rev),c:'var(--green-600)'},{l:'Labor',v:f$(scd.labor),c:'var(--navy-700)'},{l:'Parts',v:f$(scd.parts),c:'var(--gray-600)'},{l:'Open',v:f$(scd.open),c:'var(--gold-600)'},{l:'Declined',v:f$(scd.declined),c:'var(--red-500)'}].map(s=>(
@@ -660,8 +896,8 @@ function SalesTab({ ros, companies, vehicles, employees, statuses }) {
               <table>
                 <thead><tr><th>RO #</th><th>Vehicle</th><th>Status</th><th>Date</th><th>Tech</th><th>Advisor</th><th style={{textAlign:'right'}}>Labor</th><th style={{textAlign:'right'}}>Parts</th><th style={{textAlign:'right'}}>Total</th><th>Declined</th><th></th></tr></thead>
                 <tbody>
-                  {scd.allRos.sort((a,b)=>new Date(b.created)-new Date(a.created)).map(ro=>{
-                    const veh=gv(ro.vid),tech=ge(ro.techId),sa=ge(ro.saId),dec=ro.jobs.filter(j=>!j.auth);
+                  {scd.allRos.sort((a, b) => new Date(b.created) - new Date(a.created)).map(ro => {
+                    const veh=gv(ro.vid), tech=ge(ro.techId), sa=ge(ro.saId), dec=ro.jobs.filter(j=>!j.auth);
                     return (
                       <tr key={ro.id}>
                         <td><span style={{fontFamily:'var(--font-mono)',fontWeight:700,color:'var(--navy-800)'}}>#{ro.rn}</span></td>
@@ -683,44 +919,37 @@ function SalesTab({ ros, companies, vehicles, employees, statuses }) {
             </div>
           </div>
         </>
-      ):(
-        <>
-          <div className="stat-grid" style={{gridTemplateColumns:'repeat(5,1fr)'}}>
-            {[{l:'Posted Revenue',v:f$(tot.rev),c:'green'},{l:'Labor',v:f$(tot.labor),c:''},{l:'Parts',v:f$(tot.parts),c:''},{l:'Open Value',v:f$(tot.open),c:'gold'},{l:'Declined',v:f$(tot.dec),c:tot.dec>0?'urgent':''}].map(s=>(
-              <div key={s.l} className="stat-card"><div className="stat-label">{s.l}</div><div className={`stat-value ${s.c}`} style={{fontSize:18}}>{s.v}</div></div>
-            ))}
+      ) : (
+        <div className="table-card">
+          <div className="table-card-header">
+            <span className="table-card-title">Revenue by Fleet Account</span>
+            <span className="table-card-count">{byco.filter(c => c.cnt > 0).length} active</span>
+            <span style={{marginLeft:'auto',fontSize:10.5,color:'var(--gray-400)'}}>Click a row to see individual ROs</span>
           </div>
-          <div className="table-card">
-            <div className="table-card-header">
-              <span className="table-card-title">💰 Revenue by Fleet Account</span>
-              <span className="table-card-count">{byco.filter(c=>c.cnt>0).length} active</span>
-              <span style={{marginLeft:'auto',fontSize:10.5,color:'var(--gray-400)'}}>Click a company to see individual ROs</span>
-            </div>
-            <div className="table-wrapper">
-              <table>
-                <thead><tr><th>Account</th><th style={{textAlign:'right'}}>Revenue</th><th style={{textAlign:'right'}}>Labor</th><th style={{textAlign:'right'}}>Parts</th><th style={{textAlign:'right'}}>Avg Ticket</th><th style={{textAlign:'right'}}>Open</th><th style={{textAlign:'right'}}>Declined</th><th style={{textAlign:'right'}}>ROs</th><th></th></tr></thead>
-                <tbody>
-                  {byco.map(co=>(
-                    <tr key={co.id} onClick={()=>setSelCo(co.id)} style={{cursor:'pointer'}}>
-                      <td>
-                        <div style={{fontWeight:600}}>{co.name}</div>
-                        <div style={{marginTop:5,height:3,background:'var(--gray-100)',borderRadius:3,width:120,overflow:'hidden'}}><div style={{height:'100%',width:`${(co.rev/mx)*100}%`,background:'var(--green-500)',borderRadius:3}}/></div>
-                      </td>
-                      <td style={{textAlign:'right',fontFamily:'var(--font-mono)',fontWeight:700,color:'var(--green-600)'}}>{f$(co.rev)}</td>
-                      <td style={{textAlign:'right',fontFamily:'var(--font-mono)',color:'var(--navy-700)'}}>{f$(co.labor)}</td>
-                      <td style={{textAlign:'right',fontFamily:'var(--font-mono)',color:'var(--gray-600)'}}>{f$(co.parts)}</td>
-                      <td style={{textAlign:'right',fontFamily:'var(--font-mono)',color:'var(--gray-700)'}}>{co.avg?f$(co.avg):'—'}</td>
-                      <td style={{textAlign:'right',fontFamily:'var(--font-mono)',fontWeight:co.open>0?700:400,color:co.open>0?'var(--gold-600)':'var(--gray-300)'}}>{f$(co.open)}</td>
-                      <td style={{textAlign:'right',fontFamily:'var(--font-mono)',fontWeight:co.declined>0?700:400,color:co.declined>0?'var(--red-500)':'var(--gray-300)'}}>{f$(co.declined)}</td>
-                      <td style={{textAlign:'right',color:'var(--gray-500)'}}>{co.cnt}</td>
-                      <td><span style={{color:'var(--blue-500)',fontSize:11,fontWeight:600}}>Details →</span></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+          <div className="table-wrapper">
+            <table>
+              <thead><tr><th>Account</th><th style={{textAlign:'right'}}>Revenue</th><th style={{textAlign:'right'}}>Labor</th><th style={{textAlign:'right'}}>Parts</th><th style={{textAlign:'right'}}>Avg Ticket</th><th style={{textAlign:'right'}}>Open</th><th style={{textAlign:'right'}}>Declined</th><th style={{textAlign:'right'}}>ROs</th><th></th></tr></thead>
+              <tbody>
+                {byco.map(co => (
+                  <tr key={co.id} onClick={() => setSelCo(co.id)} style={{cursor:'pointer'}}>
+                    <td>
+                      <div style={{fontWeight:600}}>{co.name}</div>
+                      <div style={{marginTop:5,height:3,background:'var(--gray-100)',borderRadius:3,width:120,overflow:'hidden'}}><div style={{height:'100%',width:`${(co.rev/mx)*100}%`,background:'var(--green-500)',borderRadius:3}}/></div>
+                    </td>
+                    <td style={{textAlign:'right',fontFamily:'var(--font-mono)',fontWeight:700,color:'var(--green-600)'}}>{f$(co.rev)}</td>
+                    <td style={{textAlign:'right',fontFamily:'var(--font-mono)',color:'var(--navy-700)'}}>{f$(co.labor)}</td>
+                    <td style={{textAlign:'right',fontFamily:'var(--font-mono)',color:'var(--gray-600)'}}>{f$(co.parts)}</td>
+                    <td style={{textAlign:'right',fontFamily:'var(--font-mono)',color:'var(--gray-700)'}}>{co.avg ? f$(co.avg) : '—'}</td>
+                    <td style={{textAlign:'right',fontFamily:'var(--font-mono)',fontWeight:co.open>0?700:400,color:co.open>0?'var(--gold-600)':'var(--gray-300)'}}>{f$(co.open)}</td>
+                    <td style={{textAlign:'right',fontFamily:'var(--font-mono)',fontWeight:co.declined>0?700:400,color:co.declined>0?'var(--red-500)':'var(--gray-300)'}}>{f$(co.declined)}</td>
+                    <td style={{textAlign:'right',color:'var(--gray-500)'}}>{co.cnt}</td>
+                    <td><span style={{color:'var(--blue-500)',fontSize:11,fontWeight:600}}>Details →</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        </>
+        </div>
       )}
     </>
   );
