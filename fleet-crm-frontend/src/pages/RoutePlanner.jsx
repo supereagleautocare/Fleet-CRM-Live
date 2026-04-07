@@ -1094,7 +1094,12 @@ useEffect(() => {
 }
 function MissingAddressesPopup({ missing, navigate }) {
   const [open, setOpen] = useState(false);
-  const [dismissed, setDismissed] = useState(new Set());
+  const [dismissed, setDismissed] = useState(() => {
+    try {
+      const saved = localStorage.getItem('fleet_missing_addr_dismissed');
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch (_) { return new Set(); }
+  });
   const visible = missing.filter(c => !dismissed.has(c.id));
   if (visible.length === 0) return null;
   return (
