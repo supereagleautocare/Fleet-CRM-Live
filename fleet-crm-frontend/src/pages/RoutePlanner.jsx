@@ -1154,7 +1154,11 @@ function MissingAddressesPopup({ missing, navigate }) {
                     </div>
                   </div>
                   <button
-                    onClick={() => setDismissed(d => new Set([...d, c.id]))}
+                    onClick={() => setDismissed(d => {
+                      const next = new Set([...d, c.id]);
+                      try { localStorage.setItem('fleet_missing_addr_dismissed', JSON.stringify([...next])); } catch(_) {}
+                      return next;
+                    })}
                     title="Dismiss"
                     style={{
                       flexShrink:0,background:'none',border:'none',
