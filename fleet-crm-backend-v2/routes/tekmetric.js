@@ -90,9 +90,11 @@ async function tekFetch(url, token, attempt = 1) {
   logCall(url, res.status, ms);
 
   if (res.status === 429) {
-    if (attempt >= 3) throw new Error(`429 after 3 attempts: ${url}`);
-    const wait = Math.pow(2, attempt) * 1000;
-    console.warn(`[Tekmetric] 429 — waiting ${wait}ms (attempt ${attempt})`);
+    const MAX_ATTEMPTS = 8;
+    if (attempt >= MAX_ATTEMPTS) throw new Error(`429 after ${MAX_ATTEMPTS} attempts: ${url}`);
+    const jitter = Math.floor(Math.random() * 1000);
+    const wait   = Math.min(Math.pow(2, attempt) * 1000, 60000) + jitter;
+    console.warn(`[Tekmetric] 429 — waiting ${wait}ms (attempt ${attempt}/${MAX_ATTEMPTS})`);
     await sleep(wait);
     return tekFetch(url, token, attempt + 1);
   }
@@ -109,7 +111,10 @@ async function fetchAllPages(endpoint, token, params = {}) {
   let page = 0, totalPages = 1;
   while (page < totalPages) {
     const url = new URL(endpoint);
-    Object.entries({ ...params, size: 100, page }).forEach(([k, v]) => url.searchParams.set(k, v));
+    Object.entries({ ...params, size: 100, page }).forEach(([k, v]) => {
+      if (Array.isArray(v)) v.forEach(item => url.searchParams.append(k, item));
+      else url.searchParams.set(k, v);
+    });
     const data = await tekFetch(url.toString(), token);
     results.push(...(data.content || []));
     totalPages = data.totalPages || 1;
@@ -153,15 +158,18 @@ const tekCache = {
   employeeMap:      new Map(), // id → normalized employee
   arRos:            [],        // normalized AR ROs (status 6)
   lastCustomerSync: null,
+  lastVehicleSync:  null,
   lastRoSync:       null,
   lastEmployeeSync: null,
   lastArSync:       null,
 };
 
+let syncInProgress = false;
+
 // ── Response caches ───────────────────────────────────────────────────────────
 let shopFloorCache   = null;
 let shopFloorCacheAt = 0;
-const SHOP_FLOOR_TTL = 30000;      // 30 seconds — all users share this result
+const SHOP_FLOOR_TTL = 60000;      // 60 seconds — all users share this result
 
 let arCache   = null;
 let arCacheAt = 0;
@@ -267,19 +275,17 @@ async function syncCustomers(token, base, shopId) {
 }
 
 async function syncVehicles(token, base, shopId) {
-  // Only fetch vehicles for customers that have none cached yet
-  const covered = new Set(Array.from(tekCache.vehicleMap.values()).map(v => v.cid));
-  const missing = Array.from(tekCache.customerMap.keys()).filter(id => !covered.has(id));
-  if (missing.length === 0) return;
-  console.log(`[Tekmetric] Fetching vehicles for ${missing.length} new customers…`);
-  for (let i = 0; i < missing.length; i += 8) {
-    await Promise.allSettled(missing.slice(i, i + 8).map(async cid => {
-      const rows = await fetchAllPages(`${base}/vehicles`, token, { shop: shopId, customerId: cid });
-      rows.forEach(v => tekCache.vehicleMap.set(v.id, normVehicle(v)));
-    }));
-    if (i + 8 < missing.length) await sleep(150);
-  }
-  console.log(`[Tekmetric] Vehicles cached: ${tekCache.vehicleMap.size}`);
+  const since  = tekCache.lastVehicleSync;
+  const params = { shop: shopId };
+  if (since) params.updatedDateStart = since;
+  console.log(`[Tekmetric] Syncing vehicles (${since ? 'delta' : 'full'})…`);
+  const rows = await fetchAllPages(`${base}/vehicles`, token, params);
+  rows.forEach(v => {
+    if (v.deletedDate) tekCache.vehicleMap.delete(v.id);
+    else tekCache.vehicleMap.set(v.id, normVehicle(v));
+  });
+  tekCache.lastVehicleSync = new Date().toISOString();
+  console.log(`[Tekmetric] Vehicles cached: ${tekCache.vehicleMap.size} (+${rows.length} updated)`);
 }
 
 async function syncRos(token, base, shopId) {
@@ -392,7 +398,7 @@ router.get('/shop-floor', async (req, res) => {
     // Active ROs only — no AR (6), no deleted (7)
     const rawRos = await fetchAllPages(`${base}/repair-orders`, token, {
       shop: shopId,
-      repairOrderStatusId: '1,2,3,4',
+      repairOrderStatusId: [1, 2, 3, 4],
     });
     const ros = rawRos.map(normRo);
 
@@ -461,10 +467,21 @@ router.get('/fleet-data', async (req, res) => {
     const cacheEmpty   = tekCache.customerMap.size === 0;
 
     if (cacheEmpty || forceRefresh) {
-      await syncCustomers(token, base, shopId);
-      await syncVehicles(token, base, shopId);
-      await syncRos(token, base, shopId);
-      await syncEmployees(token, base, shopId);
+      // Never block the browser — kick off sync in background and return immediately.
+      // With 15 years of history the full RO sync alone takes 9+ minutes; blocking would time out.
+      if (!syncInProgress) {
+        syncInProgress = true;
+        setImmediate(async () => {
+          try {
+            await syncCustomers(token, base, shopId);
+            await syncVehicles(token, base, shopId);
+            await syncRos(token, base, shopId);
+            await syncEmployees(token, base, shopId);
+            shopFloorCache = null; shopFloorCacheAt = 0;
+          } catch (e) { console.error('[InitialSync]', e.message); }
+          finally { syncInProgress = false; }
+        });
+      }
     } else {
       // Serve stale immediately, refresh in the background
       setImmediate(async () => {
@@ -795,11 +812,13 @@ if (!shopId) {
     tekCache.employeeMap.clear();
     tekCache.arRos            = [];
     tekCache.lastCustomerSync = null;
+    tekCache.lastVehicleSync  = null;
     tekCache.lastRoSync       = null;
     tekCache.lastEmployeeSync = null;
     tekCache.lastArSync       = null;
     shopFloorCache = null; shopFloorCacheAt = 0;
     arCache        = null; arCacheAt        = 0;
+    syncInProgress = false;
     prevShopFloorStatuses.clear();
 
     startBackgroundSync();
@@ -829,11 +848,13 @@ router.post('/disconnect', async (req, res) => {
     tekCache.employeeMap.clear();
     tekCache.arRos            = [];
     tekCache.lastCustomerSync = null;
+    tekCache.lastVehicleSync  = null;
     tekCache.lastRoSync       = null;
     tekCache.lastEmployeeSync = null;
     tekCache.lastArSync       = null;
     shopFloorCache = null; shopFloorCacheAt = 0;
     arCache        = null; arCacheAt        = 0;
+    syncInProgress = false;
     prevShopFloorStatuses.clear();
 
     await pool.query(
