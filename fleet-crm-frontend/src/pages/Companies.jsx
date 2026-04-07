@@ -492,28 +492,38 @@ async function handleImport(e) {
             <input placeholder="Search name, industry…" value={search} onChange={e=>setSearch(e.target.value)}/>
           </div>
           <button className="btn btn-ghost" onClick={()=>setShowImport(v=>!v)}>📥 Import CSV</button>
-          <button className="btn btn-ghost" onClick={()=>{
-            const headers = ['Name','Preferred Contact','Role','Phone','Address','City','Industry','Pipeline Stage','Status','Last Contact Type','Last Contacted','Total Contacts'];
-            const rows = companies.map(c => [
-              c.name||'',
-              c.preferred_contact_name||'',
-              c.preferred_contact_role||'',
-              c.main_phone||'',
-              c.address||'',
-              c.city||'',
-              c.industry||'',
-              c.pipeline_stage||'',
-              c.company_status||'prospect',
-              c.last_contact_type||'',
-              c.last_contacted ? c.last_contacted.slice(0,10) : '',
-              '',
-            ]);
-            const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
-            const blob = new Blob([csv], {type:'text/csv'});
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url; a.download = `companies-${new Date().toISOString().slice(0,10)}.csv`;
-            a.click(); URL.revokeObjectURL(url);
+          <button className="btn btn-ghost" onClick={async()=>{
+            showToast('Building export with contacts…');
+            try {
+              const enriched = await Promise.all(
+                companies.map(async (c) => {
+                  try { const full = await api.company(c.id); return { ...c, contacts: full.contacts || [] }; }
+                  catch (_) { return { ...c, contacts: [] }; }
+                })
+              );
+              const maxContacts = Math.max(0, ...enriched.map(c => c.contacts.length));
+              const contactHeaders = [];
+              for (let i = 1; i <= maxContacts; i++) {
+                contactHeaders.push(`Contact ${i} Name`, `Contact ${i} Role`, `Contact ${i} Phone`, `Contact ${i} Email`, `Contact ${i} Preferred`);
+              }
+              const headers = ['Name','Industry','Phone','Address','City','State','Website','Pipeline Stage','Status','Last Contact Type','Last Contacted','Follow-Up Date','Notes',...contactHeaders];
+              const rows = enriched.map(c => {
+                const contactCols = [];
+                for (let i = 0; i < maxContacts; i++) {
+                  const contact = c.contacts[i];
+                  if (contact) { contactCols.push(contact.name||'', contact.role_title||'', contact.direct_line||'', contact.email||'', contact.is_preferred ? 'Yes' : ''); }
+                  else { contactCols.push('','','','',''); }
+                }
+                return [c.name||'', c.industry||'', c.main_phone||'', c.address||'', c.city||'', c.state||'', c.website||'', c.pipeline_stage||'', c.company_status||'prospect', c.last_contact_type||'', c.last_contacted ? c.last_contacted.slice(0,10) : '', c.followup_due||'', c.notes||'', ...contactCols];
+              });
+              const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+              const blob = new Blob([csv], {type:'text/csv'});
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url; a.download = `companies-${new Date().toISOString().slice(0,10)}.csv`;
+              a.click(); URL.revokeObjectURL(url);
+              showToast(`Exported ${enriched.length} companies`);
+            } catch(err) { showToast('Export failed: ' + err.message, 'error'); }
           }}>⬇️ Export CSV</button>
           <button className="btn btn-primary" onClick={()=>setShowAddForm(true)}>+ Add Company</button>
         </div>
