@@ -270,8 +270,11 @@ function normEmployee(e) {
 async function syncEmployees(token, base, shopId) {
   console.log('[Tekmetric] Syncing employees…');
   const rows = await fetchAllPages(`${base}/employees`, token, { shop: shopId });
-  rows.forEach(e => tekCache.employeeMap.set(e.id, normEmployee(e)));
+  const normalized = rows.map(e => normEmployee(e));
+  normalized.forEach(e => tekCache.employeeMap.set(e.id, e));
   tekCache.lastEmployeeSync = new Date().toISOString();
+  await persistRows('tekmetric_employees', normalized);
+  await persistSyncState({ lastEmployeeSync: tekCache.lastEmployeeSync });
   console.log(`[Tekmetric] Employees cached: ${tekCache.employeeMap.size}`);
 }
 
@@ -281,8 +284,11 @@ async function syncCustomers(token, base, shopId) {
   if (since) params.updatedDateStart = since;
   console.log(`[Tekmetric] Syncing customers (${since ? 'delta' : 'full'})…`);
   const rows = await fetchAllPages(`${base}/customers`, token, params);
-  rows.forEach(c => tekCache.customerMap.set(c.id, normCustomer(c)));
+  const normalized = rows.map(c => normCustomer(c));
+  normalized.forEach(c => tekCache.customerMap.set(c.id, c));
   tekCache.lastCustomerSync = new Date().toISOString();
+  await persistRows('tekmetric_customers', normalized);
+  await persistSyncState({ lastCustomerSync: tekCache.lastCustomerSync });
   console.log(`[Tekmetric] Customers cached: ${tekCache.customerMap.size} (+${rows.length} updated)`);
 }
 
@@ -292,12 +298,22 @@ async function syncVehicles(token, base, shopId) {
   if (since) params.updatedDateStart = since;
   console.log(`[Tekmetric] Syncing vehicles (${since ? 'delta' : 'full'})…`);
   const rows = await fetchAllPages(`${base}/vehicles`, token, params);
+  const toUpsert = [], toDelete = [];
   rows.forEach(v => {
-    if (v.deletedDate) tekCache.vehicleMap.delete(v.id);
-    else if (tekCache.customerMap.has(v.customerId)) tekCache.vehicleMap.set(v.id, normVehicle(v));
+    if (v.deletedDate) {
+      tekCache.vehicleMap.delete(v.id);
+      toDelete.push(v.id);
+    } else if (tekCache.customerMap.has(v.customerId)) {
+      const n = normVehicle(v);
+      tekCache.vehicleMap.set(v.id, n);
+      toUpsert.push(n);
+    }
   });
   tekCache.lastVehicleSync = new Date().toISOString();
-  console.log(`[Tekmetric] Vehicles cached: ${tekCache.vehicleMap.size} (+${rows.length} updated)`);
+  await persistRows('tekmetric_vehicles', toUpsert);
+  for (const id of toDelete) await deleteFromDB('tekmetric_vehicles', id);
+  await persistSyncState({ lastVehicleSync: tekCache.lastVehicleSync });
+  console.log(`[Tekmetric] Vehicles cached: ${tekCache.vehicleMap.size} (+${toUpsert.length} upserted, ${toDelete.length} deleted)`);
 }
 
 async function syncRos(token, base, shopId) {
@@ -308,11 +324,14 @@ async function syncRos(token, base, shopId) {
   const params = { shop: shopId, updatedDateStart: since };
   console.log(`[Tekmetric] Syncing ROs (delta from ${since.slice(0, 10)})…`);
   const rows = await fetchAllPages(`${base}/repair-orders`, token, params);
-  // Store all non-deleted ROs; AR (status 6) lives here too so fleet history is complete
-  rows.filter(ro => ro.repairOrderStatus?.id !== 7 && tekCache.customerMap.has(ro.customerId))
-      .forEach(ro => tekCache.roMap.set(ro.id, normRo(ro)));
+  const normalized = rows
+    .filter(ro => ro.repairOrderStatus?.id !== 7 && tekCache.customerMap.has(ro.customerId))
+    .map(ro => normRo(ro));
+  normalized.forEach(ro => tekCache.roMap.set(ro.id, ro));
   tekCache.lastRoSync = new Date().toISOString();
-  console.log(`[Tekmetric] ROs cached: ${tekCache.roMap.size} (+${rows.length} updated)`);
+  await persistRows('tekmetric_ros', normalized);
+  await persistSyncState({ lastRoSync: tekCache.lastRoSync });
+  console.log(`[Tekmetric] ROs cached: ${tekCache.roMap.size} (+${normalized.length} updated)`);
 }
 
 async function syncAR(token, base, shopId) {
@@ -337,7 +356,9 @@ async function syncAR(token, base, shopId) {
     ...normalized,
   ];
   tekCache.lastArSync = new Date().toISOString();
-  arCache = null; arCacheAt = 0; // bust AR response cache
+  arCache = null; arCacheAt = 0;
+  await persistRows('tekmetric_ar_ros', normalized);
+  await persistSyncState({ lastArSync: tekCache.lastArSync });
   console.log(`[Tekmetric] AR ROs cached: ${tekCache.arRos.length}`);
 }
 
@@ -390,6 +411,90 @@ async function upsertSetting(key, value, label) {
      ON CONFLICT(key) DO UPDATE SET value = EXCLUDED.value`,
     [key, value, label]
   );
+}
+
+// ── DB persistence — Tekmetric cache survives server restarts ─────────────────
+
+async function initTekDB() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS tekmetric_customers (
+      id BIGINT PRIMARY KEY, data JSONB NOT NULL, synced_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS tekmetric_vehicles (
+      id BIGINT PRIMARY KEY, data JSONB NOT NULL, synced_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS tekmetric_ros (
+      id BIGINT PRIMARY KEY, data JSONB NOT NULL, synced_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS tekmetric_ar_ros (
+      id BIGINT PRIMARY KEY, data JSONB NOT NULL, synced_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS tekmetric_employees (
+      id BIGINT PRIMARY KEY, data JSONB NOT NULL, synced_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS tekmetric_sync_state (
+      key TEXT PRIMARY KEY, value TEXT NOT NULL
+    );
+  `);
+  console.log('[Tekmetric] DB tables ready');
+}
+
+async function loadCacheFromDB() {
+  const [custs, vehs, ros, arRos, emps, state] = await Promise.all([
+    pool.query('SELECT id, data FROM tekmetric_customers'),
+    pool.query('SELECT id, data FROM tekmetric_vehicles'),
+    pool.query('SELECT id, data FROM tekmetric_ros'),
+    pool.query('SELECT id, data FROM tekmetric_ar_ros'),
+    pool.query('SELECT id, data FROM tekmetric_employees'),
+    pool.query('SELECT key, value FROM tekmetric_sync_state'),
+  ]);
+  custs.rows.forEach(r => tekCache.customerMap.set(Number(r.id), r.data));
+  vehs.rows.forEach(r  => tekCache.vehicleMap.set(Number(r.id),  r.data));
+  ros.rows.forEach(r   => tekCache.roMap.set(Number(r.id),       r.data));
+  emps.rows.forEach(r  => tekCache.employeeMap.set(Number(r.id), r.data));
+  const now = Date.now();
+  tekCache.arRos = arRos.rows.map(r => ({
+    ...r.data,
+    balance:         (r.data.total || 0) - (r.data.paid || 0),
+    daysOutstanding: r.data.created ? Math.floor((now - new Date(r.data.created)) / 86400000) : null,
+  }));
+  const stateMap = Object.fromEntries(state.rows.map(r => [r.key, r.value]));
+  tekCache.lastCustomerSync = stateMap['lastCustomerSync'] || null;
+  tekCache.lastVehicleSync  = stateMap['lastVehicleSync']  || null;
+  tekCache.lastRoSync       = stateMap['lastRoSync']       || null;
+  tekCache.lastEmployeeSync = stateMap['lastEmployeeSync'] || null;
+  tekCache.lastArSync       = stateMap['lastArSync']       || null;
+  console.log(`[Tekmetric] Loaded from DB: ${tekCache.customerMap.size} customers, ${tekCache.vehicleMap.size} vehicles, ${tekCache.roMap.size} ROs, ${tekCache.arRos.length} AR, ${tekCache.employeeMap.size} employees`);
+}
+
+// Batch upsert rows into a tekmetric_* table. Each item must have an .id field.
+async function persistRows(table, rows) {
+  if (!rows.length) return;
+  const CHUNK = 200;
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    const chunk = rows.slice(i, i + CHUNK);
+    const vals  = chunk.map((_, j) => `($${j * 2 + 1}, $${j * 2 + 2}::jsonb)`).join(',');
+    const params = chunk.flatMap(r => [r.id, JSON.stringify(r)]);
+    await pool.query(
+      `INSERT INTO ${table} (id, data) VALUES ${vals}
+       ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, synced_at = NOW()`,
+      params
+    );
+  }
+}
+
+async function deleteFromDB(table, id) {
+  await pool.query(`DELETE FROM ${table} WHERE id = $1`, [id]);
+}
+
+async function persistSyncState(updates) {
+  for (const [key, value] of Object.entries(updates)) {
+    await pool.query(
+      `INSERT INTO tekmetric_sync_state (key, value) VALUES ($1, $2)
+       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+      [key, value]
+    );
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -827,5 +932,21 @@ router.post('/disconnect', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// ── Startup: create tables, load cache from DB, resume background sync ────────
+(async () => {
+  try {
+    await initTekDB();
+    await loadCacheFromDB();
+    const { token, shopId } = await getTekConfig();
+    if (token && shopId) {
+      console.log('[Tekmetric] Credentials found on startup — resuming background sync');
+      syncAborted = false;
+      startBackgroundSync();
+    }
+  } catch (e) {
+    console.error('[Tekmetric] Startup init failed:', e.message);
+  }
+})();
 
 module.exports = router;
