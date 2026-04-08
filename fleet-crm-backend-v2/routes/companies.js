@@ -188,7 +188,7 @@ router.get('/nearby-data', async (req, res) => {
         FROM follow_ups WHERE source_type='company'
         ORDER BY entity_id, id DESC
       ) fu ON fu.entity_id=c.id
-      WHERE c.status='active'
+      WHERE c.status='active' AND c.company_status != 'dead'
       ORDER BY c.name ASC
     `);
     res.json(rows);

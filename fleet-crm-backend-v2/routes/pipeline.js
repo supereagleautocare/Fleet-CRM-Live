@@ -365,10 +365,17 @@ router.put('/status/:id', async (req, res) => {
     const { status } = req.body;
     const valid = ['prospect','interested','customer','dead'];
     if (!valid.includes(status)) return res.status(400).json({ error: 'Invalid status.' });
-    await pool.query(
-      `UPDATE companies SET company_status=$1, updated_at=to_char(now(),'YYYY-MM-DD"T"HH24:MI:SS"Z"') WHERE id=$2`,
-      [status, req.params.id]
-    );
+    if (status === 'dead') {
+      await pool.query(
+        `UPDATE companies SET company_status=$1, pipeline_stage='dead', stage_updated_at=to_char(now(),'YYYY-MM-DD"T"HH24:MI:SS"Z"'), updated_at=to_char(now(),'YYYY-MM-DD"T"HH24:MI:SS"Z"') WHERE id=$2`,
+        [status, req.params.id]
+      );
+    } else {
+      await pool.query(
+        `UPDATE companies SET company_status=$1, updated_at=to_char(now(),'YYYY-MM-DD"T"HH24:MI:SS"Z"') WHERE id=$2`,
+        [status, req.params.id]
+      );
+    }
     res.json({ company_status: status });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
