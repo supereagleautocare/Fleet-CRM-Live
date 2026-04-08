@@ -207,13 +207,24 @@ function ShopFloor({ pollSeconds = 30, notifSettings = {} }) {
   const [exp,       setExp]       = useState(null);
   const [selTech,   setSelTech]   = useState('all');
   const [sortBy,    setSortBy]    = useState('newest'); // 'newest' | 'oldest' | 'value' | 'idle'
+  const [dateRange, setDateRange] = useState('1yr');    // 'all' | '1yr' | '90' | '30' | 'today'
 
   const gc = id => companies.find(c => c.id === id);
   const gv = id => vehicles.find(v => v.id === id);
   const ge = id => employees.find(e => e.id === id);
 
-  // Active = not posted (sid !== 5)
+  // Active = not posted (sid !== 5), filtered by date range on created date
+  const drCutoff = useMemo(() => {
+    const d = new Date();
+    if (dateRange === '1yr')  { d.setFullYear(d.getFullYear() - 1); return d; }
+    if (dateRange === '90')   { d.setDate(d.getDate() - 90); return d; }
+    if (dateRange === '30')   { d.setDate(d.getDate() - 30); return d; }
+    if (dateRange === 'today'){ d.setHours(0,0,0,0); return d; }
+    return null; // 'all'
+  }, [dateRange]);
+
   let active = ros.filter(r => r.sid !== 5);
+  if (drCutoff) active = active.filter(r => new Date(r.created) >= drCutoff);
   if (selTech !== 'all') active = active.filter(r => String(r.techId) === selTech);
 
   const sortRos = arr => {
@@ -250,6 +261,15 @@ function ShopFloor({ pollSeconds = 30, notifSettings = {} }) {
           {polling ? '⏳ Refreshing…' : `🔄 ${countdown}s`}
         </span>
         <button onClick={pollShopFloor} disabled={polling} className="btn btn-ghost btn-sm" style={{fontSize:11}}>Refresh Now</button>
+
+        {/* Date range */}
+        {[['today','Today'],['30','30d'],['90','90d'],['1yr','1 Year'],['all','All']].map(([k,l]) => (
+          <button key={k} onClick={() => setDateRange(k)} className="btn btn-sm"
+            style={{fontSize:11,background:dateRange===k?'var(--navy-800)':'white',
+              color:dateRange===k?'white':'var(--gray-600)',border:'1px solid var(--gray-200)'}}>
+            {l}
+          </button>
+        ))}
 
         <div style={{marginLeft:'auto',display:'flex',gap:6,alignItems:'center'}}>
           {/* Tech filter */}
