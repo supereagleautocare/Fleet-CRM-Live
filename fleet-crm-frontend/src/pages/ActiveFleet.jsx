@@ -1679,7 +1679,7 @@ export default function ActiveFleet() {
       } else {
         setNextSyncIn(Math.round(msLeft / 1000));
       }
-    }, 15000); // check every 15 seconds, only updates the countdown display
+    }, 1000); // tick every second for smooth countdown
     return () => clearInterval(tick);
   }, [doSync]);
 
