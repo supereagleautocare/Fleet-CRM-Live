@@ -567,25 +567,23 @@ router.get('/fleet-data', async (req, res) => {
     const forceRefresh = req.query.full === '1';
     const cacheEmpty   = tekCache.customerMap.size === 0;
 
-    if (cacheEmpty || forceRefresh) {
-      // Cache is empty (first ever run, DB not yet populated) — kick off a background
-      // sync and return immediately. Background scheduler handles all subsequent syncs.
-      if (!syncInProgress) {
-        syncInProgress = true;
-        setImmediate(async () => {
-          try {
-            await syncCustomers(token, base, shopId);
-            await syncVehicles(token, base, shopId);
-            await syncRos(token, base, shopId);
-            await syncEmployees(token, base, shopId);
-            shopFloorCache = null; shopFloorCacheAt = 0;
-          } catch (e) { console.error('[InitialSync]', e.message); }
-          finally { syncInProgress = false; }
-        });
-      }
+    if ((cacheEmpty || forceRefresh) && !syncInProgress) {
+      // cacheEmpty = first ever run; forceRefresh = user clicked Sync Now
+      // Both kick off a delta sync in background and return current cache immediately.
+      syncInProgress = true;
+      setImmediate(async () => {
+        try {
+          await syncCustomers(token, base, shopId);
+          await syncVehicles(token, base, shopId);
+          await syncRos(token, base, shopId);
+          await syncEmployees(token, base, shopId);
+          shopFloorCache = null; shopFloorCacheAt = 0;
+        } catch (e) { console.error('[InitialSync]', e.message); }
+        finally { syncInProgress = false; }
+      });
     }
-    // If cache is populated (normal case — loaded from DB on startup), serve immediately.
-    // The background scheduler (every 5 min) handles keeping data current.
+    // Returns current cache immediately — frontend gets data right away,
+    // updated data appears on the next poll after the background sync finishes.
 
     const companies = Array.from(tekCache.customerMap.values());
     const vehicles  = Array.from(tekCache.vehicleMap.values());

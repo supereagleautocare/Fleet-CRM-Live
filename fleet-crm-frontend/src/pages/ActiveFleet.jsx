@@ -1627,7 +1627,7 @@ export default function ActiveFleet() {
     }, 2500);
 
     try {
-      const data = await api.tekmetricFleetData();
+      const data = await api.tekmetricFleetData(true); // true = ?full=1, forces delta sync
       clearInterval(stageTimer);
 
       if (data.error) throw new Error(data.error);
