@@ -325,7 +325,7 @@ function ShopFloor({ pollSeconds = 30, notifSettings = {} }) {
                 <div style={{display:'flex',flexDirection:'column',gap:8,
                   padding:'8px',background:'var(--gray-50)',
                   border:`1px solid ${status.color}33`,borderRadius:'0 0 8px 8px',
-                  minHeight:80,maxHeight:'calc(100vh - 320px)',overflowY:'auto'}}>
+                  minHeight:80}}>
                   {colRos.length === 0 && (
                     <div style={{textAlign:'center',padding:'20px 0',color:'var(--gray-300)',fontSize:12}}>No orders</div>
                   )}
