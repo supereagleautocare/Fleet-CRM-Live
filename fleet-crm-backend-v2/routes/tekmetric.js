@@ -526,11 +526,13 @@ router.get('/shop-floor', async (req, res) => {
     const rawRos = await fetchAllPages(`${base}/repair-orders`, token, {
       shop: shopId,
     });
-    // Exclude Paid (5), AR (6), Deleted (7) — keep all other statuses including custom ones
-    // Only keep ROs belonging to business customers
-    const ros = rawRos.map(normRo).filter(ro =>
-      ![5, 6, 7].includes(ro.sid) && tekCache.customerMap.has(ro.cid)
-    );
+    // Deduplicate by ID (pagination can return same RO twice), exclude Paid/AR/Deleted,
+    // and only keep business customers
+    const seen = new Set();
+    const ros = rawRos
+      .filter(ro => { if (seen.has(ro.id)) return false; seen.add(ro.id); return true; })
+      .map(normRo)
+      .filter(ro => ![5, 6, 7].includes(ro.sid) && tekCache.customerMap.has(ro.cid));
 
     // ── Status change detection ───────────────────────────────────────────────
     const statusChanges = [];
