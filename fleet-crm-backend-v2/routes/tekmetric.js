@@ -172,6 +172,11 @@ const tekCache = {
 
 let syncInProgress = false;
 
+// ── DB load gate — resolves once loadCacheFromDB() finishes on startup ────────
+// Routes that need cache data await this before responding.
+let _dbLoadResolve;
+const dbReady = new Promise(res => { _dbLoadResolve = res; });
+
 // ── Response caches ───────────────────────────────────────────────────────────
 let shopFloorCache   = null;
 let shopFloorCacheAt = 0;
@@ -506,6 +511,7 @@ async function persistSyncState(updates) {
 // Returns statusChanges[] so the frontend can fire toast notifications.
 router.get('/shop-floor', async (req, res) => {
   try {
+    await dbReady; // wait for DB cache load on startup before serving
     if (shopFloorCache && Date.now() - shopFloorCacheAt < SHOP_FLOOR_TTL) {
       return res.json({ ...shopFloorCache, fromCache: true });
     }
@@ -560,6 +566,7 @@ router.get('/shop-floor', async (req, res) => {
 // Blocks on first load; returns current cache + fires background delta on subsequent calls.
 router.get('/fleet-data', async (req, res) => {
   try {
+    await dbReady; // wait for DB cache load on startup before serving
     const { token, shopId, env } = await getTekConfig();
     if (!token)  return res.status(400).json({ error: 'Tekmetric not configured — no token. Go to Active Fleet → Settings and click Connect.' });
     if (!shopId) return res.status(400).json({ error: 'Tekmetric not configured — Shop ID missing. Go to Active Fleet → Settings, enter your Shop ID, and click Save.' });
@@ -618,6 +625,7 @@ router.get('/fleet-data', async (req, res) => {
 // Add ?refresh=1 to force an immediate re-sync.
 router.get('/ar', async (req, res) => {
   try {
+    await dbReady; // wait for DB cache load on startup before serving
     const forceRefresh = req.query.refresh === '1';
     if (arCache && !forceRefresh && Date.now() - arCacheAt < AR_TTL) {
       return res.json({ ...arCache, fromCache: true });
@@ -928,6 +936,7 @@ router.post('/disconnect', async (req, res) => {
   try {
     await initTekDB();
     await loadCacheFromDB();
+    _dbLoadResolve(); // ungate all routes — cache is ready
     const { token, shopId } = await getTekConfig();
     if (token && shopId) {
       console.log('[Tekmetric] Credentials found on startup — resuming background sync');
@@ -935,6 +944,7 @@ router.post('/disconnect', async (req, res) => {
       startBackgroundSync();
     }
   } catch (e) {
+    _dbLoadResolve(); // ungate even on error so routes don't hang forever
     console.error('[Tekmetric] Startup init failed:', e.message);
   }
 })();
