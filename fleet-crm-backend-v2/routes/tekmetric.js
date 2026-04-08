@@ -521,13 +521,10 @@ router.get('/shop-floor', async (req, res) => {
     if (!shopId)  return res.status(400).json({ error: 'Tekmetric not configured — Shop ID missing. Go to Active Fleet → Settings, enter your Shop ID, and click Save.' });
     const base = baseUrl(env);
 
-    // Fetch ROs updated in the last 90 days — no status filter so all custom
-    // statuses (Waiting on Customer, etc.) come through. Filter out Paid (5),
-    // AR (6), Deleted (7) server-side after fetching.
-    const since90 = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+    // No date or status filter — fetch all ROs and exclude Paid (5), AR (6),
+    // Deleted (7) server-side. Active ROs are always a small set so this is fast.
     const rawRos = await fetchAllPages(`${base}/repair-orders`, token, {
       shop: shopId,
-      updatedDateStart: since90,
     });
     // Exclude Paid (5), AR (6), Deleted (7) — keep all other statuses including custom ones
     // Only keep ROs belonging to business customers
