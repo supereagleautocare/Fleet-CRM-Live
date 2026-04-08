@@ -568,8 +568,8 @@ router.get('/fleet-data', async (req, res) => {
     const cacheEmpty   = tekCache.customerMap.size === 0;
 
     if (cacheEmpty || forceRefresh) {
-      // Never block the browser — kick off sync in background and return immediately.
-      // With 15 years of history the full RO sync alone takes 9+ minutes; blocking would time out.
+      // Cache is empty (first ever run, DB not yet populated) — kick off a background
+      // sync and return immediately. Background scheduler handles all subsequent syncs.
       if (!syncInProgress) {
         syncInProgress = true;
         setImmediate(async () => {
@@ -583,17 +583,9 @@ router.get('/fleet-data', async (req, res) => {
           finally { syncInProgress = false; }
         });
       }
-    } else {
-      // Serve stale immediately, refresh in the background
-      setImmediate(async () => {
-        try {
-          await syncCustomers(token, base, shopId);
-          await syncVehicles(token, base, shopId);
-          await syncRos(token, base, shopId);
-          shopFloorCache = null; shopFloorCacheAt = 0;
-        } catch (e) { console.error('[BgSync delta]', e.message); }
-      });
     }
+    // If cache is populated (normal case — loaded from DB on startup), serve immediately.
+    // The background scheduler (every 5 min) handles keeping data current.
 
     const companies = Array.from(tekCache.customerMap.values());
     const vehicles  = Array.from(tekCache.vehicleMap.values());
