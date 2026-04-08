@@ -521,13 +521,19 @@ router.get('/shop-floor', async (req, res) => {
     if (!shopId)  return res.status(400).json({ error: 'Tekmetric not configured — Shop ID missing. Go to Active Fleet → Settings, enter your Shop ID, and click Save.' });
     const base = baseUrl(env);
 
-    // Active ROs only — no AR (6), no deleted (7)
+    // Fetch ROs updated in the last 90 days — no status filter so all custom
+    // statuses (Waiting on Customer, etc.) come through. Filter out Paid (5),
+    // AR (6), Deleted (7) server-side after fetching.
+    const since90 = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
     const rawRos = await fetchAllPages(`${base}/repair-orders`, token, {
       shop: shopId,
-      repairOrderStatusId: [1, 2, 3, 4],
+      updatedDateStart: since90,
     });
-    // Only keep ROs belonging to business customers — this is a fleet CRM
-    const ros = rawRos.map(normRo).filter(ro => tekCache.customerMap.has(ro.cid));
+    // Exclude Paid (5), AR (6), Deleted (7) — keep all other statuses including custom ones
+    // Only keep ROs belonging to business customers
+    const ros = rawRos.map(normRo).filter(ro =>
+      ![5, 6, 7].includes(ro.sid) && tekCache.customerMap.has(ro.cid)
+    );
 
     // ── Status change detection ───────────────────────────────────────────────
     const statusChanges = [];
