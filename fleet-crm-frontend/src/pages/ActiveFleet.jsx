@@ -54,8 +54,91 @@ function ContactBadge({ method }) {
 }
 function IdleTag({ updated }) {
   const h = hrsIn(updated);
-  if (h < 24) return null;
-  return <span className="badge badge-overdue" style={{fontSize:9.5,marginLeft:4}}>⏱ {Math.floor(h/24)}d idle</span>;
+  if (h < 6) return null;
+  return <span className="badge badge-overdue" style={{fontSize:9.5,marginLeft:4}}>⏱ {h < 24 ? `${h}h` : `${Math.floor(h/24)}d`} idle</span>;
+}
+
+// ── SHOP FLOOR HELPERS ────────────────────────────────────────────────────────
+const avatarColor = name => {
+  const cols = ['#6366f1','#d97706','#16a34a','#dc2626','#1d4ed8','#7c3aed','#0891b2','#ea580c'];
+  let h = 0;
+  for (const c of (name||'')) h = (h*31 + c.charCodeAt(0)) & 0xffffffff;
+  return cols[Math.abs(h) % cols.length];
+};
+
+function Avatar({ name }) {
+  if (!name) return null;
+  const initials = name.split(' ').map(p=>p[0]).join('').slice(0,2).toUpperCase();
+  return (
+    <div title={name} style={{width:26,height:26,borderRadius:'50%',background:avatarColor(name),color:'white',
+      fontSize:10,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+      {initials}
+    </div>
+  );
+}
+
+function RoCard({ ro, co, veh, tech, sa, statuses, expanded, onExpand }) {
+  const hrsUpdated = hrsIn(ro.updated);
+  const isIdle = hrsUpdated > 6;
+  const dec = ro.jobs.filter(j => !j.auth);
+  const status = statuses.find(s => s.id === ro.sid);
+  return (
+    <div onClick={onExpand} style={{background:'white',border:'1px solid var(--gray-200)',borderRadius:8,
+      padding:'11px 12px',cursor:'pointer',borderLeft:`3px solid ${status?.color||'var(--gray-300)'}`,
+      boxShadow:expanded?'0 2px 10px rgba(0,0,0,0.08)':'none',transition:'box-shadow .15s'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:7}}>
+        <a href={tkRoLink(ro.id)} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()}
+          style={{fontFamily:'var(--font-mono)',fontWeight:800,fontSize:12,color:'var(--navy-700)',textDecoration:'none'}}>
+          #{ro.rn}
+        </a>
+        <span style={{fontSize:10,color:'var(--gray-400)'}}>Created {tis(ro.created)} ago</span>
+      </div>
+      <div style={{fontWeight:700,fontSize:13,color:'var(--gray-900)',lineHeight:1.2,marginBottom:3}}>
+        {co?.name||'—'}
+      </div>
+      <div style={{fontSize:11.5,color:'var(--gray-500)',lineHeight:1.3}}>
+        {veh ? `${veh.year} ${veh.make} ${veh.model}` : <span style={{color:'var(--gray-300)'}}>No vehicle</span>}
+        {veh?.plate && <span style={{marginLeft:6,fontFamily:'var(--font-mono)',fontSize:10,color:'var(--gray-400)',
+          background:'var(--gray-100)',padding:'1px 5px',borderRadius:3}}>{veh.plate}</span>}
+      </div>
+      <div style={{display:'flex',alignItems:'center',gap:4,marginTop:10}}>
+        {tech && <Avatar name={tech.name}/>}
+        {sa && sa.id !== tech?.id && <Avatar name={sa.name}/>}
+        <div style={{marginLeft:'auto',fontFamily:'var(--font-mono)',fontWeight:800,fontSize:14,color:'var(--navy-800)'}}>
+          {f$(ro.total)}
+        </div>
+      </div>
+      {(isIdle || dec.length > 0) && (
+        <div style={{display:'flex',gap:4,marginTop:8,flexWrap:'wrap'}}>
+          {isIdle && <span style={{fontSize:9.5,fontWeight:700,padding:'2px 7px',borderRadius:4,background:'#fef3c7',color:'#b45309',border:'1px solid #fde68a'}}>⏱ {tis(ro.updated)} idle</span>}
+          {dec.length > 0 && <span style={{fontSize:9.5,fontWeight:700,padding:'2px 7px',borderRadius:4,background:'#fee2e2',color:'#dc2626',border:'1px solid #fecaca'}}>⚠ {dec.length} declined</span>}
+        </div>
+      )}
+      {expanded && (
+        <div style={{marginTop:10,borderTop:'1px solid var(--gray-100)',paddingTop:10}}>
+          <div style={{fontSize:10,fontWeight:700,color:'var(--gray-400)',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:6}}>Jobs on this RO</div>
+          <div style={{display:'flex',flexDirection:'column',gap:5}}>
+            {ro.jobs.map((j,i) => (
+              <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',
+                padding:'6px 8px',borderRadius:5,background:j.auth?'#f0fdf4':'#fef2f2',border:`1px solid ${j.auth?'#bbf7d0':'#fecaca'}`}}>
+                <div style={{display:'flex',alignItems:'center',gap:5}}>
+                  <span style={{fontSize:11}}>{j.auth?'✅':'❌'}</span>
+                  <span style={{fontSize:11,fontWeight:600,color:j.auth?'var(--gray-700)':'var(--gray-400)'}}>{j.name}</span>
+                  {!j.auth && <span className="badge badge-overdue" style={{fontSize:8.5}}>DECLINED</span>}
+                </div>
+                <span style={{fontFamily:'var(--font-mono)',fontSize:10.5,color:'var(--gray-500)'}}>{f$(j.labor+j.parts)}</span>
+              </div>
+            ))}
+          </div>
+          {dec.length > 0 && (
+            <div style={{marginTop:6,fontSize:11.5,color:'var(--red-500)',fontWeight:600}}>
+              ⚠ {f$(dec.reduce((s,j)=>s+j.labor+j.parts,0))} in declined revenue
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ── SHOP FLOOR ────────────────────────────────────────────────────────────────
@@ -120,39 +203,91 @@ function ShopFloor({ pollSeconds = 30, notifSettings = {} }) {
     }, 1000);
     return () => clearInterval(tick);
   }, [pollSeconds]);
-  const [sel,       setSel]       = useState(null);
+  const [viewMode,  setViewMode]  = useState('board'); // 'board' | 'list'
   const [exp,       setExp]       = useState(null);
-  const [dateField, setDateField] = useState('created');
-  const [drRange,   setDrRange]   = useState('all');
-  const [drStart,   setDrStart]   = useState('');
-  const [drEnd,     setDrEnd]     = useState('');
-  const gc = id => companies.find(c => c.id===id);
-  const gv = id => vehicles.find(v => v.id===id);
-  const ge = id => employees.find(e => e.id===id);
-  const active = filterRange(ros.filter(r => r.sid!==5), drRange, drStart, drEnd, dateField);
-  const filt   = sel ? active.filter(r => r.sid===sel) : active;
-  const idle   = active.filter(r => hrsIn(r.updated)>24).length;
-  const noct   = active.filter(r => !r.lastContact).length;
-  const val    = active.reduce((s,r) => s+r.total, 0);
-  const sids   = statuses.filter(s => active.some(r => r.sid===s.id));
-  const rbg    = ro => { const h=hrsIn(ro.updated); return h>72?'row-overdue':h>24?'row-today':''; };
+  const [selTech,   setSelTech]   = useState('all');
+  const [sortBy,    setSortBy]    = useState('newest'); // 'newest' | 'oldest' | 'value' | 'idle'
+
+  const gc = id => companies.find(c => c.id === id);
+  const gv = id => vehicles.find(v => v.id === id);
+  const ge = id => employees.find(e => e.id === id);
+
+  // Active = not posted (sid !== 5)
+  let active = ros.filter(r => r.sid !== 5);
+  if (selTech !== 'all') active = active.filter(r => String(r.techId) === selTech);
+
+  const sortRos = arr => {
+    const sorted = [...arr];
+    if (sortBy === 'newest')  sorted.sort((a,b) => new Date(b.created) - new Date(a.created));
+    if (sortBy === 'oldest')  sorted.sort((a,b) => new Date(a.created) - new Date(b.created));
+    if (sortBy === 'value')   sorted.sort((a,b) => b.total - a.total);
+    if (sortBy === 'idle')    sorted.sort((a,b) => new Date(a.updated) - new Date(b.updated));
+    return sorted;
+  };
+
+  const idle   = active.filter(r => hrsIn(r.updated) > 6).length;
+  const val    = active.reduce((s,r) => s + r.total, 0);
+  const sids   = statuses.filter(s => active.some(r => r.sid === s.id));
+
+  const techOptions = [...new Set(ros.map(r => r.techId).filter(Boolean))]
+    .map(id => ({ id, name: employees.find(e => e.id === id)?.name || `Tech ${id}` }))
+    .sort((a,b) => a.name.localeCompare(b.name));
+
+  // List view row background
+  const rbg = ro => { const h = hrsIn(ro.updated); return h > 24 ? 'row-overdue' : h > 6 ? 'row-today' : ''; };
+
   return (
     <>
-      <div style={{display:'flex',justifyContent:'flex-end',alignItems:'center',gap:8,marginBottom:8}}>
-        {lastPoll && <span style={{fontSize:11,color:'var(--gray-400)'}}>Last updated: {lastPoll.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',second:'2-digit'})}</span>}
-        <span style={{fontSize:11,color:polling?'var(--gold-500)':'var(--gray-400)',background:'var(--gray-50)',border:'1px solid var(--gray-200)',borderRadius:6,padding:'3px 10px'}}>
-          {polling ? '⏳ Refreshing…' : `🔄 Next refresh in ${countdown}s`}
+      {/* ── Top bar ── */}
+      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12,flexWrap:'wrap'}}>
+        {lastPoll && (
+          <span style={{fontSize:11,color:'var(--gray-400)'}}>
+            Updated {lastPoll.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',second:'2-digit'})}
+          </span>
+        )}
+        <span style={{fontSize:11,color:polling?'var(--gold-600)':'var(--gray-400)',background:'var(--gray-50)',
+          border:'1px solid var(--gray-200)',borderRadius:6,padding:'3px 10px'}}>
+          {polling ? '⏳ Refreshing…' : `🔄 ${countdown}s`}
         </span>
-        <button onClick={pollShopFloor} disabled={polling} className="btn btn-ghost btn-sm" style={{fontSize:11}}>
-          Refresh Now
-        </button>
+        <button onClick={pollShopFloor} disabled={polling} className="btn btn-ghost btn-sm" style={{fontSize:11}}>Refresh Now</button>
+
+        <div style={{marginLeft:'auto',display:'flex',gap:6,alignItems:'center'}}>
+          {/* Tech filter */}
+          <select value={selTech} onChange={e => setSelTech(e.target.value)}
+            style={{padding:'4px 10px',border:'1.5px solid var(--gray-200)',borderRadius:6,fontSize:12,background:'white',color:'var(--gray-700)'}}>
+            <option value="all">All Technicians</option>
+            {techOptions.map(t => <option key={t.id} value={String(t.id)}>{t.name}</option>)}
+          </select>
+
+          {/* Sort */}
+          <select value={sortBy} onChange={e => setSortBy(e.target.value)}
+            style={{padding:'4px 10px',border:'1.5px solid var(--gray-200)',borderRadius:6,fontSize:12,background:'white',color:'var(--gray-700)'}}>
+            <option value="newest">Sort: Latest Added</option>
+            <option value="oldest">Sort: Oldest First</option>
+            <option value="value">Sort: Highest Value</option>
+            <option value="idle">Sort: Idle Longest</option>
+          </select>
+
+          {/* View toggle */}
+          <div style={{display:'flex',border:'1.5px solid var(--gray-200)',borderRadius:6,overflow:'hidden'}}>
+            {[['board','⊞'],['list','☰']].map(([mode,icon])=>(
+              <button key={mode} onClick={()=>setViewMode(mode)}
+                style={{padding:'4px 10px',border:'none',cursor:'pointer',fontSize:14,
+                  background:viewMode===mode?'var(--navy-800)':'white',
+                  color:viewMode===mode?'white':'var(--gray-500)'}}>
+                {icon}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
-      <div className="stat-grid" style={{gridTemplateColumns:'repeat(4,1fr)'}}>
+
+      {/* ── Stat cards ── */}
+      <div className="stat-grid" style={{gridTemplateColumns:'repeat(3,1fr)',marginBottom:14}}>
         {[
-          {l:'Active ROs',   v:active.length, c:''},
-          {l:'Open Value',   v:f$(val),        c:'gold'},
-          {l:'Idle > 24hrs', v:idle,           c:idle>0?'urgent':''},
-          {l:'No Contact',   v:noct,           c:noct>0?'urgent':''},
+          {l:'Active ROs',  v:active.length, c:''},
+          {l:'Open Value',  v:f$(val),       c:'gold'},
+          {l:'Idle > 6hrs', v:idle,          c:idle>0?'urgent':''},
         ].map(s=>(
           <div key={s.l} className="stat-card">
             <div className="stat-label">{s.l}</div>
@@ -160,149 +295,167 @@ function ShopFloor({ pollSeconds = 30, notifSettings = {} }) {
           </div>
         ))}
       </div>
-      <div style={{display:'flex',gap:6,marginBottom:14,flexWrap:'wrap',alignItems:'center'}}>
-        <button onClick={()=>setSel(null)} className="btn btn-sm"
-          style={{background:!sel?'var(--navy-800)':'white',color:!sel?'white':'var(--gray-600)',border:'1px solid var(--gray-200)'}}>
-          All ({active.length})
-        </button>
-        {sids.map(s=>{
-          const cnt = active.filter(r=>r.sid===s.id).length;
-          const on  = sel===s.id;
-          return (
-            <button key={s.id} onClick={()=>setSel(on?null:s.id)} className="btn btn-sm"
-              style={{background:on?s.color:'white',color:on?'white':s.color,border:`1px solid ${s.color}55`}}>
-              {s.name} ({cnt})
-            </button>
-          );
-        })}
-        <span style={{marginLeft:'auto',fontSize:10.5,color:'var(--gray-400)'}}>🟡 24–72h &nbsp; 🔴 72h+</span>
-      </div>
-      <div style={{display:'flex',gap:6,marginBottom:14,flexWrap:'wrap',alignItems:'center',padding:'10px 14px',background:'var(--gray-50)',border:'1px solid var(--gray-200)',borderRadius:8}}>
-        <span style={{fontSize:11,fontWeight:700,color:'var(--gray-500)',textTransform:'uppercase',letterSpacing:'.05em',marginRight:4}}>Date field:</span>
-        {[{k:'created',l:'Created'},{k:'promiseTime',l:'Promise Date'}].map(f=>(
-          <button key={f.k} onClick={()=>setDateField(f.k)} className="btn btn-sm"
-            style={{fontSize:11,background:dateField===f.k?'var(--navy-800)':'white',color:dateField===f.k?'white':'var(--gray-600)',border:'1px solid var(--gray-200)'}}>
-            {f.l}
-          </button>
-        ))}
-        <div style={{width:1,height:18,background:'var(--gray-200)',margin:'0 6px'}}/>
-        {DATE_RANGES.map(r=>(
-          <button key={r.key} onClick={()=>setDrRange(r.key)} className="btn btn-sm"
-            style={{fontSize:11,background:drRange===r.key?'var(--navy-800)':'white',color:drRange===r.key?'white':'var(--gray-600)',border:'1px solid var(--gray-200)'}}>
-            {r.label}
-          </button>
-        ))}
-        {drRange==='custom'&&(
-          <>
-            <input type="date" value={drStart} onChange={e=>setDrStart(e.target.value)}
-              style={{padding:'4px 8px',border:'1.5px solid var(--gray-200)',borderRadius:6,fontSize:11}}/>
-            <span style={{fontSize:11,color:'var(--gray-500)'}}>→</span>
-            <input type="date" value={drEnd} onChange={e=>setDrEnd(e.target.value)}
-              style={{padding:'4px 8px',border:'1.5px solid var(--gray-200)',borderRadius:6,fontSize:11}}/>
-          </>
-        )}
-        {drRange!=='all'&&(
-          <button onClick={()=>{setDrRange('all');setDrStart('');setDrEnd('');}} className="btn btn-ghost btn-sm" style={{fontSize:11,marginLeft:'auto'}}>Clear</button>
-        )}
-      </div>
-      <div className="table-card">
-        <div className="table-card-header">
-          <span className="table-card-title">🔧 Repair Orders in Shop</span>
-          <span className="table-card-count">{filt.length} orders</span>
-          <span style={{marginLeft:'auto',fontSize:10,color:'var(--gray-400)'}}>Custom Tekmetric statuses appear automatically</span>
+
+      {/* ── BOARD VIEW ── */}
+      {viewMode === 'board' && (
+        <div style={{display:'flex',gap:12,overflowX:'auto',alignItems:'flex-start',paddingBottom:12}}>
+          {sids.length === 0 && (
+            <div style={{flex:1,textAlign:'center',padding:'60px 20px',color:'var(--gray-400)',fontSize:14}}>
+              No active repair orders
+            </div>
+          )}
+          {sids.map(status => {
+            const colRos = sortRos(active.filter(r => r.sid === status.id));
+            const colVal = colRos.reduce((s,r) => s + r.total, 0);
+            return (
+              <div key={status.id} style={{minWidth:280,maxWidth:300,flex:'0 0 280px',display:'flex',flexDirection:'column',gap:0}}>
+                {/* Column header */}
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',
+                  padding:'8px 12px',borderRadius:'8px 8px 0 0',
+                  background:status.bg,border:`1px solid ${status.color}44`,borderBottom:'none'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:7}}>
+                    <div style={{width:10,height:10,borderRadius:'50%',background:status.color,flexShrink:0}}/>
+                    <span style={{fontWeight:700,fontSize:12.5,color:status.color}}>{status.name}</span>
+                    <span style={{fontSize:11,fontWeight:600,background:status.color,color:'white',
+                      borderRadius:10,padding:'1px 7px'}}>{colRos.length}</span>
+                  </div>
+                  <span style={{fontFamily:'var(--font-mono)',fontSize:11,fontWeight:700,color:status.color}}>{f$(colVal)}</span>
+                </div>
+                {/* Cards */}
+                <div style={{display:'flex',flexDirection:'column',gap:8,
+                  padding:'8px',background:'var(--gray-50)',
+                  border:`1px solid ${status.color}33`,borderRadius:'0 0 8px 8px',
+                  minHeight:80,maxHeight:'calc(100vh - 320px)',overflowY:'auto'}}>
+                  {colRos.length === 0 && (
+                    <div style={{textAlign:'center',padding:'20px 0',color:'var(--gray-300)',fontSize:12}}>No orders</div>
+                  )}
+                  {colRos.map(ro => (
+                    <RoCard key={ro.id} ro={ro}
+                      co={gc(ro.cid)} veh={gv(ro.vid)} tech={ge(ro.techId)} sa={ge(ro.saId)}
+                      statuses={statuses} expanded={exp===ro.id}
+                      onExpand={()=>setExp(exp===ro.id?null:ro.id)}/>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </div>
-        <div className="table-wrapper">
-          <table>
-            <thead>
-              <tr><th>RO #</th><th>Company</th><th>Vehicle</th><th>Status</th><th>Time in Status</th><th>Technician</th><th>Advisor</th><th>Last Contact</th><th style={{textAlign:'right'}}>Value</th><th>Paid</th><th></th></tr>
-            </thead>
-            <tbody>
-              {filt.map(ro => {
-                const co=gc(ro.cid), veh=gv(ro.vid), tech=ge(ro.techId), sa=ge(ro.saId);
-                const hrs=hrsIn(ro.updated), isEx=exp===ro.id, dec=ro.jobs.filter(j=>!j.auth);
+      )}
+
+      {/* ── LIST VIEW ── */}
+      {viewMode === 'list' && (
+        <div className="table-card">
+          <div className="table-card-header">
+            <span className="table-card-title">Repair Orders in Shop</span>
+            <span className="table-card-count">{active.length} orders</span>
+            <div style={{marginLeft:'auto',display:'flex',gap:6}}>
+              {sids.map(s => {
+                const cnt = active.filter(r => r.sid === s.id).length;
                 return (
-                  <>
-                    <tr key={ro.id} className={rbg(ro)} onClick={()=>setExp(isEx?null:ro.id)}>
-                      <td>
-                        <div style={{fontFamily:'var(--font-mono)',fontWeight:700,color:'var(--navy-800)',fontSize:13}}>#{ro.rn}</div>
-                        <IdleTag updated={ro.updated}/>
-                      </td>
-                      <td>
-                        <div style={{fontWeight:600}}>{co?.name||'—'}</div>
-                        {dec.length>0&&<div style={{fontSize:10.5,color:'var(--red-500)',marginTop:2}}>⚠ {dec.length} declined job{dec.length>1?'s':''}</div>}
-                      </td>
-                      <td>
-                        <div style={{fontWeight:500}}>{veh?`${veh.year} ${veh.make} ${veh.model}`:'—'}</div>
-                        <div className="company-id">{veh?.plate}</div>
-                      </td>
-                      <td><StatusBadge sid={ro.sid} statuses={statuses}/></td>
-                      <td>
-                        <span style={{fontFamily:'var(--font-mono)',fontSize:12,fontWeight:hrs>24?700:400,color:hrs>72?'var(--red-500)':hrs>24?'var(--yellow-500)':'var(--gray-500)'}}>
-                          {tis(ro.updated)}
-                        </span>
-                      </td>
-                      <td style={{fontSize:12.5}}>{tech?.name||<span style={{color:'var(--gray-300)'}}>Unassigned</span>}</td>
-                      <td style={{fontSize:12.5}}>{sa?.name||'—'}</td>
-                      <td>
-                        <ContactBadge method={ro.contactMethod}/>
-                        {ro.lastContact&&<div style={{fontSize:10.5,color:'var(--gray-400)',marginTop:3}}>{fDt(ro.lastContact)}</div>}
-                      </td>
-                      <td style={{textAlign:'right',fontFamily:'var(--font-mono)',fontWeight:700}}>{f$(ro.total)}</td>
-                      <td>
-                        <span style={{fontFamily:'var(--font-mono)',fontSize:12,fontWeight:600,color:ro.paid>=ro.total&&ro.total>0?'var(--green-600)':'var(--red-500)'}}>
-                          {ro.paid>=ro.total&&ro.total>0?'✓ Paid':'Unpaid'}
-                        </span>
-                      </td>
-                      <td onClick={e=>e.stopPropagation()}>
-                        <a href={tkRoLink(ro.id)} target="_blank" rel="noreferrer"
-                          style={{color:'var(--blue-500)',fontSize:11,fontWeight:600,textDecoration:'none'}}>
-                          View ↗
-                        </a>
-                      </td>
-                    </tr>
-                    {isEx&&(
-                      <tr key={`e${ro.id}`} style={{background:'var(--gray-50)',cursor:'default'}}>
-                        <td colSpan={11} style={{padding:'12px 18px'}}>
-                          <div style={{fontWeight:700,fontSize:11,color:'var(--gray-400)',textTransform:'uppercase',letterSpacing:'.07em',marginBottom:8}}>Jobs on RO #{ro.rn}</div>
-                          <div style={{display:'flex',flexDirection:'column',gap:6}}>
-                            {ro.jobs.map((j,i)=>(
-                              <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 12px',borderRadius:'var(--r-md)',background:j.auth?'var(--green-50)':'var(--red-50)',border:`1px solid ${j.auth?'var(--green-100)':'var(--red-100)'}`}}>
-                                <div style={{display:'flex',alignItems:'center',gap:8}}>
-                                  <span>{j.auth?'✅':'❌'}</span>
-                                  <span style={{fontWeight:600,fontSize:13,color:j.auth?'var(--gray-800)':'var(--gray-400)'}}>{j.name}</span>
-                                  {!j.auth&&<span className="badge badge-overdue" style={{fontSize:9.5}}>DECLINED</span>}
-                                </div>
-                                <div style={{display:'flex',gap:18,fontFamily:'var(--font-mono)',fontSize:12,color:'var(--gray-500)'}}>
-                                  <span>Labor: {f$(j.labor)}</span>
-                                  <span>Parts: {f$(j.parts)}</span>
-                                  <span style={{fontWeight:700,color:'var(--gray-800)'}}>Total: {f$(j.labor+j.parts)}</span>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                          {dec.length>0&&(
-                            <div style={{marginTop:8,padding:'7px 12px',background:'var(--red-50)',border:'1px solid var(--red-100)',borderRadius:'var(--r-md)',fontSize:12.5,color:'var(--red-500)',fontWeight:600}}>
-                              ⚠ {f$(dec.reduce((s,j)=>s+j.labor+j.parts,0))} in declined revenue on this ticket
-                            </div>
-                          )}
-                          <div style={{marginTop:10}}>
-                            <a href={tkRoLink(ro.id)} target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm">Open in Tekmetric ↗</a>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </>
+                  <span key={s.id} style={{fontSize:10.5,fontWeight:700,padding:'2px 8px',borderRadius:4,
+                    background:s.bg,color:s.color,border:`1px solid ${s.color}44`}}>
+                    {s.name} {cnt}
+                  </span>
                 );
               })}
-              {filt.length===0&&(
-                <tr><td colSpan={11}>
-                  <div className="empty-state"><div className="icon">🔧</div><div className="title">No orders in this status</div></div>
-                </td></tr>
-              )}
-            </tbody>
-          </table>
+            </div>
+          </div>
+          <div className="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>RO #</th><th>Company</th><th>Vehicle</th><th>Status</th>
+                  <th>Created</th><th>Idle</th><th>Tech</th><th>Advisor</th>
+                  <th style={{textAlign:'right'}}>Value</th><th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortRos(active).map(ro => {
+                  const co=gc(ro.cid), veh=gv(ro.vid), tech=ge(ro.techId), sa=ge(ro.saId);
+                  const hrs=hrsIn(ro.updated), isEx=exp===ro.id, dec=ro.jobs.filter(j=>!j.auth);
+                  return (
+                    <>
+                      <tr key={ro.id} className={rbg(ro)} onClick={()=>setExp(isEx?null:ro.id)} style={{cursor:'pointer'}}>
+                        <td>
+                          <span style={{fontFamily:'var(--font-mono)',fontWeight:700,color:'var(--navy-800)',fontSize:12}}>#{ro.rn}</span>
+                        </td>
+                        <td>
+                          <div style={{fontWeight:600,fontSize:13}}>{co?.name||'—'}</div>
+                          {dec.length>0&&<div style={{fontSize:10,color:'var(--red-500)'}}>⚠ {dec.length} declined</div>}
+                        </td>
+                        <td>
+                          <div style={{fontSize:12}}>{veh?`${veh.year} ${veh.make} ${veh.model}`:'—'}</div>
+                          {veh?.plate&&<div className="company-id">{veh.plate}</div>}
+                        </td>
+                        <td><StatusBadge sid={ro.sid} statuses={statuses}/></td>
+                        <td style={{fontSize:11,color:'var(--gray-500)'}}>{fDt(ro.created)}</td>
+                        <td>
+                          <span style={{fontFamily:'var(--font-mono)',fontSize:11,fontWeight:hrs>6?700:400,
+                            color:hrs>24?'var(--red-500)':hrs>6?'var(--gold-600)':'var(--gray-400)'}}>
+                            {tis(ro.updated)}
+                          </span>
+                        </td>
+                        <td style={{fontSize:12}}>
+                          <div style={{display:'flex',alignItems:'center',gap:5}}>
+                            {tech && <Avatar name={tech.name}/>}
+                            <span>{tech?.name||<span style={{color:'var(--gray-300)'}}>—</span>}</span>
+                          </div>
+                        </td>
+                        <td style={{fontSize:12}}>{sa?.name||'—'}</td>
+                        <td style={{textAlign:'right',fontFamily:'var(--font-mono)',fontWeight:700,fontSize:13}}>{f$(ro.total)}</td>
+                        <td onClick={e=>e.stopPropagation()}>
+                          <a href={tkRoLink(ro.id)} target="_blank" rel="noreferrer"
+                            style={{color:'var(--blue-500)',fontSize:11,fontWeight:600,textDecoration:'none'}}>
+                            Open ↗
+                          </a>
+                        </td>
+                      </tr>
+                      {isEx&&(
+                        <tr key={`e${ro.id}`} style={{background:'var(--gray-50)'}}>
+                          <td colSpan={10} style={{padding:'12px 18px'}}>
+                            <div style={{fontSize:10,fontWeight:700,color:'var(--gray-400)',textTransform:'uppercase',letterSpacing:'.07em',marginBottom:8}}>Jobs on RO #{ro.rn}</div>
+                            <div style={{display:'flex',flexDirection:'column',gap:5}}>
+                              {ro.jobs.map((j,i)=>(
+                                <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',
+                                  padding:'7px 10px',borderRadius:5,
+                                  background:j.auth?'#f0fdf4':'#fef2f2',border:`1px solid ${j.auth?'#bbf7d0':'#fecaca'}`}}>
+                                  <div style={{display:'flex',alignItems:'center',gap:6}}>
+                                    <span style={{fontSize:11}}>{j.auth?'✅':'❌'}</span>
+                                    <span style={{fontSize:12,fontWeight:600,color:j.auth?'var(--gray-800)':'var(--gray-400)'}}>{j.name}</span>
+                                    {!j.auth&&<span className="badge badge-overdue" style={{fontSize:9}}>DECLINED</span>}
+                                  </div>
+                                  <div style={{display:'flex',gap:14,fontFamily:'var(--font-mono)',fontSize:11,color:'var(--gray-500)'}}>
+                                    <span>Labor: {f$(j.labor)}</span>
+                                    <span>Parts: {f$(j.parts)}</span>
+                                    <span style={{fontWeight:700,color:'var(--gray-700)'}}>Total: {f$(j.labor+j.parts)}</span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                            {dec.length>0&&(
+                              <div style={{marginTop:7,fontSize:12,color:'var(--red-500)',fontWeight:600}}>
+                                ⚠ {f$(dec.reduce((s,j)=>s+j.labor+j.parts,0))} in declined revenue
+                              </div>
+                            )}
+                            <div style={{marginTop:10}}>
+                              <a href={tkRoLink(ro.id)} target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm">Open in Tekmetric ↗</a>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </>
+                  );
+                })}
+                {active.length===0&&(
+                  <tr><td colSpan={10}>
+                    <div className="empty-state"><div className="icon">🔧</div><div className="title">No active repair orders</div></div>
+                  </td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
     </>
   );
 }
