@@ -131,7 +131,15 @@ router.get('/', async (req, res) => {
       params.push(s); where += ` AND (c.name ILIKE $${params.length} OR c.main_phone ILIKE $${params.length} OR c.industry ILIKE $${params.length})`;
     }
     if (industry)        { params.push(industry);        where += ` AND c.industry = $${params.length}`; }
-    if (company_status)  { params.push(company_status);  where += ` AND c.company_status = $${params.length}`; }
+    if (company_status) {
+      const statuses = company_status.split(',').map(s => s.trim()).filter(Boolean);
+      if (statuses.length === 1) {
+        params.push(statuses[0]); where += ` AND c.company_status = $${params.length}`;
+      } else if (statuses.length > 1) {
+        const placeholders = statuses.map((s, i) => { params.push(s); return `$${params.length}`; }).join(',');
+        where += ` AND c.company_status IN (${placeholders})`;
+      }
+    }
     if (pipeline_stage)  { params.push(pipeline_stage);  where += ` AND c.pipeline_stage = $${params.length}`; }
     if (last_contacted === 'never')      { where += ` AND cl.logged_at IS NULL`; }
     else if (last_contacted === 'this_week')  { where += ` AND cl.logged_at >= now() - interval '7 days'`; }

@@ -294,7 +294,7 @@ export default function Companies() {
   const [companies, setCompanies]   = useState([]);
   const [loading, setLoading]       = useState(true);
   const [search, setSearch]         = useState('');
-  const [filterStatus, setFilterStatus] = useState('');
+  const [filterStatus, setFilterStatus] = useState([]);
   const [filterStage, setFilterStage]   = useState('');
   const [filterContacted, setFilterContacted] = useState('');
   const [showImport, setShowImport] = useState(false);
@@ -345,7 +345,7 @@ export default function Companies() {
     setLoading(true);
     try {
      const params = { search };
-      if (filterStatus) params.company_status = filterStatus;
+      if (filterStatus.length > 0) params.company_status = filterStatus.join(',');
       if (filterStage && !filterStage.startsWith('followup_')) params.pipeline_stage = filterStage;
       if (filterContacted) params.last_contacted = filterContacted;
       let results = await api.companies(params);
@@ -360,7 +360,7 @@ export default function Companies() {
     finally { setLoading(false); }
   }
 
-  useEffect(() => { load(); }, [search, filterStatus, filterStage, filterContacted]);
+  useEffect(() => { load(); }, [search, filterStatus.join(','), filterStage, filterContacted]);
   useEffect(() => {
     if (search) {
        setSelected(null);
@@ -564,14 +564,20 @@ async function handleImport(e) {
 
       {/* Filter bar */}
       <div style={{ padding:'0 0 12px 0', display:'flex', gap:8, flexWrap:'wrap', alignItems:'center' }}>
-        <select className="form-input" style={{ width:'auto', fontSize:12, padding:'5px 10px' }}
-          value={filterStatus} onChange={e=>{ setFilterStatus(e.target.value); setSelected(null); }}>
-          <option value="">All Statuses</option>
-          <option value="prospect">Prospect</option>
-          <option value="interested">⭐ Interested</option>
-          <option value="customer">✅ Customer</option>
-          <option value="dead">💀 Dead</option>
-        </select>
+        {[
+          { key:'prospect',  label:'Prospect',  icon:'',   active:'#e2e8f0', activeText:'#334155' },
+          { key:'interested',label:'Interested',icon:'⭐', active:'#fef9c3', activeText:'#92400e' },
+          { key:'customer',  label:'Customer',  icon:'✅', active:'#dcfce7', activeText:'#166534' },
+          { key:'dead',      label:'Dead',      icon:'💀', active:'#fee2e2', activeText:'#dc2626' },
+        ].map(s => {
+          const on = filterStatus.includes(s.key);
+          return (
+            <button key={s.key} onClick={() => { setFilterStatus(prev => on ? prev.filter(x=>x!==s.key) : [...prev, s.key]); setSelected(null); }}
+              style={{ padding:'5px 12px', borderRadius:16, fontSize:12, fontWeight:700, cursor:'pointer', whiteSpace:'nowrap', border: on ? `1.5px solid ${s.activeText}` : '1.5px solid #e2e8f0', background: on ? s.active : 'var(--gray-50)', color: on ? s.activeText : 'var(--gray-400)', transition:'all .12s' }}>
+              {s.icon ? s.icon+' ' : ''}{s.label}
+            </button>
+          );
+        })}
         <select className="form-input" style={{ width:'auto', fontSize:12, padding:'5px 10px' }}
           value={filterStage} onChange={e=>{ setFilterStage(e.target.value); setSelected(null); }}>
           <option value="">All Queues</option>
@@ -597,8 +603,8 @@ async function handleImport(e) {
           <option value="followup_today">🟡 Follow-Up Today</option>
           <option value="followup_week">📅 Follow-Up This Week</option>
         </select>
-        {(filterStatus || filterStage || filterContacted) && (
-          <button className="btn btn-ghost btn-sm" onClick={()=>{ setFilterStatus(''); setFilterStage(''); setFilterContacted(''); }}>
+        {(filterStatus.length > 0 || filterStage || filterContacted) && (
+          <button className="btn btn-ghost btn-sm" onClick={()=>{ setFilterStatus([]); setFilterStage(''); setFilterContacted(''); }}>
             ✕ Clear filters
           </button>
         )}
