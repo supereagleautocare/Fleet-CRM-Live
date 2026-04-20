@@ -35,6 +35,9 @@ export default function QuickLog() {
   const [saved, setSaved]     = useState(false);
   const [pendingScorecard, setPendingScorecard] = useState(null);
   const [scorecardEnabled, setScorecardEnabled] = useState(false);
+  const [hist, setHist]       = useState([]);
+  const [histLoading, setHistLoading] = useState(false);
+  const [selStatus, setSelStatus] = useState(null);
 
   const [shopPos, setShopPos] = useState(null);
   const { showToast, refreshCounts } = useApp();
@@ -73,6 +76,20 @@ export default function QuickLog() {
       finally { setSearching(false); }
     }, 280);
   }, [query]);
+
+  useEffect(() => {
+    if (!selected) { setHist([]); setSelStatus(null); return; }
+    setSelStatus(selected.company_status || 'prospect');
+    setHistLoading(true);
+    api.companyHistory(selected.id).then(h => setHist(h || [])).catch(()=>setHist([])).finally(()=>setHistLoading(false));
+  }, [selected?.id]);
+
+  async function handleStatusChange(status) {
+    if (!selected) return;
+    setSelStatus(status);
+    try { await api.updateCompanyStatus(selected.id, status); }
+    catch(e) { showToast(e.message, 'error'); setSelStatus(selected.company_status || 'prospect'); }
+  }
 
   function selectEntity(entity) {
     setSelected(entity);
@@ -277,6 +294,23 @@ export default function QuickLog() {
                   <button className="btn btn-ghost btn-sm" onClick={() => setSelected(null)}>✕ Change</button>
                 </div>
 
+                {/* Status toggle */}
+                {selected && (
+                  <div style={{ marginBottom:14, padding:'10px 14px', background:'var(--gray-50)', borderRadius:9, border:'1px solid var(--gray-100)' }}>
+                    <div style={{ fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'.07em', color:'var(--gray-400)', marginBottom:7 }}>Company Status</div>
+                    <div style={{ display:'flex', gap:6 }}>
+                      {[['prospect','Prospect','#64748b','#f1f5f9'],['interested','⭐ Interested','#92400e','#fef9c3'],['customer','✅ Customer','#166534','#f0fdf4']].map(([val,label,col,bg])=>(
+                        <button key={val} type="button" onClick={()=>handleStatusChange(val)}
+                          style={{ fontSize:11, fontWeight:700, padding:'4px 12px', borderRadius:20, cursor:'pointer',
+                            border:`1.5px solid ${selStatus===val?col:'var(--gray-200)'}`,
+                            background: selStatus===val ? bg : 'white',
+                            color: selStatus===val ? col : 'var(--gray-500)',
+                          }}>{label}</button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* ── What type of contact is this? ── */}
                 <div style={{ marginBottom:18 }}>
                   <div style={{ fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'.07em', color:'var(--gray-400)', marginBottom:10 }}>What type of contact?</div>
@@ -437,8 +471,32 @@ export default function QuickLog() {
             )}
           </div>
 
-          {/* Right: recent logs this session */}
+          {/* Right: history (when company selected) or recent logs */}
           <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+            {selected && (
+              <div className="table-card" style={{ padding:0 }}>
+                <div className="table-card-header" style={{ background:'var(--navy-950)', borderRadius:'10px 10px 0 0' }}>
+                  <span style={{ fontSize:15 }}>📋</span>
+                  <span className="table-card-title" style={{ color:'white' }}>History</span>
+                  <span className="table-card-count">{hist.length}</span>
+                </div>
+                {histLoading ? (
+                  <div style={{ padding:'20px 16px', textAlign:'center', fontSize:13, color:'var(--gray-400)' }}>Loading…</div>
+                ) : hist.length === 0 ? (
+                  <div style={{ padding:'20px 16px', textAlign:'center', fontSize:13, color:'var(--gray-400)' }}>No history yet — this will be the first log</div>
+                ) : hist.map(h => (
+                  <div key={h.id} style={{ padding:'10px 16px', borderBottom:'1px solid var(--gray-100)' }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
+                      <div style={{ fontWeight:700, fontSize:12.5, color:'var(--gray-900)' }}>{h.contact_type || h.mail_piece || h.email_template || h.log_category}</div>
+                      <div style={{ fontSize:10, color:'var(--gray-400)', flexShrink:0, marginLeft:6 }}>{h.logged_at?.slice(0,10)}</div>
+                    </div>
+                    {h.contact_name && <div style={{ fontSize:11, color:'var(--gray-500)', marginTop:1 }}>with {h.contact_name}</div>}
+                    {h.notes && <div style={{ fontSize:11, color:'var(--gray-400)', marginTop:3, lineHeight:1.4 }}>{h.notes.length>100?h.notes.slice(0,100)+'…':h.notes}</div>}
+                    <div style={{ fontSize:10, color:'var(--gray-300)', marginTop:2 }}>Next: {h.next_action}</div>
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="table-card" style={{ padding:0 }}>
               <div className="table-card-header">
                 <span style={{ fontSize:15 }}>🕐</span>

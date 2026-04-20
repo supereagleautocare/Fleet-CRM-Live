@@ -22,6 +22,9 @@ export default function EmailQueue() {
   const [forecast, setForecast]     = useState([]);
   const [allRows, setAllRows]         = useState([]);
   const [contactTypes, setContactTypes] = useState([]);
+  const [hist, setHist]           = useState([]);
+  const [histLoading, setHistLoading] = useState(false);
+  const [selStatus, setSelStatus] = useState(null);
   const navigate = useNavigate();
   const { showToast, refreshCounts } = useApp();
 
@@ -48,6 +51,22 @@ export default function EmailQueue() {
   }
 
   useEffect(() => { load(); }, [qFilter, customFrom, customTo]);
+
+  useEffect(() => {
+    if (!selected) { setHist([]); setSelStatus(null); return; }
+    setSelStatus(selected.company_status || 'prospect');
+    setHistLoading(true);
+    api.companyHistory(selected.id).then(h => setHist(h || [])).catch(()=>setHist([])).finally(()=>setHistLoading(false));
+  }, [selected?.id]);
+
+  async function handleStatusChange(status) {
+    if (!selected) return;
+    setSelStatus(status);
+    try {
+      await api.updateCompanyStatus(selected.id, status);
+      setRows(r => r.map(row => row.id === selected.id ? { ...row, company_status: status } : row));
+    } catch(e) { showToast(e.message, 'error'); setSelStatus(selected.company_status || 'prospect'); }
+  }
 
   function set(f, v) { setForm(p => ({ ...p, [f]: v })); }
 
@@ -165,31 +184,64 @@ export default function EmailQueue() {
         {selected && (
           <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.45)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}
             onClick={e=>{ if(e.target===e.currentTarget) setSelected(null); }}>
-            <div style={{ display:'flex', background:'white', borderRadius:14, overflow:'hidden', boxShadow:'0 8px 40px rgba(0,0,0,.25)', maxWidth:820, width:'100%', maxHeight:'90vh' }}>
-              {/* Left sidebar: company info + templates */}
-              <div style={{ width:240, flexShrink:0, borderRight:'1px solid var(--gray-200)', padding:'20px 16px', background:'var(--navy-950)', overflowY:'auto' }}>
-                <div style={{ fontWeight:800, fontSize:15, color:'white' }}>{selected.name}</div>
-                <div style={{ fontSize:13, color:'var(--gold-400)', marginTop:2, fontFamily:'var(--font-mono)' }}>{fmtPhone(selected.main_phone)}</div>
-                {selected.address && <div style={{ fontSize:12, color:'rgba(255,255,255,.45)', marginTop:6 }}>📍 {selected.address}{selected.city?', '+selected.city:''}</div>}
-                {selected.preferred_contact_name && (
-                  <div style={{ marginTop:14, padding:'10px', background:'rgba(255,255,255,.08)', borderRadius:8 }}>
-                    <div style={{ fontSize:10, color:'var(--gold-400)', fontWeight:700, textTransform:'uppercase', letterSpacing:'.06em', marginBottom:4 }}>⭐ Preferred Contact</div>
-                    <div style={{ color:'white', fontWeight:600, fontSize:13 }}>{selected.preferred_contact_name}</div>
-                    {selected.preferred_email && <div style={{ color:'var(--gray-400)', fontSize:12, marginTop:2 }}>✉️ {selected.preferred_email}</div>}
+            <div style={{ display:'flex', background:'white', borderRadius:14, overflow:'hidden', boxShadow:'0 8px 40px rgba(0,0,0,.25)', maxWidth:960, width:'100%', maxHeight:'90vh' }}>
+              {/* Left sidebar: company info + templates + history */}
+              <div style={{ width:270, flexShrink:0, borderRight:'1px solid var(--gray-200)', background:'var(--navy-950)', display:'flex', flexDirection:'column', overflowY:'auto' }}>
+                <div style={{ padding:'20px 16px 14px', flexShrink:0 }}>
+                  <div style={{ fontWeight:800, fontSize:15, color:'white' }}>{selected.name}</div>
+                  <div style={{ fontSize:13, color:'var(--gold-400)', marginTop:2, fontFamily:'var(--font-mono)' }}>{fmtPhone(selected.main_phone)}</div>
+                  {selected.address && <div style={{ fontSize:12, color:'rgba(255,255,255,.45)', marginTop:6 }}>📍 {selected.address}{selected.city?', '+selected.city:''}</div>}
+                  {/* Status toggle */}
+                  <div style={{ marginTop:12 }}>
+                    <div style={{ fontSize:9.5, color:'rgba(255,255,255,.4)', fontWeight:700, textTransform:'uppercase', letterSpacing:'.07em', marginBottom:6 }}>Status</div>
+                    <div style={{ display:'flex', gap:4, flexWrap:'wrap' }}>
+                      {[['prospect','Prospect','#64748b'],['interested','⭐ Interested','#92400e'],['customer','✅ Customer','#166534']].map(([val,label,col])=>(
+                        <button key={val} type="button" onClick={()=>handleStatusChange(val)}
+                          style={{ fontSize:10, fontWeight:700, padding:'3px 9px', borderRadius:20, cursor:'pointer', border:'none',
+                            background: selStatus===val ? col : 'rgba(255,255,255,.1)',
+                            color: selStatus===val ? 'white' : 'rgba(255,255,255,.5)',
+                          }}>{label}</button>
+                      ))}
+                    </div>
                   </div>
-                )}
-                {templates.length > 0 && (
-                  <div style={{ marginTop:16 }}>
-                    <div style={{ fontSize:10, color:'var(--gold-400)', fontWeight:700, textTransform:'uppercase', letterSpacing:'.06em', marginBottom:8 }}>Email Templates</div>
-                    {templates.map(t => (
-                      <div key={t.id} onClick={()=>selectTemplate(t.name)}
-                        style={{ padding:'8px 10px', borderRadius:7, cursor:'pointer', marginBottom:4, background:form.email_template===t.name?'rgba(168,85,247,.3)':'rgba(255,255,255,.08)', border:`1px solid ${form.email_template===t.name?'#a855f7':'transparent'}` }}>
-                        <div style={{ fontSize:12, fontWeight:600, color:'white' }}>{t.name}</div>
-                        {t.subject && <div style={{ fontSize:10, color:'var(--gray-400)' }}>{t.subject}</div>}
+                  {selected.preferred_contact_name && (
+                    <div style={{ marginTop:12, padding:'10px', background:'rgba(255,255,255,.08)', borderRadius:8 }}>
+                      <div style={{ fontSize:10, color:'var(--gold-400)', fontWeight:700, textTransform:'uppercase', letterSpacing:'.06em', marginBottom:4 }}>⭐ Preferred Contact</div>
+                      <div style={{ color:'white', fontWeight:600, fontSize:13 }}>{selected.preferred_contact_name}</div>
+                      {selected.preferred_email && <div style={{ color:'var(--gray-400)', fontSize:12, marginTop:2 }}>✉️ {selected.preferred_email}</div>}
+                    </div>
+                  )}
+                  {templates.length > 0 && (
+                    <div style={{ marginTop:12 }}>
+                      <div style={{ fontSize:9.5, color:'rgba(255,255,255,.4)', fontWeight:700, textTransform:'uppercase', letterSpacing:'.07em', marginBottom:6 }}>Email Templates</div>
+                      {templates.map(t => (
+                        <div key={t.id} onClick={()=>selectTemplate(t.name)}
+                          style={{ padding:'7px 9px', borderRadius:7, cursor:'pointer', marginBottom:4, background:form.email_template===t.name?'rgba(168,85,247,.3)':'rgba(255,255,255,.08)', border:`1px solid ${form.email_template===t.name?'#a855f7':'transparent'}` }}>
+                          <div style={{ fontSize:11, fontWeight:600, color:'white' }}>{t.name}</div>
+                          {t.subject && <div style={{ fontSize:10, color:'var(--gray-400)' }}>{t.subject}</div>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {/* History */}
+                <div style={{ flex:1, borderTop:'1px solid rgba(255,255,255,.08)', padding:'10px 16px 16px', minHeight:0, overflowY:'auto' }}>
+                  <div style={{ fontSize:9.5, color:'rgba(255,255,255,.4)', fontWeight:700, textTransform:'uppercase', letterSpacing:'.07em', marginBottom:8 }}>
+                    History {hist.length > 0 ? `(${hist.length})` : ''}
+                  </div>
+                  {histLoading ? <div style={{ color:'rgba(255,255,255,.3)', fontSize:11 }}>Loading…</div>
+                  : hist.length === 0 ? <div style={{ color:'rgba(255,255,255,.25)', fontSize:11 }}>No activity yet</div>
+                  : hist.map(h => (
+                    <div key={h.id} style={{ paddingBottom:8, marginBottom:8, borderBottom:'1px solid rgba(255,255,255,.07)' }}>
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:4 }}>
+                        <span style={{ color:'white', fontSize:11, fontWeight:700, lineHeight:1.3 }}>{h.contact_type || h.mail_piece || h.email_template || h.log_category}</span>
+                        <span style={{ color:'rgba(255,255,255,.3)', fontSize:9.5, flexShrink:0 }}>{h.logged_at?.slice(0,10)}</span>
                       </div>
-                    ))}
-                  </div>
-                )}
+                      {h.contact_name && <div style={{ color:'rgba(255,255,255,.45)', fontSize:10, marginTop:1 }}>with {h.contact_name}</div>}
+                      {h.notes && <div style={{ color:'rgba(255,255,255,.35)', fontSize:10, marginTop:2, lineHeight:1.4 }}>{h.notes.length>80?h.notes.slice(0,80)+'…':h.notes}</div>}
+                    </div>
+                  ))}
+                </div>
               </div>
               {/* Right: log form */}
               <form onSubmit={handleLog} style={{ flex:1, padding:'22px 24px', display:'flex', flexDirection:'column', gap:16, overflowY:'auto' }}>

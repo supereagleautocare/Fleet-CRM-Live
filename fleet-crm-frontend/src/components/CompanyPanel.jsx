@@ -81,6 +81,7 @@ export default function CompanyPanel({ row, sourceType, contactTypes, onComplete
   const [editingPreferred, setEditingPreferred] = useState(false);
   const [prefEdit, setPrefEdit] = useState({ name:'', role_title:'', direct_line:'', email:'' });
   const [prefSaving, setPrefSaving] = useState(false);
+  const [companyStatus, setCompanyStatus] = useState(null);
   const [myPos, setMyPos] = useState(null);
   const [dist, setDist]         = useState(null);   // straight-line miles (fallback)
   const [routeDist, setRouteDist] = useState(null); // actual route miles via OSRM
@@ -142,6 +143,7 @@ export default function CompanyPanel({ row, sourceType, contactTypes, onComplete
     Promise.all([api.company(entityId), api.companyHistory(entityId)])
       .then(async ([full, hist]) => {
         setData({ full, hist, contacts: full.contacts || [], branches: full.branches || [] });
+        setCompanyStatus(full.company_status || 'prospect');
         // Geocode if no stored coords
         let compLat = full.lat, compLng = full.lng;
         if ((!compLat || !compLng) && full.address) {
@@ -189,6 +191,12 @@ export default function CompanyPanel({ row, sourceType, contactTypes, onComplete
   function set(f, v) {
     isDirty.current = true;
     setForm(p => ({ ...p, [f]: v }));
+  }
+
+  async function handleStatusChange(status) {
+    setCompanyStatus(status);
+    try { await api.updateCompanyStatus(entityId, status); }
+    catch(e) { showToast(e.message, 'error'); setCompanyStatus(data?.full?.company_status || 'prospect'); }
   }
 
   function startEditPreferred(contact) {
@@ -294,6 +302,18 @@ export default function CompanyPanel({ row, sourceType, contactTypes, onComplete
             </div>
             {data?.full?.address && (
               <div style={{ fontSize:11, color:'rgba(255,255,255,.35)', marginTop:6 }}>📍 {data.full.address}{data.full.city ? ', '+data.full.city : ''}</div>
+            )}
+            {/* Status toggle */}
+            {companyStatus !== null && (
+              <div style={{ marginTop:10, display:'flex', gap:4, flexWrap:'wrap' }}>
+                {[['prospect','Prospect','#475569'],['interested','⭐ Interested','#92400e'],['customer','✅ Customer','#166534']].map(([val,label,col])=>(
+                  <button key={val} type="button" onClick={()=>handleStatusChange(val)}
+                    style={{ fontSize:10, fontWeight:700, padding:'3px 9px', borderRadius:20, cursor:'pointer', border:'none',
+                      background: companyStatus===val ? col : 'rgba(255,255,255,.1)',
+                      color: companyStatus===val ? 'white' : 'rgba(255,255,255,.45)',
+                    }}>{label}</button>
+                ))}
+              </div>
             )}
             {displayMiles && (
               <div style={{ marginTop:6, display:'flex', gap:10, fontSize:11 }}>
