@@ -154,7 +154,9 @@ router.get('/activity-drill', async (req, res) => {
       ? `cl.logged_at::date >= '${yearStart}'`
       : `cl.logged_at::date >= '${monthStart}'`;
 
-    const actionFilter = type === 'calls' ? `cl.action_type = 'Call'` : `cl.action_type != 'Move'`;
+    const actionFilter = type === 'calls'
+      ? `cl.action_type = 'Call' AND cl.counts_as_attempt = 1`
+      : `cl.action_type != 'Move'`;
 
     const { rows } = await pool.query(`
       SELECT c.id, c.name, c.company_id, c.main_phone, c.industry, c.pipeline_stage, c.company_status,
