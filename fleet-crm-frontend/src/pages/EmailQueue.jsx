@@ -25,6 +25,10 @@ export default function EmailQueue() {
   const [hist, setHist]           = useState([]);
   const [histLoading, setHistLoading] = useState(false);
   const [selStatus, setSelStatus] = useState(null);
+  const [prefContact, setPrefContact] = useState(null);
+  const [editingPref, setEditingPref] = useState(false);
+  const [prefEdit, setPrefEdit]   = useState({ name:'', role_title:'', direct_line:'', email:'' });
+  const [prefSaving, setPrefSaving] = useState(false);
   const navigate = useNavigate();
   const { showToast, refreshCounts } = useApp();
 
@@ -53,10 +57,15 @@ export default function EmailQueue() {
   useEffect(() => { load(); }, [qFilter, customFrom, customTo]);
 
   useEffect(() => {
-    if (!selected) { setHist([]); setSelStatus(null); return; }
+    if (!selected) { setHist([]); setSelStatus(null); setPrefContact(null); setEditingPref(false); return; }
     setSelStatus(selected.company_status || 'prospect');
+    setEditingPref(false);
     setHistLoading(true);
     api.companyHistory(selected.id).then(h => setHist(h || [])).catch(()=>setHist([])).finally(()=>setHistLoading(false));
+    api.company(selected.id).then(c => {
+      const pref = (c.contacts || []).find(x => x.is_preferred);
+      setPrefContact(pref || null);
+    }).catch(()=>{});
   }, [selected?.id]);
 
   async function handleStatusChange(status) {
@@ -66,6 +75,18 @@ export default function EmailQueue() {
       await api.updateCompanyStatus(selected.id, status);
       setRows(r => r.map(row => row.id === selected.id ? { ...row, company_status: status } : row));
     } catch(e) { showToast(e.message, 'error'); setSelStatus(selected.company_status || 'prospect'); }
+  }
+
+  async function savePref() {
+    if (!prefContact) return;
+    setPrefSaving(true);
+    try {
+      await api.updateContact(prefContact.id, { ...prefEdit, is_preferred: true });
+      setPrefContact(p => ({ ...p, ...prefEdit }));
+      setEditingPref(false);
+      showToast('✅ Contact updated');
+    } catch(e) { showToast(e.message, 'error'); }
+    finally { setPrefSaving(false); }
   }
 
   function set(f, v) { setForm(p => ({ ...p, [f]: v })); }
@@ -191,24 +212,43 @@ export default function EmailQueue() {
                   <div style={{ fontWeight:800, fontSize:15, color:'white' }}>{selected.name}</div>
                   <div style={{ fontSize:13, color:'var(--gold-400)', marginTop:2, fontFamily:'var(--font-mono)' }}>{fmtPhone(selected.main_phone)}</div>
                   {selected.address && <div style={{ fontSize:12, color:'rgba(255,255,255,.45)', marginTop:6 }}>📍 {selected.address}{selected.city?', '+selected.city:''}</div>}
-                  {/* Status toggle */}
-                  <div style={{ marginTop:12 }}>
-                    <div style={{ fontSize:9.5, color:'rgba(255,255,255,.4)', fontWeight:700, textTransform:'uppercase', letterSpacing:'.07em', marginBottom:6 }}>Status</div>
-                    <div style={{ display:'flex', gap:4, flexWrap:'wrap' }}>
-                      {[['prospect','Prospect','#64748b'],['interested','⭐ Interested','#92400e'],['customer','✅ Customer','#166534']].map(([val,label,col])=>(
-                        <button key={val} type="button" onClick={()=>handleStatusChange(val)}
-                          style={{ fontSize:10, fontWeight:700, padding:'3px 9px', borderRadius:20, cursor:'pointer', border:'none',
-                            background: selStatus===val ? col : 'rgba(255,255,255,.1)',
-                            color: selStatus===val ? 'white' : 'rgba(255,255,255,.5)',
-                          }}>{label}</button>
-                      ))}
-                    </div>
-                  </div>
-                  {selected.preferred_contact_name && (
+                  {/* Preferred contact with edit */}
+                  {(prefContact || selected.preferred_contact_name) && (
                     <div style={{ marginTop:12, padding:'10px', background:'rgba(255,255,255,.08)', borderRadius:8 }}>
-                      <div style={{ fontSize:10, color:'var(--gold-400)', fontWeight:700, textTransform:'uppercase', letterSpacing:'.06em', marginBottom:4 }}>⭐ Preferred Contact</div>
-                      <div style={{ color:'white', fontWeight:600, fontSize:13 }}>{selected.preferred_contact_name}</div>
-                      {selected.preferred_email && <div style={{ color:'var(--gray-400)', fontSize:12, marginTop:2 }}>✉️ {selected.preferred_email}</div>}
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
+                        <div style={{ fontSize:10, color:'var(--gold-400)', fontWeight:700, textTransform:'uppercase', letterSpacing:'.06em' }}>⭐ Preferred Contact</div>
+                        {prefContact && !editingPref && (
+                          <button type="button" onClick={()=>{ setPrefEdit({ name:prefContact.name||'', role_title:prefContact.role_title||'', direct_line:prefContact.direct_line||'', email:prefContact.email||'' }); setEditingPref(true); }}
+                            style={{ fontSize:10, fontWeight:700, color:'var(--gold-400)', background:'rgba(251,191,36,.15)', border:'1px solid rgba(251,191,36,.3)', borderRadius:4, padding:'2px 7px', cursor:'pointer' }}>
+                            ✏️ Edit
+                          </button>
+                        )}
+                      </div>
+                      {!editingPref ? (
+                        <>
+                          <div style={{ color:'white', fontWeight:600, fontSize:13 }}>{prefContact?.name || selected.preferred_contact_name}</div>
+                          {prefContact?.role_title && <div style={{ color:'rgba(255,255,255,.5)', fontSize:11, marginTop:1 }}>{prefContact.role_title}</div>}
+                          {prefContact?.direct_line && <div style={{ color:'rgba(255,255,255,.45)', fontSize:11, marginTop:1 }}>📱 {prefContact.direct_line}</div>}
+                          {(prefContact?.email || selected.preferred_email) && <div style={{ color:'rgba(255,255,255,.45)', fontSize:11, marginTop:1 }}>✉️ {prefContact?.email || selected.preferred_email}</div>}
+                        </>
+                      ) : (
+                        <div style={{ display:'flex', flexDirection:'column', gap:5, marginTop:4 }}>
+                          {[['name','Name'],['role_title','Role'],['direct_line','Direct line'],['email','Email']].map(([f,pl])=>(
+                            <input key={f} style={{ fontSize:11, padding:'4px 7px', border:'1px solid rgba(251,191,36,.4)', borderRadius:4, background:'rgba(255,255,255,.1)', color:'white', width:'100%', boxSizing:'border-box' }}
+                              placeholder={pl} value={prefEdit[f]} onChange={e=>setPrefEdit(p=>({...p,[f]:e.target.value}))} type={f==='email'?'email':'text'} />
+                          ))}
+                          <div style={{ display:'flex', gap:5 }}>
+                            <button type="button" onClick={savePref} disabled={prefSaving}
+                              style={{ flex:1, fontSize:11, fontWeight:700, padding:'4px 0', background:'#92400e', color:'white', border:'none', borderRadius:4, cursor:'pointer' }}>
+                              {prefSaving?'Saving…':'✅ Save'}
+                            </button>
+                            <button type="button" onClick={()=>setEditingPref(false)}
+                              style={{ fontSize:11, padding:'4px 8px', background:'rgba(255,255,255,.1)', color:'rgba(255,255,255,.6)', border:'none', borderRadius:4, cursor:'pointer' }}>
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                   {templates.length > 0 && (
@@ -247,7 +287,17 @@ export default function EmailQueue() {
               <form onSubmit={handleLog} style={{ flex:1, padding:'22px 24px', display:'flex', flexDirection:'column', gap:16, overflowY:'auto' }}>
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                   <div style={{ fontWeight:800, fontSize:16 }}>📧 Log Email</div>
-                  <button type="button" onClick={()=>setSelected(null)} style={{ border:'none', background:'none', cursor:'pointer', fontSize:20, color:'var(--gray-400)', lineHeight:1 }}>✕</button>
+                  <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                    {selStatus !== null && (
+                      <select value={selStatus} onChange={e=>handleStatusChange(e.target.value)}
+                        style={{ fontSize:12, fontWeight:700, padding:'5px 10px', borderRadius:7, cursor:'pointer', border:'1px solid var(--gray-200)', background:'white', color:'var(--gray-800)' }}>
+                        <option value="prospect">Prospect</option>
+                        <option value="interested">⭐ Interested</option>
+                        <option value="customer">✅ Customer</option>
+                      </select>
+                    )}
+                    <button type="button" onClick={()=>setSelected(null)} style={{ border:'none', background:'none', cursor:'pointer', fontSize:20, color:'var(--gray-400)', lineHeight:1 }}>✕</button>
+                  </div>
                 </div>
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
                   <div className="form-group" style={{ margin:0 }}>

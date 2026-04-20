@@ -303,18 +303,6 @@ export default function CompanyPanel({ row, sourceType, contactTypes, onComplete
             {data?.full?.address && (
               <div style={{ fontSize:11, color:'rgba(255,255,255,.35)', marginTop:6 }}>📍 {data.full.address}{data.full.city ? ', '+data.full.city : ''}</div>
             )}
-            {/* Status toggle */}
-            {companyStatus !== null && (
-              <div style={{ marginTop:10, display:'flex', gap:4, flexWrap:'wrap' }}>
-                {[['prospect','Prospect','#475569'],['interested','⭐ Interested','#92400e'],['customer','✅ Customer','#166534']].map(([val,label,col])=>(
-                  <button key={val} type="button" onClick={()=>handleStatusChange(val)}
-                    style={{ fontSize:10, fontWeight:700, padding:'3px 9px', borderRadius:20, cursor:'pointer', border:'none',
-                      background: companyStatus===val ? col : 'rgba(255,255,255,.1)',
-                      color: companyStatus===val ? 'white' : 'rgba(255,255,255,.45)',
-                    }}>{label}</button>
-                ))}
-              </div>
-            )}
             {displayMiles && (
               <div style={{ marginTop:6, display:'flex', gap:10, fontSize:11 }}>
                 <span style={{ color:'var(--gold-400)', fontWeight:700 }}>
@@ -472,7 +460,14 @@ export default function CompanyPanel({ row, sourceType, contactTypes, onComplete
               </div>
             </div>
             <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-              
+              {companyStatus !== null && (
+                <select value={companyStatus} onChange={e=>handleStatusChange(e.target.value)}
+                  style={{ fontSize:12, fontWeight:700, padding:'5px 10px', borderRadius:7, cursor:'pointer', border:'1px solid var(--gray-200)', background:'white', color:'var(--gray-800)' }}>
+                  <option value="prospect">Prospect</option>
+                  <option value="interested">⭐ Interested</option>
+                  <option value="customer">✅ Customer</option>
+                </select>
+              )}
               <button type="button"
                 onClick={() => window.open(`${window.location.origin}/script-popup`, 'fleet-crm-script', 'width=1100,height=820,menubar=no,toolbar=no,scrollbars=yes')}
                 style={{ padding:'5px 13px', borderRadius:'var(--r-md)', border:'1px solid #fde68a', background:'#fffbeb', color:'#92400e', cursor:'pointer', fontSize:12, fontWeight:700 }}>
