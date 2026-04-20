@@ -78,6 +78,9 @@ async function geocode(address) {
 export default function CompanyPanel({ row, sourceType, contactTypes, onComplete, onClose, saving }) {
   const [data, setData]   = useState(null);
   const [busy, setBusy]   = useState(true);
+  const [editingPreferred, setEditingPreferred] = useState(false);
+  const [prefEdit, setPrefEdit] = useState({ name:'', role_title:'', direct_line:'', email:'' });
+  const [prefSaving, setPrefSaving] = useState(false);
   const [myPos, setMyPos] = useState(null);
   const [dist, setDist]         = useState(null);   // straight-line miles (fallback)
   const [routeDist, setRouteDist] = useState(null); // actual route miles via OSRM
@@ -134,6 +137,7 @@ export default function CompanyPanel({ row, sourceType, contactTypes, onComplete
       contact_name: '',
       role_title: '',
     }));
+    setEditingPreferred(false);
     setBusy(true);
     Promise.all([api.company(entityId), api.companyHistory(entityId)])
       .then(async ([full, hist]) => {
@@ -185,6 +189,28 @@ export default function CompanyPanel({ row, sourceType, contactTypes, onComplete
   function set(f, v) {
     isDirty.current = true;
     setForm(p => ({ ...p, [f]: v }));
+  }
+
+  function startEditPreferred(contact) {
+    setPrefEdit({ name: contact.name || '', role_title: contact.role_title || '', direct_line: contact.direct_line || '', email: contact.email || '' });
+    setEditingPreferred(true);
+  }
+
+  async function savePreferred() {
+    if (!preferred) return;
+    setPrefSaving(true);
+    try {
+      await api.updateContact(preferred.id, { ...prefEdit, is_preferred: true });
+      // refresh data
+      const [full, hist] = await Promise.all([api.company(entityId), api.companyHistory(entityId)]);
+      setData(d => ({ ...d, full, hist, contacts: full.contacts || [] }));
+      setEditingPreferred(false);
+      showToast('✅ Contact updated');
+    } catch(e) {
+      showToast(e.message, 'error');
+    } finally {
+      setPrefSaving(false);
+    }
   }
 
   function handleClose() {
@@ -296,13 +322,46 @@ export default function CompanyPanel({ row, sourceType, contactTypes, onComplete
               {/* Preferred contact */}
               {preferred && (
                 <div style={{ padding:'14px 18px', borderBottom:'1px solid var(--gray-200)', background:'#fffbeb' }}>
-                  <div style={{ fontSize:9.5, fontWeight:700, textTransform:'uppercase', letterSpacing:'.1em', color:'#92400e', marginBottom:6 }}>⭐ Preferred Contact</div>
-                  <div style={{ fontWeight:700, fontSize:14, color:'var(--gray-900)' }}>{preferred.name}</div>
-                  {preferred.role_title && <div style={{ fontSize:11, color:'var(--gray-500)', marginTop:1 }}>{preferred.role_title}</div>}
-                  <div style={{ display:'flex', gap:12, fontSize:12, color:'var(--gray-600)', marginTop:5, flexWrap:'wrap' }}>
-                    {preferred.direct_line && <span className="phone-num">📱 {fmtPhone(preferred.direct_line)}</span>}
-                    {preferred.email && <span>✉️ {preferred.email}</span>}
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
+                    <div style={{ fontSize:9.5, fontWeight:700, textTransform:'uppercase', letterSpacing:'.1em', color:'#92400e' }}>⭐ Preferred Contact</div>
+                    {!editingPreferred && (
+                      <button type="button" onClick={() => startEditPreferred(preferred)}
+                        style={{ fontSize:10, fontWeight:700, color:'#92400e', background:'rgba(146,64,14,.1)', border:'1px solid rgba(146,64,14,.2)', borderRadius:4, padding:'2px 7px', cursor:'pointer' }}>
+                        ✏️ Edit
+                      </button>
+                    )}
                   </div>
+                  {!editingPreferred ? (
+                    <>
+                      <div style={{ fontWeight:700, fontSize:14, color:'var(--gray-900)' }}>{preferred.name}</div>
+                      {preferred.role_title && <div style={{ fontSize:11, color:'var(--gray-500)', marginTop:1 }}>{preferred.role_title}</div>}
+                      <div style={{ display:'flex', gap:12, fontSize:12, color:'var(--gray-600)', marginTop:5, flexWrap:'wrap' }}>
+                        {preferred.direct_line && <span className="phone-num">📱 {fmtPhone(preferred.direct_line)}</span>}
+                        {preferred.email && <span>✉️ {preferred.email}</span>}
+                      </div>
+                    </>
+                  ) : (
+                    <div style={{ display:'flex', flexDirection:'column', gap:6, marginTop:4 }}>
+                      <input style={{ fontSize:12, padding:'5px 8px', border:'1px solid #fcd34d', borderRadius:5, background:'white', width:'100%', boxSizing:'border-box' }}
+                        placeholder="Name" value={prefEdit.name} onChange={e => setPrefEdit(p=>({...p,name:e.target.value}))} />
+                      <input style={{ fontSize:12, padding:'5px 8px', border:'1px solid #fcd34d', borderRadius:5, background:'white', width:'100%', boxSizing:'border-box' }}
+                        placeholder="Role / Title" value={prefEdit.role_title} onChange={e => setPrefEdit(p=>({...p,role_title:e.target.value}))} />
+                      <input style={{ fontSize:12, padding:'5px 8px', border:'1px solid #fcd34d', borderRadius:5, background:'white', width:'100%', boxSizing:'border-box' }}
+                        placeholder="Direct line" value={prefEdit.direct_line} onChange={e => setPrefEdit(p=>({...p,direct_line:e.target.value}))} />
+                      <input style={{ fontSize:12, padding:'5px 8px', border:'1px solid #fcd34d', borderRadius:5, background:'white', width:'100%', boxSizing:'border-box' }}
+                        placeholder="Email" type="email" value={prefEdit.email} onChange={e => setPrefEdit(p=>({...p,email:e.target.value}))} />
+                      <div style={{ display:'flex', gap:6, marginTop:2 }}>
+                        <button type="button" onClick={savePreferred} disabled={prefSaving}
+                          style={{ flex:1, fontSize:11, fontWeight:700, padding:'5px 0', background:'#92400e', color:'white', border:'none', borderRadius:5, cursor:'pointer' }}>
+                          {prefSaving ? 'Saving…' : '✅ Save'}
+                        </button>
+                        <button type="button" onClick={() => setEditingPreferred(false)}
+                          style={{ fontSize:11, fontWeight:700, padding:'5px 10px', background:'white', color:'var(--gray-500)', border:'1px solid var(--gray-200)', borderRadius:5, cursor:'pointer' }}>
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -454,6 +513,9 @@ export default function CompanyPanel({ row, sourceType, contactTypes, onComplete
                 <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', fontSize:12, padding:'6px 10px', background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:7, color:'#15803d', marginTop:8 }}>
                   <input type="checkbox" checked={form.set_as_preferred} onChange={e=>set('set_as_preferred',e.target.checked)} style={{ width:13, height:13, accentColor:'#15803d' }}/>
                   ⭐ Set <strong style={{ margin:'0 3px' }}>{form.contact_name}</strong> as the preferred contact
+                  {preferred && preferred.name !== form.contact_name && (
+                    <span style={{ fontSize:10, color:'#6b7280', fontWeight:400, marginLeft:2 }}>(replaces {preferred.name})</span>
+                  )}
                 </label>
               )}
             </div>
