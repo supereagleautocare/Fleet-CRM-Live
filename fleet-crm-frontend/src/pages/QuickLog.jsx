@@ -38,6 +38,7 @@ export default function QuickLog() {
   const [hist, setHist]       = useState([]);
   const [histLoading, setHistLoading] = useState(false);
   const [selStatus, setSelStatus] = useState(null);
+  const [allContacts, setAllContacts] = useState([]);
 
   const [shopPos, setShopPos] = useState(null);
   const { showToast, refreshCounts } = useApp();
@@ -78,10 +79,11 @@ export default function QuickLog() {
   }, [query]);
 
   useEffect(() => {
-    if (!selected) { setHist([]); setSelStatus(null); return; }
+    if (!selected) { setHist([]); setSelStatus(null); setAllContacts([]); return; }
     setSelStatus(selected.company_status || 'prospect');
     setHistLoading(true);
     api.companyHistory(selected.id).then(h => setHist(h || [])).catch(()=>setHist([])).finally(()=>setHistLoading(false));
+    api.company(selected.id).then(c => setAllContacts(c.contacts || [])).catch(()=>{});
   }, [selected?.id]);
 
   async function handleStatusChange(status) {
@@ -493,6 +495,26 @@ export default function QuickLog() {
                     {h.contact_name && <div style={{ fontSize:11, color:'var(--gray-500)', marginTop:1 }}>with {h.contact_name}</div>}
                     {h.notes && <div style={{ fontSize:11, color:'var(--gray-400)', marginTop:3, lineHeight:1.4 }}>{h.notes.length>100?h.notes.slice(0,100)+'…':h.notes}</div>}
                     <div style={{ fontSize:10, color:'var(--gray-300)', marginTop:2 }}>Next: {h.next_action}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {selected && allContacts.length > 0 && (
+              <div className="table-card" style={{ padding:0 }}>
+                <div className="table-card-header">
+                  <span style={{ fontSize:15 }}>👥</span>
+                  <span className="table-card-title">Contacts</span>
+                  <span className="table-card-count">{allContacts.length}</span>
+                </div>
+                {allContacts.map(c => (
+                  <div key={c.id} style={{ padding:'9px 16px', borderBottom:'1px solid var(--gray-100)', display:'flex', alignItems:'flex-start', gap:8 }}>
+                    {c.is_preferred && <span style={{ fontSize:11, marginTop:1, flexShrink:0 }}>⭐</span>}
+                    <div style={{ minWidth:0 }}>
+                      <div style={{ fontWeight:700, fontSize:12.5, color:'var(--gray-900)' }}>{c.name}</div>
+                      {c.role_title && <div style={{ fontSize:11, color:'var(--gray-500)', marginTop:1 }}>{c.role_title}</div>}
+                      {c.direct_line && <div style={{ fontSize:11, color:'var(--gray-500)', marginTop:1 }}>📱 {c.direct_line}</div>}
+                      {c.email && <div style={{ fontSize:11, color:'var(--gray-500)', marginTop:1 }}>✉️ {c.email}</div>}
+                    </div>
                   </div>
                 ))}
               </div>

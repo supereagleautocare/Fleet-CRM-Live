@@ -25,6 +25,7 @@ export default function EmailQueue() {
   const [hist, setHist]           = useState([]);
   const [histLoading, setHistLoading] = useState(false);
   const [selStatus, setSelStatus] = useState(null);
+  const [allContacts, setAllContacts] = useState([]);
   const [prefContact, setPrefContact] = useState(null);
   const [editingPref, setEditingPref] = useState(false);
   const [prefEdit, setPrefEdit]   = useState({ name:'', role_title:'', direct_line:'', email:'' });
@@ -57,14 +58,15 @@ export default function EmailQueue() {
   useEffect(() => { load(); }, [qFilter, customFrom, customTo]);
 
   useEffect(() => {
-    if (!selected) { setHist([]); setSelStatus(null); setPrefContact(null); setEditingPref(false); return; }
+    if (!selected) { setHist([]); setSelStatus(null); setAllContacts([]); setPrefContact(null); setEditingPref(false); return; }
     setSelStatus(selected.company_status || 'prospect');
     setEditingPref(false);
     setHistLoading(true);
     api.companyHistory(selected.id).then(h => setHist(h || [])).catch(()=>setHist([])).finally(()=>setHistLoading(false));
     api.company(selected.id).then(c => {
-      const pref = (c.contacts || []).find(x => x.is_preferred);
-      setPrefContact(pref || null);
+      const contacts = c.contacts || [];
+      setAllContacts(contacts);
+      setPrefContact(contacts.find(x => x.is_preferred) || null);
     }).catch(()=>{});
   }, [selected?.id]);
 
@@ -259,6 +261,20 @@ export default function EmailQueue() {
                           style={{ padding:'7px 9px', borderRadius:7, cursor:'pointer', marginBottom:4, background:form.email_template===t.name?'rgba(168,85,247,.3)':'rgba(255,255,255,.08)', border:`1px solid ${form.email_template===t.name?'#a855f7':'transparent'}` }}>
                           <div style={{ fontSize:11, fontWeight:600, color:'white' }}>{t.name}</div>
                           {t.subject && <div style={{ fontSize:10, color:'var(--gray-400)' }}>{t.subject}</div>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {/* Other contacts */}
+                  {allContacts.filter(c => !c.is_preferred).length > 0 && (
+                    <div style={{ marginTop:10 }}>
+                      <div style={{ fontSize:9.5, color:'rgba(255,255,255,.4)', fontWeight:700, textTransform:'uppercase', letterSpacing:'.07em', marginBottom:6 }}>Other Contacts</div>
+                      {allContacts.filter(c => !c.is_preferred).map(c => (
+                        <div key={c.id} style={{ padding:'7px 9px', background:'rgba(255,255,255,.06)', borderRadius:6, marginBottom:5 }}>
+                          <div style={{ color:'white', fontWeight:600, fontSize:12 }}>{c.name}</div>
+                          {c.role_title && <div style={{ color:'rgba(255,255,255,.45)', fontSize:10, marginTop:1 }}>{c.role_title}</div>}
+                          {c.direct_line && <div style={{ color:'rgba(255,255,255,.4)', fontSize:10, marginTop:1 }}>📱 {c.direct_line}</div>}
+                          {c.email && <div style={{ color:'rgba(255,255,255,.4)', fontSize:10, marginTop:1 }}>✉️ {c.email}</div>}
                         </div>
                       ))}
                     </div>
