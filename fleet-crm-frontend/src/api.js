@@ -47,7 +47,7 @@ export const api = {
   resetPassword:         (token, password) => req('POST', '/auth/reset-password', { token, password }),
 
   // ── Dashboard ───────────────────────────────────────
-  dashboard:      ()                => req('GET',  '/dashboard'),
+  dashboard:      (period='month')  => req('GET',  `/dashboard?period=${period}`),
   dashboardDrill: (type, period)    => req('GET',  `/dashboard/activity-drill?type=${type}&period=${period}`),
   tekmetricFleetData:    (full) => req('GET',  full ? '/tekmetric/fleet-data?full=1' : '/tekmetric/fleet-data'),
   tekmetricShopFloor:    ()     => req('GET',  '/tekmetric/shop-floor'),

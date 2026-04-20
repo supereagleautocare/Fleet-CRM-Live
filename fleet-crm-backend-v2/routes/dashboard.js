@@ -23,90 +23,110 @@ router.get('/check-skipped', async (req, res) => {
 
 router.get('/', async (req, res) => {
   try {
-    const today        = new Date().toISOString().split('T')[0];
-    const sevenDaysAgo  = new Date(Date.now() -  7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const { period = 'month' } = req.query;
+
+    const now  = new Date();
+    const today = now.toISOString().split('T')[0];
+
+    // Calendar week start = Monday of current week
+    const dow = now.getDay(); // 0=Sun,1=Mon,...,6=Sat
+    const daysToMon = dow === 0 ? 6 : dow - 1;
+    const weekStart = new Date(now.getTime() - daysToMon * 86400000).toISOString().split('T')[0];
+
+    // Month start = 1st of current month
+    const monthStart = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
+
+    // Year start = Jan 1 of current year
+    const yearStart = `${now.getFullYear()}-01-01`;
+
+    // Period start used for byRep/byOutcome charts
+    const periodStart = period === 'week' ? weekStart
+                      : period === 'year' ? yearStart
+                      : monthStart;
 
     const [
-  followupResult,
-  visitResult,
-  queueResult,
-  callsTodayResult,
-  callsWeekResult,
-  callsMonthResult,
-  contactsMonthResult,
-  contactsTodayResult,
-  contactsWeekResult,
-  byTypeResult,
-  byOutcomeResult,
-  byRepResult,
-  totalsResult,
-] = await Promise.all([
-  pool.query(`
-  SELECT
-    COUNT(*) as total,
-    SUM(CASE WHEN due_date < $1 THEN 1 ELSE 0 END) as overdue,
-    SUM(CASE WHEN due_date = $1 THEN 1 ELSE 0 END) as due_today,
-    SUM(CASE WHEN source_type = 'company' THEN 1 ELSE 0 END) as company_followups
-  FROM follow_ups WHERE due_date <= $1
-`, [today]),
-pool.query(`
-  SELECT
-    COUNT(*) as total,
-    SUM(CASE WHEN scheduled_date < $1 THEN 1 ELSE 0 END) as overdue,
-    SUM(CASE WHEN scheduled_date = $1 THEN 1 ELSE 0 END) as due_today
-  FROM visit_queue WHERE scheduled_date <= $1
-`, [today]),
-  pool.query(`SELECT COUNT(*) as total_in_queue FROM calling_queue WHERE queue_type = 'company'`),
-  // ── Calls = only contact_types where counts_as_attempt = 1 ──
-  pool.query(`
-    SELECT COUNT(*) as cnt FROM call_log cl
-    WHERE substring(cl.logged_at,1,10) = current_date::text
-      AND cl.action_type = 'Call'
-      AND cl.counts_as_attempt = 1
-  `),
-  pool.query(`
-    SELECT COUNT(*) as cnt FROM call_log cl
-    WHERE substring(cl.logged_at,1,10) >= $1
-      AND cl.action_type = 'Call'
-      AND cl.counts_as_attempt = 1
-  `, [sevenDaysAgo]),
-  pool.query(`
-    SELECT COUNT(*) as cnt FROM call_log cl
-    WHERE substring(cl.logged_at,1,10) >= $1
-      AND cl.action_type = 'Call'
-      AND cl.counts_as_attempt = 1
-  `, [thirtyDaysAgo]),
-  pool.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND action_type != 'Move'`, [thirtyDaysAgo]),
-  pool.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) = current_date::text AND action_type != 'Move'`),
-  pool.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND action_type != 'Move'`, [sevenDaysAgo]),
-  pool.query(`SELECT log_type, COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 GROUP BY log_type`, [thirtyDaysAgo]),
-  pool.query(`SELECT contact_type, COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND counts_as_attempt=1 GROUP BY contact_type ORDER BY cnt DESC LIMIT 10`, [thirtyDaysAgo]),
-  pool.query(`SELECT logged_by_name, COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND counts_as_attempt=1 GROUP BY logged_by_name ORDER BY cnt DESC`, [thirtyDaysAgo]),
-  pool.query(`
-    SELECT
-      (SELECT COUNT(*) FROM companies WHERE status = 'active') as total_companies,
-      (SELECT COUNT(*) FROM call_log WHERE log_type = 'company' AND counts_as_attempt=1) as total_company_calls,
-      (SELECT COUNT(*) FROM call_log WHERE action_type = 'Visit') as total_visits
-  `),
-]);
+      followupResult,
+      visitResult,
+      queueResult,
+      callsTodayResult,
+      callsWeekResult,
+      callsMonthResult,
+      callsYearResult,
+      contactsTodayResult,
+      contactsWeekResult,
+      contactsMonthResult,
+      contactsYearResult,
+      byTypeResult,
+      byOutcomeResult,
+      byRepResult,
+      totalsResult,
+    ] = await Promise.all([
+      pool.query(`
+        SELECT
+          COUNT(*) as total,
+          SUM(CASE WHEN due_date < $1 THEN 1 ELSE 0 END) as overdue,
+          SUM(CASE WHEN due_date = $1 THEN 1 ELSE 0 END) as due_today,
+          SUM(CASE WHEN source_type = 'company' THEN 1 ELSE 0 END) as company_followups
+        FROM follow_ups WHERE due_date <= $1
+      `, [today]),
+      pool.query(`
+        SELECT
+          COUNT(*) as total,
+          SUM(CASE WHEN scheduled_date < $1 THEN 1 ELSE 0 END) as overdue,
+          SUM(CASE WHEN scheduled_date = $1 THEN 1 ELSE 0 END) as due_today
+        FROM visit_queue WHERE scheduled_date <= $1
+      `, [today]),
+      pool.query(`SELECT COUNT(*) as total_in_queue FROM calling_queue WHERE queue_type = 'company'`),
+      // Calls today
+      pool.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) = $1 AND action_type='Call' AND counts_as_attempt=1`, [today]),
+      // Calls this week (calendar week Mon–today)
+      pool.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND action_type='Call' AND counts_as_attempt=1`, [weekStart]),
+      // Calls this month
+      pool.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND action_type='Call' AND counts_as_attempt=1`, [monthStart]),
+      // Calls this year
+      pool.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND action_type='Call' AND counts_as_attempt=1`, [yearStart]),
+      // Contacts today
+      pool.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) = $1 AND action_type!='Move'`, [today]),
+      // Contacts this week
+      pool.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND action_type!='Move'`, [weekStart]),
+      // Contacts this month
+      pool.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND action_type!='Move'`, [monthStart]),
+      // Contacts this year
+      pool.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND action_type!='Move'`, [yearStart]),
+      pool.query(`SELECT log_type, COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 GROUP BY log_type`, [periodStart]),
+      pool.query(`SELECT contact_type, COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND counts_as_attempt=1 GROUP BY contact_type ORDER BY cnt DESC LIMIT 10`, [periodStart]),
+      pool.query(`SELECT logged_by_name, COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND counts_as_attempt=1 GROUP BY logged_by_name ORDER BY cnt DESC`, [periodStart]),
+      pool.query(`
+        SELECT
+          (SELECT COUNT(*) FROM companies WHERE status = 'active') as total_companies,
+          (SELECT COUNT(*) FROM call_log WHERE log_type = 'company' AND counts_as_attempt=1) as total_company_calls,
+          (SELECT COUNT(*) FROM call_log WHERE action_type = 'Visit') as total_visits
+      `),
+    ]);
+
     res.json({
       follow_ups: followupResult.rows[0],
       visits:     visitResult.rows[0],
       queues:     queueResult.rows[0],
       activity: {
-        calls_today:         parseInt(callsTodayResult.rows[0].cnt),
-        calls_this_week:     parseInt(callsWeekResult.rows[0].cnt),
-        calls_this_month:    parseInt(callsMonthResult.rows[0].cnt),
-        contacts_today:      parseInt(contactsTodayResult.rows[0].cnt),
-        contacts_this_week:  parseInt(contactsWeekResult.rows[0].cnt),
-        contacts_this_month: parseInt(contactsMonthResult.rows[0].cnt),
+        calls_today:          parseInt(callsTodayResult.rows[0].cnt),
+        calls_this_week:      parseInt(callsWeekResult.rows[0].cnt),
+        calls_this_month:     parseInt(callsMonthResult.rows[0].cnt),
+        calls_this_year:      parseInt(callsYearResult.rows[0].cnt),
+        contacts_today:       parseInt(contactsTodayResult.rows[0].cnt),
+        contacts_this_week:   parseInt(contactsWeekResult.rows[0].cnt),
+        contacts_this_month:  parseInt(contactsMonthResult.rows[0].cnt),
+        contacts_this_year:   parseInt(contactsYearResult.rows[0].cnt),
       },
       breakdowns: {
         by_type:    byTypeResult.rows,
         by_outcome: byOutcomeResult.rows,
         by_rep:     byRepResult.rows,
       },
+      period,
+      week_start:  weekStart,
+      month_start: monthStart,
+      year_start:  yearStart,
       totals: totalsResult.rows[0],
       generated_at: new Date().toISOString(),
     });
@@ -119,14 +139,20 @@ pool.query(`
 router.get('/activity-drill', async (req, res) => {
   try {
     const { type = 'calls', period = 'today' } = req.query;
-    const sevenDaysAgo  = new Date(Date.now() -  7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const now = new Date();
+    const dow = now.getDay();
+    const daysToMon = dow === 0 ? 6 : dow - 1;
+    const weekStart  = new Date(now.getTime() - daysToMon * 86400000).toISOString().split('T')[0];
+    const monthStart = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
+    const yearStart  = `${now.getFullYear()}-01-01`;
 
     const dateFilter = period === 'today'
       ? `cl.logged_at::date = current_date`
       : period === 'week'
-      ? `cl.logged_at::date >= '${sevenDaysAgo}'`
-      : `cl.logged_at::date >= '${thirtyDaysAgo}'`;
+      ? `cl.logged_at::date >= '${weekStart}'`
+      : period === 'year'
+      ? `cl.logged_at::date >= '${yearStart}'`
+      : `cl.logged_at::date >= '${monthStart}'`;
 
     const actionFilter = type === 'calls' ? `cl.action_type = 'Call'` : `cl.action_type != 'Move'`;
 

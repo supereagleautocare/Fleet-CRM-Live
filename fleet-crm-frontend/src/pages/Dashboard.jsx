@@ -24,11 +24,18 @@ function StatusBadge({ status }) {
   return <span style={{ fontSize:10, fontWeight:700, color:s.color, background:s.bg, padding:'1px 7px', borderRadius:8 }}>{s.label}</span>;
 }
 
+const PERIODS = [
+  { key: 'week',  label: 'This Week'  },
+  { key: 'month', label: 'This Month' },
+  { key: 'year',  label: 'This Year'  },
+];
+
 export default function Dashboard() {
   const [board, setBoard]           = useState(null);
   const [stats, setStats]           = useState(null);
   const [forecast, setForecast]     = useState([]);
   const [loading, setLoading]       = useState(true);
+  const [period, setPeriod]         = useState('month');
 
   // Stage drill-down
   const [drillStage, setDrillStage]     = useState(null);
@@ -43,12 +50,12 @@ export default function Dashboard() {
   const [movingId, setMovingId] = useState(null);
   const navigate = useNavigate();
 
-  async function load() {
+  async function load(p = period) {
     setLoading(true);
     try {
       const [b, s, f] = await Promise.all([
         api.pipelineBoard(),
-        api.dashboard(),
+        api.dashboard(p),
         api.pipelineForecast(),
       ]);
       setBoard(b);
@@ -57,7 +64,7 @@ export default function Dashboard() {
     } finally { setLoading(false); }
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(period); }, [period]);
 
   async function drillInto(stage) {
     if (drillStage === stage) { setDrillStage(null); return; }
@@ -83,14 +90,29 @@ export default function Dashboard() {
   const { counts = {} } = board || {};
   const total = STAGES.reduce((s, st) => s + (counts[st.key] || 0), 0);
 
-  const callsToday  = stats?.activity?.calls_today        ?? 0;
-  const callsWeek   = stats?.activity?.calls_this_week    ?? 0;
-  const callsMonth  = stats?.activity?.calls_this_month   ?? 0;
-  const ctcToday    = stats?.activity?.contacts_today     ?? 0;
-  const ctcWeek     = stats?.activity?.contacts_this_week ?? 0;
+  const callsToday  = stats?.activity?.calls_today         ?? 0;
+  const callsWeek   = stats?.activity?.calls_this_week     ?? 0;
+  const callsMonth  = stats?.activity?.calls_this_month    ?? 0;
+  const callsYear   = stats?.activity?.calls_this_year     ?? 0;
+  const ctcToday    = stats?.activity?.contacts_today      ?? 0;
+  const ctcWeek     = stats?.activity?.contacts_this_week  ?? 0;
   const ctcMonth    = stats?.activity?.contacts_this_month ?? 0;
+  const ctcYear     = stats?.activity?.contacts_this_year  ?? 0;
   const byRep       = stats?.breakdowns?.by_rep     ?? [];
   const byOutcome   = stats?.breakdowns?.by_outcome ?? [];
+
+  // Stat cards based on selected period
+  const periodLabel = PERIODS.find(p => p.key === period)?.label ?? 'This Month';
+  const callCards = period === 'week'
+    ? [['Today', callsToday, 'today'], ['This Week', callsWeek, 'week']]
+    : period === 'year'
+    ? [['Today', callsToday, 'today'], ['This Month', callsMonth, 'month'], ['This Year', callsYear, 'year']]
+    : [['Today', callsToday, 'today'], ['This Week', callsWeek, 'week'], ['This Month', callsMonth, 'month']];
+  const ctcCards = period === 'week'
+    ? [['Today', ctcToday, 'today'], ['This Week', ctcWeek, 'week']]
+    : period === 'year'
+    ? [['Today', ctcToday, 'today'], ['This Month', ctcMonth, 'month'], ['This Year', ctcYear, 'year']]
+    : [['Today', ctcToday, 'today'], ['This Week', ctcWeek, 'week'], ['This Month', ctcMonth, 'month']];
 
   if (loading) return <div className="loading-wrap"><div className="spinner"/></div>;
 
@@ -105,7 +127,17 @@ export default function Dashboard() {
           <div className="page-title">📊 Pipeline</div>
         </div>
         <div className="header-actions">
-          <button className="btn btn-ghost btn-sm" onClick={load}>🔄 Refresh</button>
+          <div style={{ display:'flex', gap:4, background:'var(--gray-100)', borderRadius:8, padding:3 }}>
+            {PERIODS.map(p => (
+              <button key={p.key}
+                className={`btn btn-sm ${period===p.key ? 'btn-navy' : 'btn-ghost'}`}
+                style={{ border:'none', whiteSpace:'nowrap' }}
+                onClick={() => setPeriod(p.key)}>
+                {p.label}
+              </button>
+            ))}
+          </div>
+          <button className="btn btn-ghost btn-sm" onClick={() => load(period)}>🔄 Refresh</button>
         </div>
       </div>
 
@@ -113,18 +145,14 @@ export default function Dashboard() {
 
         {/* ── Call Activity ─────────────────────────────────────────── */}
         {sectionLabel('📞 Call Activity')}
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12, marginBottom:16 }}>
-          {[
-            ['Today',      callsToday, '#1e40af', 'today'],
-            ['This Week',  callsWeek,  '#1e40af', 'week'],
-            ['This Month', callsMonth, '#1e40af', 'month'],
-          ].map(([label, value, color, period]) => (
-            <div key={label} onClick={() => clickStat('calls', period)}
+        <div style={{ display:'grid', gridTemplateColumns:`repeat(${callCards.length},1fr)`, gap:12, marginBottom:16 }}>
+          {callCards.map(([label, value, p]) => (
+            <div key={label} onClick={() => clickStat('calls', p)}
               className="table-card"
               style={{ padding:'16px 20px', display:'flex', alignItems:'center', gap:14, cursor:'pointer',
-                border: activeStat===`calls-${period}` ? `2px solid ${color}` : undefined,
-                background: activeStat===`calls-${period}` ? '#eff6ff' : 'white' }}>
-              <div style={{ fontSize:28, fontWeight:900, color, lineHeight:1 }}>{value}</div>
+                border: activeStat===`calls-${p}` ? '2px solid #1e40af' : undefined,
+                background: activeStat===`calls-${p}` ? '#eff6ff' : 'white' }}>
+              <div style={{ fontSize:28, fontWeight:900, color:'#1e40af', lineHeight:1 }}>{value}</div>
               <div style={{ fontSize:13, color:'var(--gray-500)' }}>{label}</div>
             </div>
           ))}
@@ -132,18 +160,14 @@ export default function Dashboard() {
 
         {/* ── Total Contacts ────────────────────────────────────────── */}
         {sectionLabel('🤝 Total Contacts (all types)')}
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12, marginBottom:20 }}>
-          {[
-            ['Today',      ctcToday,  '#065f46', 'today'],
-            ['This Week',  ctcWeek,   '#065f46', 'week'],
-            ['This Month', ctcMonth,  '#065f46', 'month'],
-          ].map(([label, value, color, period]) => (
-            <div key={label} onClick={() => clickStat('contacts', period)}
+        <div style={{ display:'grid', gridTemplateColumns:`repeat(${ctcCards.length},1fr)`, gap:12, marginBottom:20 }}>
+          {ctcCards.map(([label, value, p]) => (
+            <div key={label} onClick={() => clickStat('contacts', p)}
               className="table-card"
               style={{ padding:'16px 20px', display:'flex', alignItems:'center', gap:14, cursor:'pointer',
-                border: activeStat===`contacts-${period}` ? `2px solid ${color}` : undefined,
-                background: activeStat===`contacts-${period}` ? '#ecfdf5' : 'white' }}>
-              <div style={{ fontSize:28, fontWeight:900, color, lineHeight:1 }}>{value}</div>
+                border: activeStat===`contacts-${p}` ? '2px solid #065f46' : undefined,
+                background: activeStat===`contacts-${p}` ? '#ecfdf5' : 'white' }}>
+              <div style={{ fontSize:28, fontWeight:900, color:'#065f46', lineHeight:1 }}>{value}</div>
               <div style={{ fontSize:13, color:'var(--gray-500)' }}>{label}</div>
             </div>
           ))}
@@ -156,7 +180,7 @@ export default function Dashboard() {
               <span>{activeStat.startsWith('calls') ? '📞' : '🤝'}</span>
               <span className="table-card-title">
                 {activeStat.startsWith('calls') ? 'Calls' : 'Contacts'} —{' '}
-                {activeStat.endsWith('today') ? 'Today' : activeStat.endsWith('week') ? 'This Week' : 'This Month'}
+                {activeStat.endsWith('today') ? 'Today' : activeStat.endsWith('week') ? 'This Week' : activeStat.endsWith('year') ? 'This Year' : 'This Month'}
               </span>
               <span className="table-card-count">{statRows.length} companies</span>
               <button className="btn btn-ghost btn-sm" style={{ marginLeft:'auto' }} onClick={() => setActiveStat(null)}>✕ Close</button>
@@ -254,7 +278,7 @@ export default function Dashboard() {
             {byRep.length > 0 && (
               <div className="table-card" style={{ padding:0 }}>
                 <div className="table-card-header">
-                  <span className="table-card-title">📊 Calls by Rep (30d)</span>
+                  <span className="table-card-title">📊 Calls by Rep — {periodLabel}</span>
                 </div>
                 {byRep.map(r => (
                   <div key={r.logged_by_name} style={{ padding:'8px 18px', borderBottom:'1px solid var(--gray-100)', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
@@ -267,7 +291,7 @@ export default function Dashboard() {
             {byOutcome.length > 0 && (
               <div className="table-card" style={{ padding:0 }}>
                 <div className="table-card-header">
-                  <span className="table-card-title">📋 Outcomes (30d)</span>
+                  <span className="table-card-title">📋 Outcomes — {periodLabel}</span>
                 </div>
                 {byOutcome.slice(0,8).map(r => (
                   <div key={r.contact_type} style={{ padding:'8px 18px', borderBottom:'1px solid var(--gray-100)', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
