@@ -182,7 +182,9 @@ export default function Dashboard() {
                 {activeStat.startsWith('calls') ? 'Calls' : 'Contacts'} —{' '}
                 {activeStat.endsWith('today') ? 'Today' : activeStat.endsWith('week') ? 'This Week' : activeStat.endsWith('year') ? 'This Year' : 'This Month'}
               </span>
-              <span className="table-card-count">{statRows.length} companies</span>
+              <span className="table-card-count">
+                {statRows.length} {statRows.length === 1 ? 'company' : 'companies'} · {statRows.reduce((s, r) => s + parseInt(r.contact_count || 0), 0)} {activeStat?.startsWith('calls') ? 'calls' : 'contacts'}
+              </span>
               <button className="btn btn-ghost btn-sm" style={{ marginLeft:'auto' }} onClick={() => setActiveStat(null)}>✕ Close</button>
             </div>
             {statLoading ? <div className="loading-wrap"><div className="spinner"/></div>
