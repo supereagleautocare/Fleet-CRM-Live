@@ -160,6 +160,7 @@ router.get('/activity-drill', async (req, res) => {
 
     const { rows } = await pool.query(`
       SELECT c.id, c.name, c.company_id, c.main_phone, c.industry, c.pipeline_stage, c.company_status,
+        c.is_multi_location, c.location_name,
         COUNT(cl.id) as contact_count,
         MAX(cl.logged_at) as last_contact,
         MAX(cl.contact_type) as last_contact_type

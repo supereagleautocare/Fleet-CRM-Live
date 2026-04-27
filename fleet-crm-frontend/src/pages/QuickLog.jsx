@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { api, fmtPhone, fmtDate } from '../api.js';
+import { api, fmtPhone, fmtDate, companyDisplayName } from '../api.js';
 import { useApp } from '../App.jsx';
 import ScoreCardModal from '../components/ScoreCardModal.jsx';
 
@@ -150,10 +150,10 @@ export default function QuickLog() {
           await api.quicklogCompany(selected.id, payload);
         }
       }
-      showToast(`✅ Logged for ${selected.name}`);
+      showToast(`✅ Logged for ${companyDisplayName(selected)}`);
       setSaved(true);
       setRecentLogs(prev => [{
-        name: selected.name,
+        name: companyDisplayName(selected),
         contact_type: actionMode === 'mail' ? `Mail — ${form.mail_piece}` : form.contact_type,
         notes: form.notes,
         next_action: form.next_action,
@@ -240,7 +240,7 @@ export default function QuickLog() {
                         onMouseLeave={e=>e.currentTarget.style.background='white'}
                       >
                         <div>
-                          <div style={{ fontWeight:700, fontSize:13, color:'var(--gray-900)' }}>{r.name}</div>
+                          <div style={{ fontWeight:700, fontSize:13, color:'var(--gray-900)' }}>{companyDisplayName(r)}</div>
                           <div style={{ fontSize:11, color:'var(--gray-400)', marginTop:2, display:'flex', gap:10 }}>
                             {fmtPhone(r.main_phone)}
                             {r.industry && <span>· {r.industry}</span>}
@@ -277,7 +277,7 @@ export default function QuickLog() {
                         </span>
                       )}
                     </div>
-                    <div style={{ fontSize:22, fontWeight:800, color:'var(--gray-900)' }}>{selected.name}</div>
+                    <div style={{ fontSize:22, fontWeight:800, color:'var(--gray-900)' }}>{companyDisplayName(selected)}</div>
                     <div style={{ fontSize:13, color:'var(--gray-500)', marginTop:2 }}>
                       {fmtPhone(selected.main_phone)}
                       {selected.industry && ` · ${selected.industry}`}
@@ -461,13 +461,13 @@ export default function QuickLog() {
             {selected && saved && (
               <div className="table-card" style={{ padding:'32px 24px', textAlign:'center' }}>
                 <div style={{ fontSize:48, marginBottom:12 }}>✅</div>
-                <div style={{ fontSize:20, fontWeight:800, marginBottom:6 }}>Logged for {selected.name}</div>
+                <div style={{ fontSize:20, fontWeight:800, marginBottom:6 }}>Logged for {companyDisplayName(selected)}</div>
                 <div style={{ fontSize:13, color:'var(--gray-500)', marginBottom:24 }}>
                   {actionMode === 'mail' ? `Mail — ${form.mail_piece}` : actionMode === 'email' ? `Email — ${form.email_template}` : form.contact_type} · {form.next_action==='Stop'?'No follow-up scheduled':form.next_action==='Call'?'Follow-up call scheduled':form.next_action==='Visit'?'Visit scheduled':form.next_action==='Mail'?'Mail follow-up scheduled':form.next_action==='Email'?'Email follow-up scheduled':'Follow-up scheduled'}
                 </div>
                 <div style={{ display:'flex', gap:10, justifyContent:'center' }}>
                   <button className="btn btn-primary btn-lg" onClick={logAnother}>⚡ Log Another</button>
-                  <button className="btn btn-ghost btn-lg" onClick={()=>{ setSelected(null); setSaved(false); }}>Log More for {selected.name}</button>
+                  <button className="btn btn-ghost btn-lg" onClick={()=>{ setSelected(null); setSaved(false); }}>Log More for {companyDisplayName(selected)}</button>
                 </div>
               </div>
             )}

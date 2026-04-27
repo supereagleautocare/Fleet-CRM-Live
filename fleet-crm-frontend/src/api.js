@@ -1,3 +1,10 @@
+// Returns "Company Name (Location)" for multi-location chains, else just the name
+export function companyDisplayName(co) {
+  if (!co) return '';
+  if (co.is_multi_location && co.location_name) return `${co.name} (${co.location_name})`;
+  return co.name || '';
+}
+
 // ── API helper — all calls to the Fleet CRM backend ──────────────────────────
 // Token is stored in memory (never localStorage for security)
 let token = null; 

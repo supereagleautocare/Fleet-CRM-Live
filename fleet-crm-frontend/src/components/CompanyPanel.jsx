@@ -12,7 +12,7 @@
  *  - Geocodes company address on mount and stores lat/lng
  */
 import { useState, useEffect, useRef } from 'react';
-import { api, fmtPhone, fmtDate } from '../api.js';
+import { api, fmtPhone, fmtDate, companyDisplayName } from '../api.js';
 import { useApp } from '../App.jsx';
 
 const CATEGORY_ICONS = { call:'📞', mail:'✉️', email:'📧', visit:'📍', move:'➡️' };
@@ -99,7 +99,8 @@ export default function CompanyPanel({ row, sourceType, contactTypes, onComplete
   const { showToast } = useApp();
 
   const entityId    = row.entity_id ?? row.id;
-  const companyName = row.company_name ?? row.entity_name ?? row.name ?? '';
+  const _baseName   = row.company_name ?? row.entity_name ?? row.name ?? '';
+  const companyName = (row.is_multi_location && row.location_name) ? `${_baseName} (${row.location_name})` : _baseName;
   const mainPhone   = row.main_phone ?? row.phone ?? '';
 
   // Get shop location from settings (preferred) then fall back to GPS

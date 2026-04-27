@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api, fmtPhone, fmtDate, dueDateStatus } from '../api.js';
+import { api, fmtPhone, fmtDate, dueDateStatus, companyDisplayName } from '../api.js';
 import { useApp } from '../App.jsx';
 import UpcomingList from '../components/UpcomingList.jsx';
 import CompanyPanel from '../components/CompanyPanel.jsx';
@@ -213,7 +213,7 @@ export default function CallingQueue() {
                             style={{ fontWeight:700, fontSize:13, color:'var(--navy-700)', cursor:'pointer', textDecoration:'underline', textDecorationStyle:'dotted', textUnderlineOffset:3, display:'inline' }}
                             onClick={e=>{ e.stopPropagation(); navigate('/companies?company='+row.id); }}
                             title="Open company profile"
-                          >{row.name}</div>
+                          >{companyDisplayName(row)}</div>
                         </td>
                         <td><span className="phone-num">{fmtPhone(row.main_phone)}</span></td>
                         <td style={{ overflow:'hidden', maxWidth:0 }}>{row.industry?<span className="badge badge-gray" style={{ overflow:'hidden', textOverflow:'ellipsis', display:'block', maxWidth:'100%' }}>{row.industry}</span>:'—'}</td>

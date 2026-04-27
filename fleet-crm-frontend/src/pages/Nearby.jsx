@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { api, fmtPhone, fmtDate } from '../api.js';
+import { api, fmtPhone, fmtDate, companyDisplayName } from '../api.js';
 import { useApp } from '../App.jsx';
 import CompanyPanel from '../components/CompanyPanel.jsx';
 
@@ -101,7 +101,7 @@ function NearbyMap({ companies, myPos, selectedId, onSelect, radius }) {
         const miles = myPos ? distMiles(myPos,c).toFixed(1) : '?';
         const marker = L.marker([c.lat,c.lng],{icon})
           .addTo(mapInstanceRef.current)
-          .bindPopup(`<div style="min-width:160px;font-family:system-ui"><div style="font-weight:700;font-size:13px">${c.name}</div><div style="font-size:11px;color:#64748b;margin-top:2px">${c.address||''}${c.city?', '+c.city:''}</div><div style="font-size:11px;margin-top:4px">${p.dot} ${p.label} · ${miles} mi</div></div>`)
+          .bindPopup(`<div style="min-width:160px;font-family:system-ui"><div style="font-weight:700;font-size:13px">${companyDisplayName(c)}</div><div style="font-size:11px;color:#64748b;margin-top:2px">${c.address||''}${c.city?', '+c.city:''}</div><div style="font-size:11px;margin-top:4px">${p.dot} ${p.label} · ${miles} mi</div></div>`)
           .on('click', () => onSelect(c));
         markersRef.current.push(marker);
       });
@@ -374,7 +374,7 @@ export default function Nearby({ embedded = false }) {
                     onMouseEnter={e=>e.currentTarget.style.background='var(--gray-50)'}
                     onMouseLeave={e=>e.currentTarget.style.background='white'}
                     onClick={()=>{setSelected(c);setPanelMode(null);}}>
-                    <div style={{fontWeight:700,fontSize:13}}>{c.name}</div>
+                    <div style={{fontWeight:700,fontSize:13}}>{companyDisplayName(c)}</div>
                     <div style={{fontSize:11,color:'var(--gray-400)',marginTop:2}}>
                       {c.address?`${c.address}${c.city?', '+c.city:''}`:'No address'}
                       {miles&&<span style={{marginLeft:4,color:'var(--navy-700)',fontWeight:600}}>· {miles}mi</span>}
@@ -395,7 +395,7 @@ export default function Nearby({ embedded = false }) {
               <div style={{background:'var(--navy-950)',padding:'16px 18px'}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
                   <div>
-                    <div style={{fontSize:16,fontWeight:800,color:'white'}}>{selected.name}</div>
+                    <div style={{fontSize:16,fontWeight:800,color:'white'}}>{companyDisplayName(selected)}</div>
                     <div style={{fontSize:13,color:'var(--gold-400)',marginTop:3,fontFamily:'var(--font-mono)'}}>{fmtPhone(selected.main_phone)}</div>
                     {selected.address&&<div style={{fontSize:11,color:'rgba(255,255,255,.35)',marginTop:4}}>📍 {selected.address}{selected.city?', '+selected.city:''}</div>}
                     {activePos&&selected.geoOk&&<div style={{fontSize:11,color:'rgba(255,255,255,.5)',marginTop:3}}>📏 {distMiles(activePos,selected).toFixed(1)} mi away</div>}

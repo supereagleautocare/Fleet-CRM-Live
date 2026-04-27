@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { api, fmtPhone, fmtDate } from '../api.js';
+import { api, fmtPhone, fmtDate, companyDisplayName } from '../api.js';
 import { useNavigate } from 'react-router-dom';
 import MoveModal from '../components/MoveModal.jsx';
 
@@ -207,7 +207,7 @@ export default function Dashboard() {
                       {statRows.map(row => (
                         <tr key={row.id} style={{ cursor:'pointer' }} onClick={() => navigate('/companies?company='+row.id)}>
                           <td>
-                            <div style={{ fontWeight:700, fontSize:13, color:'var(--navy-700)' }}>{row.name}</div>
+                            <div style={{ fontWeight:700, fontSize:13, color:'var(--navy-700)' }}>{companyDisplayName(row)}</div>
                             <div className="company-id">{row.company_id}</div>
                           </td>
                           <td>{row.industry ? <span className="badge badge-gray">{row.industry}</span> : '—'}</td>
@@ -373,7 +373,7 @@ export default function Dashboard() {
                         {drillRows.map(row => (
                           <tr key={row.id} style={{ cursor:'pointer' }} onClick={() => navigate('/companies?company='+row.id)}>
                             <td>
-                              <div style={{ fontWeight:700, fontSize:13, color:'var(--navy-700)' }}>{row.name}</div>
+                              <div style={{ fontWeight:700, fontSize:13, color:'var(--navy-700)' }}>{companyDisplayName(row)}</div>
                               <div className="company-id">{row.company_id}</div>
                             </td>
                             <td><span className="phone-num">{fmtPhone(row.main_phone)}</span></td>

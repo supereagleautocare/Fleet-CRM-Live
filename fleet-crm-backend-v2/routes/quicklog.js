@@ -21,7 +21,7 @@ router.get('/search', async (req, res) => {
       const { rows: companies } = await pool.query(`
         SELECT
           c.id, c.company_id, c.name, c.main_phone, c.industry, c.address, c.city,
-          c.lat, c.lng,
+          c.lat, c.lng, c.is_multi_location, c.location_name, c.location_group,
           'company' AS entity_type,
           cl.contact_type AS last_contact_type,
           cl.logged_at    AS last_contacted,

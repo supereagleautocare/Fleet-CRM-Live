@@ -2,7 +2,7 @@ import CompanyMergeModal from '../components/CompanyMergeModal.jsx';
 import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import AddressAutocomplete from '../components/AddressAutocomplete.jsx';
-import { api, fmtPhone, fmtDate } from '../api.js';
+import { api, fmtPhone, fmtDate, companyDisplayName } from '../api.js';
 import { useApp } from '../App.jsx';
 import ScoreCardModal from '../components/ScoreCardModal.jsx';
 import ImportSettings from '../components/ImportSettings.jsx'; import SimpleImport from '../components/SimpleImport.jsx';// ── Note cell for history table ───────────────────────────────────────────────
@@ -667,7 +667,7 @@ async function handleImport(e) {
                   <div style={{ textAlign: selected ? 'center' : 'left' }}>
                     <div style={{ display:'flex', alignItems:'center', gap:5, justifyContent: selected ? 'center' : 'flex-start' }}>
                       {!!c.is_starred && <span style={{ fontSize:11 }}>⭐</span>}
-                      <div style={{ fontWeight:600, fontSize:13, color:'var(--gray-900)' }}>{c.name}</div>
+                      <div style={{ fontWeight:600, fontSize:13, color:'var(--gray-900)' }}>{companyDisplayName(c)}</div>
                     </div>
                     {selected && <div style={{ fontSize:11, color:'var(--gray-400)', marginTop:1 }}>{fmtPhone(c.main_phone)}</div>}
                   </div>
@@ -719,7 +719,7 @@ async function handleImport(e) {
                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
                     <div>
                       <div style={{ fontSize:20, fontWeight:800, color:'var(--gray-900)', display:'flex', alignItems:'center', gap:8 }}>
-                        {selected.name}
+                        {companyDisplayName(selected)}
                         {selected.is_starred ? <span title="Warm Lead" style={{ fontSize:18, cursor:'default' }}>⭐</span> : null}
                       </div>
                       <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:3, flexWrap:'wrap' }}>
@@ -1063,26 +1063,6 @@ async function handleImport(e) {
                       </div>
                     </div>
                   )}
-                  {/* Multi-location name fields */}
-                  {isMultiLoc && (
-                    <div style={{marginTop:8,padding:'10px 12px',background:'#eff6ff',border:'1px solid #bfdbfe',borderRadius:8,fontSize:12}}>
-                      <div style={{fontWeight:700,color:'#1e40af',marginBottom:6}}>🏢 Multi-location chain: <b>{addForm.name}</b></div>
-                      <div style={{marginBottom:6,color:'#1e3a8a',fontSize:11}}>Give this new location a specific name (e.g. "North Charlotte" or "Concord"):</div>
-                      <input className="form-input" value={locationName}
-                        onChange={e=>setLocationName(e.target.value)}
-                        placeholder="e.g. North Charlotte, Downtown, Concord…"
-                        style={{fontSize:12,marginBottom:6}}/>
-                      {nameMatches.length > 0 && (
-                        <div style={{fontSize:11,color:'#1e40af'}}>
-                          The existing location{nameMatches.length>1?'s':''} will also be updated to show as part of this chain.
-                        </div>
-                      )}
-                      <button type="button" style={{marginTop:6,fontSize:11,background:'none',border:'none',color:'#64748b',cursor:'pointer',padding:0}}
-                        onClick={()=>{ setIsMultiLoc(false); setMultiLocPrompt(false); setLocationName(''); }}>
-                        ✕ Cancel multi-location
-                      </button>
-                    </div>
-                  )}
                 </div>
                 <div className="form-group">
                   <label className="form-label">Main Phone</label>
@@ -1091,6 +1071,28 @@ async function handleImport(e) {
                 <div className="form-group">
                   <label className="form-label">Industry</label>
                   <input className="form-input" value={addForm.industry} onChange={e=>setAddForm(f=>({...f,industry:e.target.value}))} placeholder="HVAC / Plumbing…"/>
+                </div>
+                {/* Multi-location — always visible checkbox */}
+                <div style={{ marginBottom:12, padding:'10px 14px', background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:8 }}>
+                  <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', fontSize:13, fontWeight:600, color:'#1e40af' }}>
+                    <input type="checkbox" checked={isMultiLoc} onChange={e=>{ setIsMultiLoc(e.target.checked); if (!e.target.checked) setLocationName(''); }}
+                      style={{ width:15, height:15, accentColor:'#3b82f6', flexShrink:0 }}/>
+                    🏢 This is part of a multi-location chain
+                  </label>
+                  {isMultiLoc && (
+                    <div style={{marginTop:8}}>
+                      <div style={{fontSize:11,color:'#1e3a8a',marginBottom:5}}>Give this location a specific name shown in all queues (e.g. "North Charlotte" or "Concord"):</div>
+                      <input className="form-input" value={locationName}
+                        onChange={e=>setLocationName(e.target.value)}
+                        placeholder="e.g. North Charlotte, Downtown, Concord…"
+                        style={{fontSize:12}}/>
+                      {nameMatches.length > 0 && (
+                        <div style={{fontSize:11,color:'#1e40af',marginTop:4}}>
+                          The existing location{nameMatches.length>1?'s':''} will also be updated to show as part of this chain.
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div className="form-group">
                   <label className="form-label">Address</label>

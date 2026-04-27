@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api, fmtPhone, fmtDate } from '../api.js';
+import { api, fmtPhone, fmtDate, companyDisplayName } from '../api.js';
 import { useApp } from '../App.jsx';
 import UpcomingList from '../components/UpcomingList.jsx';
 import MoveModal from '../components/MoveModal.jsx'; 
@@ -164,7 +164,7 @@ export default function MailQueue() {
                             onClick={e=>{ e.stopPropagation(); navigate('/companies?company='+row.id); }}
                             title="Open company profile"
                           >
-                            {row.name}
+                            {companyDisplayName(row)}
                           </div>
                           </td>
                         <td><span className="phone-num">{fmtPhone(row.main_phone)}</span></td>
@@ -202,7 +202,7 @@ export default function MailQueue() {
               {/* Left: company info + history */}
               <div style={{ width:260, flexShrink:0, borderRight:'1px solid var(--gray-200)', background:'var(--navy-950)', overflowY:'auto', display:'flex', flexDirection:'column' }}>
                 <div style={{ padding:'20px 16px 14px', flexShrink:0 }}>
-                  <div style={{ fontWeight:800, fontSize:15, color:'white' }}>{selected.name}</div>
+                  <div style={{ fontWeight:800, fontSize:15, color:'white' }}>{companyDisplayName(selected)}</div>
                   <div style={{ fontSize:13, color:'var(--gold-400)', marginTop:2, fontFamily:'var(--font-mono)' }}>{fmtPhone(selected.main_phone)}</div>
                   {selected.address && <div style={{ fontSize:12, color:'rgba(255,255,255,.45)', marginTop:6 }}>📍 {selected.address}{selected.city?', '+selected.city:''}</div>}
                   {/* Preferred contact with edit */}
