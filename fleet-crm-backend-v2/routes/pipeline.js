@@ -53,8 +53,12 @@ router.get('/board', async (req, res) => {
   try {
     const counts = {};
     await Promise.all(STAGES.map(async stage => {
+      // Treat NULL pipeline_stage as 'new'
       const { rows } = await pool.query(
-        "SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage=$1 AND status='active'", [stage]
+        stage === 'new'
+          ? "SELECT COUNT(*) as cnt FROM companies WHERE (pipeline_stage='new' OR pipeline_stage IS NULL) AND status='active'"
+          : "SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage=$1 AND status='active'",
+        stage === 'new' ? [] : [stage]
       );
       counts[stage] = parseInt(rows[0].cnt);
     }));
@@ -81,18 +85,25 @@ router.get('/counts', async (req, res) => {
   try {
     const today = new Date().toLocaleDateString('en-CA');
     const [callingRes, mailRes, emailRes, visitsRes] = await Promise.all([
+      // Matches the /calling list query exactly: in queue OR no unlocked follow-up OR follow-up due today
       pool.query(`
-        SELECT COUNT(DISTINCT c.id) as cnt FROM companies c
+        SELECT COUNT(DISTINCT c.id) as cnt
+        FROM companies c
+        LEFT JOIN (
+          SELECT DISTINCT ON (entity_id) id, entity_id, due_date
+          FROM follow_ups WHERE source_type='company' AND is_locked=0
+          ORDER BY entity_id, id DESC
+        ) fu ON fu.entity_id = c.id
+        LEFT JOIN calling_queue cq ON cq.entity_id = c.id AND cq.queue_type = 'company'
         WHERE c.status='active' AND c.pipeline_stage IN ('new','call')
-          AND (
-            EXISTS (SELECT 1 FROM follow_ups fu WHERE fu.entity_id=c.id AND fu.source_type='company' AND fu.due_date <= $1)
-            OR EXISTS (SELECT 1 FROM calling_queue cq WHERE cq.entity_id=c.id AND cq.queue_type='company')
-            OR (SELECT COUNT(*) FROM call_log WHERE entity_id=c.id AND log_type='company' AND log_category='call') = 0
-          )
+          AND (cq.id IS NOT NULL OR fu.id IS NULL OR fu.due_date <= $1)
       `, [today]),
-      pool.query(`SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='mail' AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND is_locked=0 AND due_date <= $1)`, [today]),
-      pool.query(`SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='email' AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND is_locked=0 AND due_date <= $1)`, [today]),
-      pool.query(`SELECT COUNT(*) as cnt FROM visit_queue WHERE scheduled_date <= $1`, [today]),
+      // Matches /mail list: all companies in mail stage
+      pool.query(`SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='mail' AND status='active'`),
+      // Matches /email list: all companies in email stage
+      pool.query(`SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='email' AND status='active'`),
+      // All visits in the queue
+      pool.query(`SELECT COUNT(*) as cnt FROM visit_queue`),
     ]);
     res.json({
       calling: parseInt(callingRes.rows[0].cnt),
@@ -162,6 +173,8 @@ router.get('/stage/:stage', async (req, res) => {
 
     if (starred === '1') {
       where += ` AND c.is_starred = 1`;
+    } else if (stage === 'new') {
+      where += ` AND (c.pipeline_stage = 'new' OR c.pipeline_stage IS NULL)`;
     } else if (stage !== 'all') {
       params.push(stage);
       where += ` AND c.pipeline_stage = $${params.length}`;
@@ -225,7 +238,7 @@ router.get('/calling', async (req, res) => {
         FROM call_log WHERE log_type='company' AND log_category='call'
         ORDER BY entity_id, id DESC
       ) cl_last ON cl_last.entity_id=c.id
-      WHERE c.status='active' AND c.pipeline_stage IN ('new','call')
+      WHERE c.status='active' AND (c.pipeline_stage IN ('new','call') OR c.pipeline_stage IS NULL)
     `;
 
     if (upcoming === '1') {
