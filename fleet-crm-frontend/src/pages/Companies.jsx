@@ -312,7 +312,8 @@ export default function Companies() {
   const [scorecardView, setScorecardView] = useState(null); // { entityName, entityId } — open manual scorecard
   const [showAddForm, setShowAddForm] = useState(false);
   const [showAddContact, setShowAddContact] = useState(false);
-  const [addForm, setAddForm]       = useState({ name:'', main_phone:'', industry:'', address:'', city:'', state:'' });
+  const [addForm, setAddForm]       = useState({ name:'', main_phone:'', industry:'', address:'', city:'', state:'', zip:'' });
+  const [addressDisplay, setAddressDisplay] = useState('');
   const [nameMatches, setNameMatches] = useState([]);
   const [multiLocPrompt, setMultiLocPrompt] = useState(false);
   const [locationName, setLocationName] = useState('');
@@ -438,7 +439,8 @@ export default function Companies() {
       if (addToQueue) await api.addToCompanyQueue(company.id);
       showToast(company.name + ' added' + (addToQueue ? ' and queued' : ''));
       setShowAddForm(false);
-      setAddForm({ name:'', main_phone:'', industry:'', address:'', city:'', state:'' });
+      setAddForm({ name:'', main_phone:'', industry:'', address:'', city:'', state:'', zip:'' });
+      setAddressDisplay('');
       setNameMatches([]); setMultiLocPrompt(false); setIsMultiLoc(false); setLocationName('');
       await load();
       await refreshCounts();
@@ -1074,11 +1076,15 @@ async function handleImport(e) {
                 </div>
                 <div className="form-group">
                   <label className="form-label">Address</label>
-                  <AddressAutocomplete value={addForm.address} onChange={val=>setAddForm(f=>({...f,address:val}))} onSelect={({address,city,state,zip})=>setAddForm(f=>({...f,address,city:city||f.city,state:state||f.state,zip:zip||f.zip}))} placeholder="Start typing address…"/>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">City</label>
-                  <input className="form-input" value={addForm.city} onChange={e=>setAddForm(f=>({...f,city:e.target.value}))} placeholder="Charlotte"/>
+                  <AddressAutocomplete
+                    value={addressDisplay}
+                    onChange={val => { setAddressDisplay(val); setAddForm(f => ({...f, address: val})); }}
+                    onSelect={({address, city, state, zip, display}) => {
+                      setAddressDisplay(display);
+                      setAddForm(f => ({...f, address, city: city||f.city, state: state||f.state, zip: zip||f.zip}));
+                    }}
+                    placeholder="Start typing address or business name…"
+                  />
                 </div>
                 <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:8, marginBottom:12 }}>
                   <input type="checkbox" id="addqueue" checked={addToQueue} onChange={e=>setAddToQueue(e.target.checked)} style={{ width:16, height:16, accentColor:'var(--gold-500)', flexShrink:0 }}/>

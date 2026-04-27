@@ -1,6 +1,23 @@
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 
+// USPS secondary unit abbreviations — applied when a full word is followed by a space or end
+function normalizeSuite(str) {
+  return str
+    .replace(/\bsuite\s+/gi,      'Ste ')
+    .replace(/\bsuite$/gi,        'Ste')
+    .replace(/\bapartment\s+/gi,  'Apt ')
+    .replace(/\bapartment$/gi,    'Apt')
+    .replace(/\bfloor\s+/gi,      'Fl ')
+    .replace(/\bfloor$/gi,        'Fl')
+    .replace(/\bbuilding\s+/gi,   'Bldg ')
+    .replace(/\bbuilding$/gi,     'Bldg')
+    .replace(/\broom\s+/gi,       'Rm ')
+    .replace(/\broom$/gi,         'Rm')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
 /**
  * AddressAutocomplete — dropdown renders via portal to escape overflow:hidden containers
  */
@@ -40,7 +57,7 @@ export default function AddressAutocomplete({
   }, []);
 
   function handleChange(e) {
-    const val = e.target.value;
+    const val = normalizeSuite(e.target.value);
     onChange(val);
     setHighlighted(-1);
     clearTimeout(timerRef.current);
@@ -59,15 +76,18 @@ export default function AddressAutocomplete({
         fetch(`${base}&q=${encodeURIComponent(val + ' Charlotte NC')}`, { headers }).then(r => r.json()).catch(() => []),
         fetch(`${base}&q=${encodeURIComponent(val + ', NC')}`,          { headers }).then(r => r.json()).catch(() => []),
       ]);
-      const seen = new Set(); const merged = [];
+      const seen = new Set(); const all = [];
       for (const item of [...r1, ...r2]) {
-        if (!seen.has(item.place_id)) { seen.add(item.place_id); merged.push(item); }
+        if (!seen.has(item.place_id)) { seen.add(item.place_id); all.push(item); }
       }
+      // Prefer results with a real street number; fall back to named places
+      const withNum = all.filter(i => i.address?.house_number);
+      const merged = withNum.length > 0 ? withNum : all.filter(i => i.address?.road);
       merged.sort((a, b) => {
         const aHas = !!(a.address?.house_number), bHas = !!(b.address?.house_number);
         return aHas && !bHas ? -1 : !aHas && bHas ? 1 : 0;
       });
-      setResults(merged.slice(0, 6));
+      setResults(merged.slice(0, 4));
       setOpen(merged.length > 0);
       reposition();
     } catch (_) {
@@ -79,15 +99,13 @@ export default function AddressAutocomplete({
 
   function pick(item) {
     const a = item.address || {};
-    const streetAddr = [a.house_number, a.road || a.pedestrian || a.footway].filter(Boolean).join(' ');
+    const streetAddr = normalizeSuite([a.house_number, a.road || a.pedestrian || a.footway].filter(Boolean).join(' '));
     const city  = a.city || a.town || a.village || a.municipality || a.suburb || '';
     const state = a.state || 'NC';
-    const isNamedPlace = item.name && !item.name.match(/^\d/);
-    let display;
-    if (isNamedPlace && streetAddr) display = `${streetAddr}, ${city}, ${state}`;
-    else display = [streetAddr || item.name, city, state].filter(Boolean).join(', ');
-    onChange(display || item.display_name.split(',').slice(0, 3).join(',').trim());
-    onSelect?.({ display, address: streetAddr || item.name, city, state, zip: a.postcode || a.postal_code || '', state: a.state || a.state_abbreviation || 'NC', name: item.name });
+    const zip   = a.postcode || a.postal_code || '';
+    const fullDisplay = normalizeSuite([streetAddr || item.name, city, state, zip].filter(Boolean).join(', '));
+    onChange(fullDisplay || item.display_name.split(',').slice(0, 3).join(',').trim());
+    onSelect?.({ display: fullDisplay, address: streetAddr || item.name, city, state, zip, name: item.name });
     setOpen(false); setResults([]);
   }
 
@@ -101,14 +119,12 @@ export default function AddressAutocomplete({
 
   function label(item) {
     const a = item.address || {};
-    const parts = [];
     const addr = [a.house_number, a.road || a.pedestrian].filter(Boolean).join(' ');
-    if (item.name && item.name !== addr) parts.push(item.name);
-    if (addr) parts.push(addr);
-    const city = a.city || a.town || a.village || '';
-    if (city) parts.push(city);
-    if (a.state) parts.push(a.state);
-    return parts.join(', ') || item.display_name.split(',').slice(0, 3).join(',');
+    const city  = a.city || a.town || a.village || '';
+    const zip   = a.postcode || a.postal_code || '';
+    // Single clean line: "123 Main St, Charlotte, NC 28202"
+    return [addr || item.name, city, [a.state, zip].filter(Boolean).join(' ')].filter(Boolean).join(', ')
+      || item.display_name.split(',').slice(0, 3).join(',');
   }
 
   function icon(item) {
@@ -153,9 +169,6 @@ export default function AddressAutocomplete({
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--gray-900)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {label(item)}
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--gray-400)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {item.display_name.split(',').slice(-3).join(',').trim()}
             </div>
           </div>
         </div>
