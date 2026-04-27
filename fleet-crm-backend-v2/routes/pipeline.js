@@ -103,8 +103,8 @@ router.get('/counts', async (req, res) => {
       pool.query(`SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='mail' AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND is_locked=0 AND due_date <= $1)`, [today]),
       // Email: same as mail
       pool.query(`SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='email' AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND is_locked=0 AND due_date <= $1)`, [today]),
-      // All visits in the queue
-      pool.query(`SELECT COUNT(*) as cnt FROM visit_queue`),
+      // Visits due today or overdue (matches default "Due Today" filter in route planner)
+      pool.query(`SELECT COUNT(*) as cnt FROM visit_queue WHERE scheduled_date <= $1`, [today]),
     ]);
     res.json({
       calling: parseInt(callingRes.rows[0].cnt),
@@ -192,7 +192,7 @@ router.get('/stage/:stage', async (req, res) => {
         cl.next_action    as last_next_action,
         (SELECT COUNT(*) FROM call_log WHERE entity_id=c.id AND log_type='company' AND action_type!='Move') as total_contacts
       FROM companies c
-      LEFT JOIN company_contacts cc ON cc.company_id=c.company_id AND cc.is_preferred=1
+      LEFT JOIN (SELECT DISTINCT ON (company_id) company_id, name, role_title, direct_line, email FROM company_contacts WHERE is_preferred=1 ORDER BY company_id, id ASC) cc ON cc.company_id=c.company_id
       LEFT JOIN (
         SELECT DISTINCT ON (entity_id) entity_id, contact_type, logged_at, next_action
         FROM call_log WHERE log_type='company' AND log_category='call'
@@ -227,7 +227,7 @@ router.get('/calling', async (req, res) => {
         cl_last.notes        as last_notes,
         (SELECT COUNT(*) FROM call_log WHERE entity_id=c.id AND log_type='company' AND action_type!='Move') as call_count
       FROM companies c
-      LEFT JOIN company_contacts cc ON cc.company_id=c.company_id AND cc.is_preferred=1
+      LEFT JOIN (SELECT DISTINCT ON (company_id) company_id, name, role_title, direct_line, email FROM company_contacts WHERE is_preferred=1 ORDER BY company_id, id ASC) cc ON cc.company_id=c.company_id
       LEFT JOIN (
         SELECT DISTINCT ON (entity_id) id, entity_id, due_date, source_type
         FROM follow_ups WHERE source_type='company' AND is_locked=0
@@ -277,7 +277,7 @@ router.get('/mail', async (req, res) => {
         cl.logged_at      as last_contacted,
         (SELECT COUNT(*) FROM call_log WHERE entity_id=c.id AND log_type='company' AND action_type!='Move') as call_count
       FROM companies c
-      LEFT JOIN company_contacts cc ON cc.company_id=c.company_id AND cc.is_preferred=1
+      LEFT JOIN (SELECT DISTINCT ON (company_id) company_id, name, role_title, direct_line, email FROM company_contacts WHERE is_preferred=1 ORDER BY company_id, id ASC) cc ON cc.company_id=c.company_id
       LEFT JOIN (
         SELECT DISTINCT ON (entity_id) entity_id, due_date
         FROM follow_ups WHERE source_type='company' AND is_locked=0
@@ -308,7 +308,7 @@ router.get('/email', async (req, res) => {
         cl.logged_at      as last_contacted,
         (SELECT COUNT(*) FROM call_log WHERE entity_id=c.id AND log_type='company' AND action_type!='Move') as call_count
       FROM companies c
-      LEFT JOIN company_contacts cc ON cc.company_id=c.company_id AND cc.is_preferred=1
+      LEFT JOIN (SELECT DISTINCT ON (company_id) company_id, name, role_title, direct_line, email FROM company_contacts WHERE is_preferred=1 ORDER BY company_id, id ASC) cc ON cc.company_id=c.company_id
       LEFT JOIN (
         SELECT DISTINCT ON (entity_id) entity_id, due_date
         FROM follow_ups WHERE source_type='company' AND is_locked=0
