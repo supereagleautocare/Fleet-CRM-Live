@@ -82,6 +82,7 @@ export default function CompanyPanel({ row, sourceType, contactTypes, onComplete
   const [prefEdit, setPrefEdit] = useState({ name:'', role_title:'', direct_line:'', email:'' });
   const [prefSaving, setPrefSaving] = useState(false);
   const [companyStatus, setCompanyStatus] = useState(null);
+  const [expandedNote, setExpandedNote] = useState(null);
   const [myPos, setMyPos] = useState(null);
   const [dist, setDist]         = useState(null);   // straight-line miles (fallback)
   const [routeDist, setRouteDist] = useState(null); // actual route miles via OSRM
@@ -437,8 +438,20 @@ export default function CompanyPanel({ row, sourceType, contactTypes, onComplete
                         {h.mail_piece && <div style={{ fontSize:11, color:'#065f46', marginTop:1 }}>✉️ {h.mail_piece}</div>}
                         {h.email_to && <div style={{ fontSize:11, color:'#6b21a8', marginTop:1 }}>📧 to {h.email_to}</div>}
                         {h.referral_name && <div style={{ fontSize:11, color:'var(--green-600)', fontWeight:600, marginTop:1 }}>→ referred {h.referral_name}{h.referral_role?` · ${h.referral_role}`:''}</div>}
-                        {h.notes && <div style={{ fontSize:11, color:'var(--gray-600)', marginTop:2, lineHeight:1.5 }}>{h.notes}</div>}
-                        {h.log_category === 'move' && h.notes && <div style={{ fontSize:11, fontWeight:700, color:'var(--navy-700)', marginTop:2 }}>{h.notes}</div>}
+                        {h.notes && (() => {
+                          const long = h.notes.length > 120;
+                          const isMoveNote = h.log_category === 'move';
+                          return (
+                            <div
+                              style={{ fontSize:11, color: isMoveNote ? 'var(--navy-700)' : 'var(--gray-600)', fontWeight: isMoveNote ? 700 : undefined, marginTop:2, lineHeight:1.5,
+                                ...(long ? { overflow:'hidden', display:'-webkit-box', WebkitLineClamp:3, WebkitBoxOrient:'vertical', cursor:'pointer' } : {}) }}
+                              onClick={() => long && setExpandedNote(h.notes)}
+                              title={long ? 'Click to read full note' : undefined}
+                            >
+                              {h.notes}{long && <span style={{ color:'var(--navy-600)', fontWeight:600 }}> … read more</span>}
+                            </div>
+                          );
+                        })()}
                         {h.next_action && h.log_category !== 'move' && <div style={{ fontSize:10, color:'var(--gray-400)', marginTop:2 }}>Next: {h.next_action}{h.next_action_date?` · ${fmtDate(h.next_action_date)}`:''}</div>}
                       </div>
                     </div>
@@ -596,6 +609,21 @@ export default function CompanyPanel({ row, sourceType, contactTypes, onComplete
           </div>
         </form>
       </div>
+
+      {/* Full note modal */}
+      {expandedNote && (
+        <div onClick={() => setExpandedNote(null)}
+          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.55)', zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center', padding:24 }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background:'white', borderRadius:12, padding:24, maxWidth:520, width:'100%', maxHeight:'70vh', overflowY:'auto', boxShadow:'0 8px 32px rgba(0,0,0,.25)' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
+              <span style={{ fontWeight:700, fontSize:14, color:'var(--gray-900)' }}>Note</span>
+              <button onClick={() => setExpandedNote(null)} style={{ background:'none', border:'none', fontSize:18, cursor:'pointer', color:'var(--gray-400)', lineHeight:1 }}>×</button>
+            </div>
+            <div style={{ fontSize:13, color:'var(--gray-700)', lineHeight:1.65, whiteSpace:'pre-wrap' }}>{expandedNote}</div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

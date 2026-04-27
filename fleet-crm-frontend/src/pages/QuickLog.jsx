@@ -15,6 +15,7 @@ export default function QuickLog() {
   const [contactTypes, setContactTypes] = useState([]);
   const [recentLogs, setRecentLogs] = useState([]);
 
+  const [expandedNote, setExpandedNote] = useState(null);
   const [actionMode, setActionMode] = useState('call'); // call | mail | email | visit
   const [form, setForm] = useState({
     contact_type: '',
@@ -493,7 +494,13 @@ export default function QuickLog() {
                       <div style={{ fontSize:10, color:'var(--gray-400)', flexShrink:0, marginLeft:6 }}>{h.logged_at?.slice(0,10)}</div>
                     </div>
                     {h.contact_name && <div style={{ fontSize:11, color:'var(--gray-500)', marginTop:1 }}>with {h.contact_name}</div>}
-                    {h.notes && <div style={{ fontSize:11, color:'var(--gray-400)', marginTop:3, lineHeight:1.4 }}>{h.notes.length>100?h.notes.slice(0,100)+'…':h.notes}</div>}
+                    {h.notes && (() => { const long = h.notes.length > 120; return (
+                      <div style={{ fontSize:11, color:'var(--gray-400)', marginTop:3, lineHeight:1.4,
+                        ...(long ? { overflow:'hidden', display:'-webkit-box', WebkitLineClamp:3, WebkitBoxOrient:'vertical', cursor:'pointer' } : {}) }}
+                        onClick={() => long && setExpandedNote(h.notes)} title={long ? 'Click to read full note' : undefined}>
+                        {h.notes}{long && <span style={{ color:'var(--navy-600)', fontWeight:600 }}> … read more</span>}
+                      </div>
+                    ); })()}
                     <div style={{ fontSize:10, color:'var(--gray-300)', marginTop:2 }}>Next: {h.next_action}</div>
                   </div>
                 ))}
@@ -538,11 +545,13 @@ export default function QuickLog() {
                     <div style={{ fontSize:11, color:'var(--gray-500)', marginTop:2 }}>
                       {log.contact_type} · {log.next_action}
                     </div>
-                    {log.notes && (
-                      <div style={{ fontSize:11, color:'var(--gray-400)', marginTop:3, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                        {log.notes}
+                    {log.notes && (() => { const long = log.notes.length > 80; return (
+                      <div style={{ fontSize:11, color:'var(--gray-400)', marginTop:3,
+                        ...(long ? { overflow:'hidden', display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', cursor:'pointer' } : { overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }) }}
+                        onClick={() => long && setExpandedNote(log.notes)} title={long ? 'Click to read full note' : undefined}>
+                        {log.notes}{long && <span style={{ color:'var(--navy-600)', fontWeight:600 }}> … read more</span>}
                       </div>
-                    )}
+                    ); })()}
                     <div style={{ fontSize:10, color:'var(--gray-300)', marginTop:3 }}>
                       {log.loggedAt.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}
                     </div>
@@ -578,6 +587,20 @@ export default function QuickLog() {
           onClose={()=>setPendingScorecard(null)}
           onSaved={()=>{ setPendingScorecard(null); showToast('✅ Scorecard saved'); }}
         />
+      )}
+
+      {expandedNote && (
+        <div onClick={() => setExpandedNote(null)}
+          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.55)', zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center', padding:24 }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background:'white', borderRadius:12, padding:24, maxWidth:520, width:'100%', maxHeight:'70vh', overflowY:'auto', boxShadow:'0 8px 32px rgba(0,0,0,.25)' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
+              <span style={{ fontWeight:700, fontSize:14, color:'var(--gray-900)' }}>Note</span>
+              <button onClick={() => setExpandedNote(null)} style={{ background:'none', border:'none', fontSize:18, cursor:'pointer', color:'var(--gray-400)', lineHeight:1 }}>×</button>
+            </div>
+            <div style={{ fontSize:13, color:'var(--gray-700)', lineHeight:1.65, whiteSpace:'pre-wrap' }}>{expandedNote}</div>
+          </div>
+        </div>
       )}
     </>
   );
