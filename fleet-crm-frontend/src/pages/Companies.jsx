@@ -326,6 +326,7 @@ export default function Companies() {
   const [addToQueue, setAddToQueue] = useState(true);
   const [editingCompany, setEditingCompany] = useState(false);
   const [editForm, setEditForm]     = useState({});
+  const [editAddressDisplay, setEditAddressDisplay] = useState('');
   const { showToast, refreshCounts } = useApp();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -751,7 +752,12 @@ async function handleImport(e) {
                             await refreshCounts();
                           } catch(err) { showToast(err.message, 'error'); }
                         }}>🗑️ Delete</button>
-                      <button className="btn btn-ghost btn-sm" onClick={()=>{ setEditForm({name:selected.name,main_phone:selected.main_phone||'',industry:selected.industry||'',address:selected.address||'',city:selected.city||'',state:selected.state||'',website:selected.website||'',notes:selected.notes||'',is_multi_location:selected.is_multi_location||0,location_group:selected.location_group||'',location_name:selected.location_name||''}); setEditingCompany(true); }}>✏️ Edit</button>
+                      <button className="btn btn-ghost btn-sm" onClick={()=>{
+                        const addr = [selected.address, selected.city, selected.state, selected.zip].filter(Boolean).join(', ');
+                        setEditAddressDisplay(addr);
+                        setEditForm({name:selected.name,main_phone:selected.main_phone||'',industry:selected.industry||'',address:selected.address||'',city:selected.city||'',state:selected.state||'',zip:selected.zip||'',website:selected.website||'',notes:selected.notes||'',is_multi_location:selected.is_multi_location||0,location_group:selected.location_group||'',location_name:selected.location_name||''});
+                        setEditingCompany(true);
+                      }}>✏️ Edit</button>
                       <button className="pill-btn pill-btn-ghost" onClick={()=>setSelected(null)}>✕</button>
                       <button className="btn btn-ghost btn-sm" style={{ color:'#1e40af', border:'1px solid #bfdbfe' }}
                         onClick={()=>{ setMerging(true); setMergeSearch(''); setMergeResults([]); }}>
@@ -858,12 +864,24 @@ async function handleImport(e) {
                 <form onSubmit={handleSaveCompanyEdit}>
                   <div style={{ fontWeight:700, fontSize:14, marginBottom:14 }}>✏️ Edit Company</div>
                   <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:10 }}>
-                    {[['name','Company Name'],['main_phone','Main Phone'],['industry','Industry'],['address','Address'],['city','City'],['website','Website']].map(([f,l])=>(
+                    {[['name','Company Name'],['main_phone','Main Phone'],['industry','Industry'],['website','Website']].map(([f,l])=>(
                       <div key={f} className="form-group" style={{ margin:0 }}>
                         <label className="form-label">{l}</label>
                         <input className="form-input" value={editForm[f]||''} onChange={e=>setEditForm(p=>({...p,[f]:e.target.value}))}/>
                       </div>
                     ))}
+                  </div>
+                  <div className="form-group" style={{ marginBottom:10 }}>
+                    <label className="form-label">Address</label>
+                    <AddressAutocomplete
+                      value={editAddressDisplay}
+                      onChange={val => { setEditAddressDisplay(val); setEditForm(p => ({...p, address: val})); }}
+                      onSelect={({address, city, state, zip, display}) => {
+                        setEditAddressDisplay(display);
+                        setEditForm(p => ({...p, address, city: city||p.city, state: state||p.state, zip: zip||p.zip}));
+                      }}
+                      placeholder="Start typing address or business name…"
+                    />
                   </div>
 
                   {/* Multi-location */}
