@@ -153,7 +153,6 @@ router.get('/forecast', async (req, res) => {
       const label = i === 0 ? 'Today' : i === 1 ? 'Tomorrow'
         : d.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
 
-      // Both today and future: only count companies with an explicit follow-up on that date
       const callingCntQuery = pool.query(`SELECT COUNT(DISTINCT c.id) as cnt ${callingBase} AND fu.due_date = $1`, [ds]);
 
       const [dc, dm, de, dv] = await Promise.all([

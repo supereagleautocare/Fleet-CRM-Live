@@ -273,6 +273,11 @@ router.post('/', async (req, res) => {
         state||null, zip||null, website||null, notes||null,
         is_multi_location ? 1 : 0, location_name||null, location_group||name.trim()]);
     geocodeAndSave(rows[0].id, address, city);
+    const todayStr = new Date().toLocaleDateString('en-CA');
+    await pool.query(
+      "INSERT INTO follow_ups (source_type,entity_id,company_id_str,entity_name,phone,due_date,next_action) VALUES ('company',$1,$2,$3,$4,$5,'Call') ON CONFLICT (source_type,entity_id) DO NOTHING",
+      [rows[0].id, company_id, name.trim(), main_phone||null, todayStr]
+    );
     res.status(201).json(rows[0]);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

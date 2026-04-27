@@ -168,4 +168,20 @@ async function geocodeMissing() {
 
 setTimeout(geocodeMissing, 5000);
 setInterval(geocodeMissing, 24*60*60*1000);
+
+// ─── One-time backfill: create follow-up records for companies that have none ──
+async function backfillFollowupDates() {
+  try {
+    const { rowCount } = await pool.query(`
+      INSERT INTO follow_ups (source_type, entity_id, company_id_str, entity_name, phone, due_date, next_action)
+      SELECT 'company', c.id, c.company_id, c.name, c.main_phone, LEFT(c.created_at, 10), 'Call'
+      FROM companies c
+      WHERE c.status = 'active'
+        AND NOT EXISTS (SELECT 1 FROM follow_ups fu WHERE fu.source_type='company' AND fu.entity_id=c.id)
+      ON CONFLICT (source_type, entity_id) DO NOTHING
+    `);
+    if (rowCount > 0) console.log(`[backfill] created follow-up records for ${rowCount} companies`);
+  } catch (e) { console.error('[backfill] error:', e.message); }
+}
+setTimeout(backfillFollowupDates, 4000);
 module.exports = app;
