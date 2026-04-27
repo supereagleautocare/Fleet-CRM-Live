@@ -78,7 +78,7 @@ router.get('/queue/list', async (req, res) => {
         cc.email AS preferred_email, cc.role_title AS preferred_role
       FROM calling_queue q
       JOIN companies c ON c.id=q.entity_id
-      LEFT JOIN company_contacts cc ON cc.company_id=c.company_id AND cc.is_preferred=1
+      LEFT JOIN (SELECT DISTINCT ON (company_id) company_id, name, role_title, direct_line, email FROM company_contacts WHERE is_preferred=1 ORDER BY company_id, id ASC) cc ON cc.company_id=c.company_id
       WHERE q.queue_type='company'
       ORDER BY q.added_at ASC
     `);
@@ -155,7 +155,7 @@ router.get('/', async (req, res) => {
         fu.due_date       as followup_due,
         fu.next_action    as followup_action
       FROM companies c
-      LEFT JOIN company_contacts cc ON cc.company_id=c.company_id AND cc.is_preferred=1
+      LEFT JOIN (SELECT DISTINCT ON (company_id) company_id, name, role_title, direct_line, email FROM company_contacts WHERE is_preferred=1 ORDER BY company_id, id ASC) cc ON cc.company_id=c.company_id
       LEFT JOIN (
         SELECT DISTINCT ON (entity_id) entity_id, contact_type, logged_at
         FROM call_log WHERE log_type='company'
