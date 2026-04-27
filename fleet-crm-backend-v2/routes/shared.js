@@ -160,7 +160,7 @@ async function scheduleNextAction(pool, { company, contact_type, next_action, ne
 
   if (!next_action || next_action === 'Stop') {
     await pool.query(
-      "UPDATE companies SET pipeline_stage='dead', stage_updated_at=to_char(now(),'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"'), updated_at=to_char(now(),'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') WHERE id=$1",
+      "UPDATE companies SET pipeline_stage='dead', company_status='dead', stage_updated_at=to_char(now(),'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"'), updated_at=to_char(now(),'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') WHERE id=$1",
       [company.id]
     );
     return { next_action_date: null, nextStage: 'dead' };
