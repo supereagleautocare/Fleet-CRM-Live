@@ -85,7 +85,7 @@ router.get('/counts', async (req, res) => {
   try {
     const today = new Date().toLocaleDateString('en-CA');
     const [callingRes, mailRes, emailRes, visitsRes] = await Promise.all([
-      // Matches the /calling list query exactly: in queue OR no unlocked follow-up OR follow-up due today
+      // Matches the /calling list query: in queue OR no unlocked follow-up OR due today; includes NULL stage
       pool.query(`
         SELECT COUNT(DISTINCT c.id) as cnt
         FROM companies c
@@ -95,13 +95,14 @@ router.get('/counts', async (req, res) => {
           ORDER BY entity_id, id DESC
         ) fu ON fu.entity_id = c.id
         LEFT JOIN calling_queue cq ON cq.entity_id = c.id AND cq.queue_type = 'company'
-        WHERE c.status='active' AND c.pipeline_stage IN ('new','call')
+        WHERE c.status='active'
+          AND (c.pipeline_stage IN ('new','call') OR c.pipeline_stage IS NULL)
           AND (cq.id IS NOT NULL OR fu.id IS NULL OR fu.due_date <= $1)
       `, [today]),
-      // Matches /mail list: all companies in mail stage
-      pool.query(`SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='mail' AND status='active'`),
-      // Matches /email list: all companies in email stage
-      pool.query(`SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='email' AND status='active'`),
+      // Mail: companies in mail stage with unlocked follow-up due today or overdue (matches default "Due Today" filter)
+      pool.query(`SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='mail' AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND is_locked=0 AND due_date <= $1)`, [today]),
+      // Email: same as mail
+      pool.query(`SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='email' AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND is_locked=0 AND due_date <= $1)`, [today]),
       // All visits in the queue
       pool.query(`SELECT COUNT(*) as cnt FROM visit_queue`),
     ]);
