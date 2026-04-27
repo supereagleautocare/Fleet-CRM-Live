@@ -119,10 +119,24 @@ router.get('/forecast', async (req, res) => {
   try {
     const today = new Date().toLocaleDateString('en-CA');
 
+    // Reusable CTE snippet for calling-stage companies with their latest unlocked follow-up
+    const callingBase = `
+      FROM companies c
+      LEFT JOIN (
+        SELECT DISTINCT ON (entity_id) id, entity_id, due_date
+        FROM follow_ups WHERE source_type='company' AND is_locked=0
+        ORDER BY entity_id, id DESC
+      ) fu ON fu.entity_id = c.id
+      LEFT JOIN calling_queue cq ON cq.entity_id = c.id AND cq.queue_type = 'company'
+      WHERE c.status='active'
+        AND (c.pipeline_stage IN ('new','call') OR c.pipeline_stage IS NULL)
+    `;
+
     const [oc, om, oe, ov] = await Promise.all([
-      pool.query("SELECT COUNT(*) as cnt FROM follow_ups WHERE source_type='company' AND due_date < $1", [today]),
-      pool.query(`SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='mail' AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND due_date < $1)`, [today]),
-      pool.query(`SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='email' AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND due_date < $1)`, [today]),
+      // Overdue calling: has an actual overdue follow-up
+      pool.query(`SELECT COUNT(DISTINCT c.id) as cnt ${callingBase} AND fu.due_date < $1`, [today]),
+      pool.query(`SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='mail' AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND is_locked=0 AND due_date < $1)`, [today]),
+      pool.query(`SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='email' AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND is_locked=0 AND due_date < $1)`, [today]),
       pool.query("SELECT COUNT(*) as cnt FROM visit_queue WHERE scheduled_date < $1", [today]),
     ]);
 
@@ -139,20 +153,16 @@ router.get('/forecast', async (req, res) => {
       const label = i === 0 ? 'Today' : i === 1 ? 'Tomorrow'
         : d.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
 
+      // Today: no follow-up (COALESCE → today) OR in queue OR follow-up = today
+      // Future: follow-up scheduled exactly on that date
       const callingCntQuery = i === 0
-        ? pool.query(`SELECT COUNT(DISTINCT c.id) as cnt FROM companies c
-            WHERE c.status='active' AND c.pipeline_stage IN ('new','call')
-            AND (
-              EXISTS (SELECT 1 FROM follow_ups fu WHERE fu.entity_id=c.id AND fu.source_type='company' AND fu.due_date = $1)
-              OR (NOT EXISTS (SELECT 1 FROM follow_ups fu WHERE fu.entity_id=c.id AND fu.source_type='company')
-                  AND (EXISTS (SELECT 1 FROM calling_queue cq WHERE cq.entity_id=c.id AND cq.queue_type='company')
-                       OR (SELECT COUNT(*) FROM call_log WHERE entity_id=c.id AND log_type='company' AND log_category='call') = 0))
-            )`, [ds])
-        : pool.query("SELECT COUNT(*) as cnt FROM follow_ups WHERE source_type='company' AND due_date=$1", [ds]);
+        ? pool.query(`SELECT COUNT(DISTINCT c.id) as cnt ${callingBase} AND (cq.id IS NOT NULL OR fu.id IS NULL OR fu.due_date = $1)`, [ds])
+        : pool.query(`SELECT COUNT(DISTINCT c.id) as cnt ${callingBase} AND fu.due_date = $1`, [ds]);
+
       const [dc, dm, de, dv] = await Promise.all([
         callingCntQuery,
-        pool.query(`SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='mail' AND status='active' AND (SELECT COUNT(*) FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND due_date=$1) > 0`, [ds]),
-        pool.query(`SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='email' AND status='active' AND (SELECT COUNT(*) FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND due_date=$1) > 0`, [ds]),
+        pool.query(`SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='mail' AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND is_locked=0 AND due_date=$1)`, [ds]),
+        pool.query(`SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='email' AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND is_locked=0 AND due_date=$1)`, [ds]),
         pool.query("SELECT COUNT(*) as cnt FROM visit_queue WHERE scheduled_date=$1", [ds]),
       ]);
 
