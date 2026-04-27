@@ -153,11 +153,8 @@ router.get('/forecast', async (req, res) => {
       const label = i === 0 ? 'Today' : i === 1 ? 'Tomorrow'
         : d.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
 
-      // Today: no follow-up (COALESCE → today) OR in queue OR follow-up = today
-      // Future: follow-up scheduled exactly on that date
-      const callingCntQuery = i === 0
-        ? pool.query(`SELECT COUNT(DISTINCT c.id) as cnt ${callingBase} AND (cq.id IS NOT NULL OR fu.id IS NULL OR fu.due_date = $1)`, [ds])
-        : pool.query(`SELECT COUNT(DISTINCT c.id) as cnt ${callingBase} AND fu.due_date = $1`, [ds]);
+      // Both today and future: only count companies with an explicit follow-up on that date
+      const callingCntQuery = pool.query(`SELECT COUNT(DISTINCT c.id) as cnt ${callingBase} AND fu.due_date = $1`, [ds]);
 
       const [dc, dm, de, dv] = await Promise.all([
         callingCntQuery,
