@@ -114,9 +114,19 @@ export default function RoutePlanner({ embedded = false }) {
   const [contactTypes, setContactTypes]   = useState([]);
   const [myGps, setMyGps]                 = useState(null);
   const [mobileMapTab, setMobileMapTab]   = useState('list'); // 'list' | 'map'
+  const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false);
   const [mapSearch, setMapSearch]         = useState('');
   const [mapSearchOpen, setMapSearchOpen] = useState(false);
   const mapInstanceRef2                   = useRef(null);
+
+  // Invalidate map size whenever the map tab becomes visible on mobile
+  useEffect(() => {
+    if (mobileMapTab === 'map') {
+      [50, 150, 350].forEach(ms =>
+        setTimeout(() => { try { mapInstanceRef2.current?.invalidateSize(); } catch(_){} }, ms)
+      );
+    }
+  }, [mobileMapTab]);
 
   // ── Nearby state ──────────────────────────────────────────────────────────
   const [nearbyCompanies, setNearbyCompanies] = useState([]);
@@ -534,13 +544,17 @@ useEffect(() => {
               </div>
             )}
           </div>
-          <div style={{display:'flex',gap:8}}>
+          <div style={{display:'flex',gap:8,alignItems:'center'}}>
             {route && <button className="btn btn-ghost btn-sm" onClick={()=>setRoute(null)}>← Edit Stops</button>}
             {route && <button className="btn btn-ghost btn-sm" onClick={printRoute}>🖨️ Print</button>}
+            {/* Mobile: toggle route settings */}
+            <button className="route-settings-toggle" onClick={()=>setMobileSettingsOpen(o=>!o)}>
+              ⚙️ {mobileSettingsOpen ? 'Hide' : 'Settings'}
+            </button>
           </div>
         </div>
 
-        <div className="route-controls-panel" style={{display:'flex',alignItems:'center',gap:16,padding:'10px 20px 12px',flexWrap:'wrap'}}>
+        <div className={`route-controls-panel${mobileSettingsOpen ? ' mobile-open' : ''}`} style={{display:'flex',alignItems:'center',gap:16,padding:'10px 20px 12px',flexWrap:'wrap'}}>
           {/* Start address */}
           <div style={{display:'flex',alignItems:'center',gap:6}}>
             <span style={{fontSize:11,fontWeight:700,color:'var(--gray-500)',whiteSpace:'nowrap'}}>FROM</span>
@@ -608,7 +622,7 @@ useEffect(() => {
           </div>
 
           {!route && (
-            <button className="btn btn-primary" style={{marginLeft:'auto',whiteSpace:'nowrap'}}
+            <button className="btn btn-primary route-plan-btn-desktop" style={{marginLeft:'auto',whiteSpace:'nowrap'}}
               onClick={buildRoute} disabled={planning||selected.size===0}>
               {planning ? (
                 <span style={{display:'flex',alignItems:'center',gap:6}}>
@@ -619,6 +633,20 @@ useEffect(() => {
             </button>
           )}
         </div>
+        {/* Mobile: Plan Route button always visible outside the collapsible controls */}
+        {!route && (
+          <div className="route-plan-btn-mobile" style={{padding:'8px 12px',borderTop:'1px solid var(--gray-100)'}}>
+            <button className="btn btn-primary" style={{width:'100%'}}
+              onClick={buildRoute} disabled={planning||selected.size===0}>
+              {planning ? (
+                <span style={{display:'flex',alignItems:'center',gap:6}}>
+                  <span style={{width:12,height:12,border:'2px solid rgba(0,0,0,.2)',borderTopColor:'var(--navy-950)',borderRadius:'50%',display:'inline-block',animation:'spin .7s linear infinite'}}/>
+                  {planStep||'Planning…'}
+                </span>
+              ) : `🗺️ Plan Route — ${selected.size} stop${selected.size!==1?'s':''}`}
+            </button>
+          </div>
+        )}
       </div>
 
       {error && <div style={{padding:'8px 20px',background:'#fef2f2',borderBottom:'1px solid #fca5a5',color:'#dc2626',fontSize:13,flexShrink:0}}>❌ {error}</div>}
@@ -736,7 +764,7 @@ useEffect(() => {
                                   style={{width:18,height:18,border:'1px solid var(--gray-200)',borderRadius:3,background:'white',cursor:'pointer',fontSize:12,lineHeight:1,padding:0,display:'flex',alignItems:'center',justifyContent:'center'}}>+</button>
                               </div>
                             </div>
-                            <div style={{display:'flex',gap:4,marginTop:6,alignItems:'center'}} onClick={e=>e.stopPropagation()}>
+                            <div className="stop-card-actions" style={{display:'flex',gap:4,marginTop:6,alignItems:'center'}} onClick={e=>e.stopPropagation()}>
                               <RowActions
                                 companyStatus={v.company_status || 'prospect'}
                                 onStatusChange={async status => { await api.updateCompanyStatus(v.entity_id, status); const d=await api.visitsAll(); setVisits(d); }}

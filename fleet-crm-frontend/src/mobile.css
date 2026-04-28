@@ -6,6 +6,8 @@
 .mobile-topbar,
 .mobile-bottom-nav,
 .route-mobile-tabs,
+.route-settings-toggle,
+.route-plan-btn-mobile,
 .col-sub-mobile {
   display: none;
 }
@@ -346,14 +348,35 @@
 
   /* ── RoutePlanner ────────────────────────────────────────────────────────── */
 
-  /* RoutePlanner outer container: normal height accounting for topbar+bottomnav */
-  .route-planner {
-    height: calc(100dvh - 56px - 58px) !important;
+  /* Route controls hidden by default on mobile; shown when .mobile-open */
+  .route-controls-panel {
+    display: none !important;
+  }
+  .route-controls-panel.mobile-open {
+    display: flex !important;
   }
 
-  /* In map mode: hide the route controls panel so the map gets maximum space */
-  .route-planner.mobile-map-mode .route-controls-panel {
+  /* Plan Route button: hide desktop version, show mobile version */
+  .route-plan-btn-desktop {
     display: none !important;
+  }
+  .route-plan-btn-mobile {
+    display: block !important;
+  }
+
+  /* Settings toggle button: only visible on mobile */
+  .route-settings-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 10px;
+    border: 1px solid var(--gray-200);
+    border-radius: 6px;
+    background: white;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--gray-600);
+    cursor: pointer;
   }
 
   .route-mobile-tabs {
@@ -361,6 +384,8 @@
     background: white;
     border-bottom: 1px solid var(--gray-200);
     flex-shrink: 0;
+    position: relative;
+    z-index: 1;
   }
 
   .route-mobile-tab {
@@ -382,6 +407,7 @@
     border-bottom-color: var(--gold-500);
   }
 
+  /* Stops tab: normal scrollable column */
   .route-body {
     display: flex !important;
     flex-direction: column !important;
@@ -404,32 +430,74 @@
     -webkit-overflow-scrolling: touch !important;
   }
 
+  /* Map tab: fixed overlay filling the whole screen between topbar and bottom nav */
   .route-map-panel.mobile-visible {
-    display: flex !important;
-    flex-direction: column !important;
-    flex: 1 !important;
-    min-height: 0 !important;
+    display: block !important;
+    position: fixed !important;
+    top: 56px !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 58px !important;
+    z-index: 500 !important;
+    background: #e8e8e8;
   }
 
-  /* Map fills its panel completely */
-  .route-map-panel.mobile-visible > div,
-  .route-map-panel.mobile-visible .leaflet-container,
-  .route-map-panel.mobile-visible .mapboxgl-map {
+  /* The tabs bar floats above the fixed map */
+  .route-planner.mobile-map-mode .route-mobile-tabs {
+    position: fixed !important;
+    top: 56px !important;
+    left: 0 !important;
+    right: 0 !important;
+    z-index: 501 !important;
+    background: white;
+    border-bottom: 2px solid var(--gray-200);
+  }
+
+  /* Push the map down so it doesn't hide behind the tabs bar */
+  .route-map-panel.mobile-visible {
+    top: calc(56px + 44px) !important;
+  }
+
+  /* Leaflet container fills the fixed panel */
+  .route-map-panel.mobile-visible > div {
+    position: absolute !important;
+    inset: 0 !important;
     width: 100% !important;
     height: 100% !important;
-    flex: 1 !important;
-    min-height: 0 !important;
   }
 
-  /* Compact stop selector cards on mobile */
+  /* Compact stop cards */
   .stop-card {
     padding: 8px 10px !important;
   }
 
-  .stop-card .btn-sm {
-    font-size: 11px !important;
-    padding: 5px 8px !important;
+  /* Up/down reorder arrows: hide on mobile, finger-friendly reorder is awkward */
+  .stop-card > div > div > div:last-child > div[style*="display:'flex'"][style*="gap:2"],
+  .stop-card [style*="gap:2"][style*="flexShrink:0"] {
+    display: none !important;
+  }
+
+  /* Action buttons row: smaller and tighter */
+  .stop-card-actions {
+    gap: 5px !important;
+    margin-top: 4px !important;
+  }
+
+  .stop-card-actions .btn-sm {
+    font-size: 12px !important;
+    padding: 6px 10px !important;
     min-height: 36px !important;
+  }
+
+  /* The Log Visit button specifically */
+  .stop-card-actions .btn-primary {
+    flex: 1 !important;
+  }
+
+  /* Time adjuster buttons: slightly larger touch target */
+  .stop-card [style*="width:18px"] {
+    width: 24px !important;
+    height: 24px !important;
   }
 
   /* ── Dashboard ───────────────────────────────────────────────────────────── */
