@@ -738,7 +738,7 @@ useEffect(() => {
                                 ✅ Log Visit
                               </button>
                               <button className="btn btn-sm btn-ghost" style={{fontSize:10,padding:'3px 8px',color:'#dc2626',border:'1px solid #fca5a5'}}
-                                onClick={e=>{ e.stopPropagation(); setCancellingVisit(v); setCancelForm({next_action:'Call',next_action_date_override:'',show_date:false}); }}>✕ Cancel</button>
+                                onClick={e=>{ e.stopPropagation(); setCancellingVisit(v); setCancelForm({next_action:'Call',next_action_date_override:new Date().toISOString().split('T')[0],show_date:false}); }}>✕ Cancel</button>
                             </div>
                           </div>
                         </div>
@@ -1109,15 +1109,17 @@ useEffect(() => {
               ))}
             </div>
 
-            <label style={{display:'flex',alignItems:'center',gap:7,cursor:'pointer',fontSize:12,color:'var(--gray-600)',marginBottom:8}}>
-              <input type="checkbox" checked={cancelForm.show_date} onChange={e=>setCancelForm(f=>({...f,show_date:e.target.checked}))} style={{width:13,height:13,accentColor:'var(--gold-500)'}}/>
-              Set follow-up date manually
-            </label>
-            {cancelForm.show_date && (
-              <input className="form-input" type="date" style={{marginBottom:16,width:200}}
-                value={cancelForm.next_action_date_override}
-                onChange={e=>setCancelForm(f=>({...f,next_action_date_override:e.target.value}))}
-                min={new Date().toISOString().split('T')[0]}/>
+            {cancelForm.next_action !== 'Stop' && (
+              <div style={{marginBottom:16}}>
+                <label className="form-label" style={{marginBottom:6,display:'block'}}>
+                  Follow-up Date
+                </label>
+                <input className="form-input" type="date" style={{width:200}}
+                  value={cancelForm.next_action_date_override}
+                  onChange={e=>setCancelForm(f=>({...f,next_action_date_override:e.target.value}))}
+                  min={new Date().toISOString().split('T')[0]}/>
+                <div style={{fontSize:11,color:'var(--gray-400)',marginTop:4}}>Leave blank to use the auto-calculated date</div>
+              </div>
             )}
 
             <div style={{display:'flex',gap:10,marginTop:8}}>
@@ -1125,7 +1127,7 @@ useEffect(() => {
                 try {
                   await api.cancelVisitRoute(cancellingVisit.id, {
                     next_action: cancelForm.next_action,
-                    next_action_date_override: cancelForm.show_date && cancelForm.next_action_date_override ? cancelForm.next_action_date_override : undefined,
+                    next_action_date_override: cancelForm.next_action_date_override || undefined,
                   });
                   setCancellingVisit(null);
                   const d = await api.visitsAll(); setVisits(d);
