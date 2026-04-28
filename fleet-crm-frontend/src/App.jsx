@@ -1,5 +1,5 @@
 import { useState, useEffect, createContext, useContext } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, NavLink } from 'react-router-dom';
 import { api, setToken, clearToken } from './api.js';
 import Sidebar from './components/Sidebar.jsx';
 import Login from './pages/Login.jsx';
@@ -17,6 +17,33 @@ import ResetPassword from './pages/ResetPassword.jsx';
 
 export const AppCtx = createContext(null);
 export const useApp = () => useContext(AppCtx);
+
+function MobileBottomNav({ counts }) {
+  return (
+    <nav className="mobile-bottom-nav">
+      <NavLink to="/dashboard"   className={({isActive})=>`mbn-item${isActive?' active':''}`}>
+        <span className="mbn-icon">📊</span><span className="mbn-label">Pipeline</span>
+      </NavLink>
+      <NavLink to="/calling"     className={({isActive})=>`mbn-item${isActive?' active':''}`}>
+        <span className="mbn-icon">📞</span>
+        {counts.calling > 0 && <span className="mbn-badge">{counts.calling}</span>}
+        <span className="mbn-label">Calling</span>
+      </NavLink>
+      <NavLink to="/quicklog"    className={({isActive})=>`mbn-item${isActive?' active':''}`}>
+        <span className="mbn-icon">⚡</span><span className="mbn-label">Log</span>
+      </NavLink>
+      <NavLink to="/visit-queue" className={({isActive})=>`mbn-item${isActive?' active':''}`}>
+        <span className="mbn-icon">📍</span>
+        {counts.visits > 0 && <span className="mbn-badge">{counts.visits}</span>}
+        <span className="mbn-label">Visits</span>
+      </NavLink>
+      <NavLink to="/companies"   className={({isActive})=>`mbn-item${isActive?' active':''}`}
+        onClick={() => window.dispatchEvent(new CustomEvent('companies-reset'))}>
+        <span className="mbn-icon">🏢</span><span className="mbn-label">Companies</span>
+      </NavLink>
+    </nav>
+  );
+}
 
 const TOKEN_KEY = 'fleet_crm_token';
 const USER_KEY  = 'fleet_crm_user';
@@ -110,6 +137,7 @@ export default function App() {
            </div>
            <Sidebar mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} />
            {mobileOpen && <div className="mobile-backdrop" onClick={() => setMobileOpen(false)} />}
+           <MobileBottomNav counts={counts} />
            <div className="main-content">
               <Routes>
                 <Route path="/"             element={<Navigate to="/dashboard" />} />

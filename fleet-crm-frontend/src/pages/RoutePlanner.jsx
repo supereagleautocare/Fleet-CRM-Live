@@ -113,6 +113,7 @@ export default function RoutePlanner({ embedded = false }) {
   const [cancelForm, setCancelForm]           = useState({ next_action:'Call', next_action_date_override:'', show_date:false });
   const [contactTypes, setContactTypes]   = useState([]);
   const [myGps, setMyGps]                 = useState(null);
+  const [mobileMapTab, setMobileMapTab]   = useState('list'); // 'list' | 'map'
   const [mapSearch, setMapSearch]         = useState('');
   const [mapSearchOpen, setMapSearchOpen] = useState(false);
   const mapInstanceRef2                   = useRef(null);
@@ -622,11 +623,17 @@ useEffect(() => {
 
       {error && <div style={{padding:'8px 20px',background:'#fef2f2',borderBottom:'1px solid #fca5a5',color:'#dc2626',fontSize:13,flexShrink:0}}>❌ {error}</div>}
 
+      {/* Mobile map/list toggle */}
+      <div className="route-mobile-tabs">
+        <button className={`route-mobile-tab${mobileMapTab==='list'?' active':''}`} onClick={()=>setMobileMapTab('list')}>📋 Stops</button>
+        <button className={`route-mobile-tab${mobileMapTab==='map'?' active':''}`} onClick={()=>setMobileMapTab('map')}>🗺️ Map</button>
+      </div>
+
       {/* BODY */}
-      <div style={{flex:1,minHeight:0,display:'grid',gridTemplateColumns:'300px 1fr',overflow:'hidden'}}>
+      <div className="route-body" style={{flex:1,minHeight:0,display:'grid',gridTemplateColumns:'300px 1fr',overflow:'hidden'}}>
 
         {/* LEFT: Stop list OR timeline */}
-        <div style={{display:'flex',flexDirection:'column',borderRight:'1px solid var(--gray-200)',overflow:'hidden'}}>
+        <div className={`route-list-panel${mobileMapTab==='list'?' mobile-visible':''}`} style={{display:'flex',flexDirection:'column',borderRight:'1px solid var(--gray-200)',overflow:'hidden'}}>
 
           {/* STOP SELECTOR */}
           {!route && (
@@ -870,7 +877,7 @@ useEffect(() => {
         </div>
 
         {/* RIGHT: Map */}
-        <div style={{position:'relative',overflow:'hidden',minWidth:0}}>
+        <div className={`route-map-panel${mobileMapTab==='map'?' mobile-visible':''}`} style={{position:'relative',overflow:'hidden',minWidth:0}}>
           <PersistentMap
             routeStops={route ? (() => { const r=recalcTimeline(route.stops,routeStopMins,route.startTime,route.startGeo,route.returnHome); return r.stops; })() : []}
             startGeo={route?.startGeo || null}

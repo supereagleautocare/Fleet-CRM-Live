@@ -148,15 +148,15 @@ export default function EmailQueue() {
             </div>
           ) : (
             <div className="table-wrapper">
-              <table>
-                <thead><tr><th>Company</th><th>Phone</th><th>Industry</th><th>Contacts</th><th>Email Contact</th><th>Due</th><th></th></tr></thead>
+              <table className="queue-table">
+                <thead><tr><th>Company</th><th>Phone</th><th className="col-industry">Industry</th><th className="col-contacts">Contacts</th><th className="col-preferred">Email Contact</th><th>Due</th><th></th></tr></thead>
                 <tbody>
                   {rows.map(row => {
                     const isSel = selected?.id === row.id;
                     return (
                       <tr key={row.id} onClick={() => setSelected(p => p?.id===row.id ? null : row)}
                         style={{ cursor:'pointer', background:isSel?'#faf5ff':undefined, borderLeft:isSel?'3px solid #a855f7':'3px solid transparent' }}>
-                        <td>
+                        <td className="col-company">
                           {row.company_status && row.company_status !== 'prospect' && (
                             <div style={{ fontSize:10, fontWeight:700, marginBottom:3,
                               color:row.company_status==='interested'?'#92400e':row.company_status==='customer'?'#166534':'#dc2626',
@@ -172,19 +172,22 @@ export default function EmailQueue() {
                           >
                            {companyDisplayName(row)}
                           </div>
-                          </td> 
-                        
-                        <td><span className="phone-num">{fmtPhone(row.main_phone)}</span></td>
-                        <td>{row.industry?<span className="badge badge-gray">{row.industry}</span>:'—'}</td>
-                        <td>
+                          <div className="col-sub-mobile">
+                            {row.preferred_contact_name && <span style={{ fontSize:11, color:'var(--gray-500)' }}>{row.preferred_contact_name}{row.preferred_email ? ` · ${row.preferred_email}` : ''}</span>}
+                            {row.industry && <span style={{ fontSize:11, color:'var(--gray-400)', marginLeft:6 }}>{row.industry}</span>}
+                          </div>
+                        </td>
+                        <td className="col-phone"><span className="phone-num">{fmtPhone(row.main_phone)}</span></td>
+                        <td className="col-industry">{row.industry?<span className="badge badge-gray">{row.industry}</span>:'—'}</td>
+                        <td className="col-contacts">
                           <div style={{ fontSize:12, color:'var(--gray-700)' }}>{row.call_count || 0}</div>
                           {(!row.call_count || row.call_count === 0) && <div style={{ fontSize:10, color:'var(--gray-400)' }}>First Time</div>}
                         </td>
-                        <td style={{ fontSize:12 }}>
+                        <td className="col-preferred" style={{ fontSize:12 }}>
                           {row.preferred_contact_name ? <div><span style={{ fontWeight:600 }}>{row.preferred_contact_name}</span>{row.preferred_email && <div style={{ color:'var(--gray-400)', fontSize:11 }}>{row.preferred_email}</div>}</div> : '—'}
                         </td>
-                        <td style={{ fontSize:12 }}>{row.due_date?fmtDate(row.due_date):'—'}</td>
-                        <td onClick={e=>e.stopPropagation()} style={{textAlign:'right'}}>
+                        <td className="col-due" style={{ fontSize:12 }}>{row.due_date?fmtDate(row.due_date):'—'}</td>
+                        <td className="col-actions" onClick={e=>e.stopPropagation()} style={{textAlign:'right'}}>
                           <RowActions
                             companyStatus={row.company_status || 'prospect'}
                             onStatusChange={async(status) => {
@@ -207,7 +210,7 @@ export default function EmailQueue() {
         {selected && (
           <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.45)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}
             onClick={e=>{ if(e.target===e.currentTarget) setSelected(null); }}>
-            <div style={{ display:'flex', background:'white', borderRadius:14, overflow:'hidden', boxShadow:'0 8px 40px rgba(0,0,0,.25)', maxWidth:960, width:'100%', maxHeight:'90vh' }}>
+            <div className="log-modal-columns" style={{ display:'flex', background:'white', borderRadius:14, overflow:'hidden', boxShadow:'0 8px 40px rgba(0,0,0,.25)', maxWidth:960, width:'100%', maxHeight:'90vh' }}>
               {/* Left sidebar: company info + templates + history */}
               <div style={{ width:270, flexShrink:0, borderRight:'1px solid var(--gray-200)', background:'var(--navy-950)', display:'flex', flexDirection:'column', overflowY:'auto' }}>
                 <div style={{ padding:'20px 16px 14px', flexShrink:0 }}>

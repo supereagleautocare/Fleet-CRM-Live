@@ -178,17 +178,17 @@ export default function CallingQueue() {
             </div>
           ) : (
             <div className="table-wrapper">
-              <table style={{ tableLayout:'fixed', width:'100%' }}>
+              <table className="queue-table" style={{ tableLayout:'fixed', width:'100%' }}>
                 <thead>
                   <tr>
-                    <th style={{ width:36 }}>#</th>
+                    <th className="col-num" style={{ width:36 }}>#</th>
                     <th style={{ width:'25%' }}>Company</th>
                     <th style={{ width:130 }}>Phone</th>
-                    <th style={{ width:'18%' }}>Industry</th>
-                    <th style={{ width:80 }}>Contacts</th>
-                    <th style={{ width:'18%' }}>Preferred Contact</th>
+                    <th className="col-industry" style={{ width:'18%' }}>Industry</th>
+                    <th className="col-contacts" style={{ width:80 }}>Contacts</th>
+                    <th className="col-preferred" style={{ width:'18%' }}>Preferred Contact</th>
                     <th style={{ width:90 }}>Due</th>
-                    <th style={{ width:'15%' }}>Last Call</th>
+                    <th className="col-last" style={{ width:'15%' }}>Last Call</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -199,8 +199,8 @@ export default function CallingQueue() {
                     return (
                       <tr key={row.id} onClick={() => setSelected(prev => prev?.id===row.id ? null : row)}
                         style={{ cursor:'pointer', background: isSel?'#fef9ec':undefined, borderLeft: isSel?'3px solid var(--gold-500)':'3px solid transparent' }}>
-                        <td style={{ color:'var(--gray-400)', fontSize:12 }}>{i+1}</td>
-                        <td>
+                        <td className="col-num" style={{ color:'var(--gray-400)', fontSize:12 }}>{i+1}</td>
+                        <td className="col-company">
                           {(row.company_status==='prospect'||row.company_status==='interested'||row.company_status==='customer') && (
                             <div style={{ fontSize:10, fontWeight:700, marginBottom:3,
                               color:row.company_status==='interested'?'#92400e':row.company_status==='customer'?'#166534':'#374151',
@@ -214,15 +214,19 @@ export default function CallingQueue() {
                             onClick={e=>{ e.stopPropagation(); navigate('/companies?company='+row.id); }}
                             title="Open company profile"
                           >{companyDisplayName(row)}</div>
+                          <div className="col-sub-mobile">
+                            {row.preferred_contact_name && <span style={{ fontSize:11, color:'var(--gray-500)' }}>{row.preferred_contact_name}{row.preferred_role ? ` · ${row.preferred_role}` : ''}</span>}
+                            {row.industry && <span style={{ fontSize:11, color:'var(--gray-400)', marginLeft:6 }}>{row.industry}</span>}
+                          </div>
                         </td>
-                        <td><span className="phone-num">{fmtPhone(row.main_phone)}</span></td>
-                        <td style={{ overflow:'hidden', maxWidth:0 }}>{row.industry?<span className="badge badge-gray" style={{ overflow:'hidden', textOverflow:'ellipsis', display:'block', maxWidth:'100%' }}>{row.industry}</span>:'—'}</td>
-                        <td>
+                        <td className="col-phone"><span className="phone-num">{fmtPhone(row.main_phone)}</span></td>
+                        <td className="col-industry" style={{ overflow:'hidden', maxWidth:0 }}>{row.industry?<span className="badge badge-gray" style={{ overflow:'hidden', textOverflow:'ellipsis', display:'block', maxWidth:'100%' }}>{row.industry}</span>:'—'}</td>
+                        <td className="col-contacts">
                           {(!row.call_count || row.call_count === 0)
                             ? <div style={{ fontSize:11, color:'var(--navy-600)', fontWeight:600 }}>First Time</div>
                             : <div style={{ fontSize:12, color:'var(--gray-700)' }}>{row.call_count}</div>}
                         </td>
-                        <td style={{ fontSize:12 }}>
+                        <td className="col-preferred" style={{ fontSize:12 }}>
                           {row.preferred_contact_name
                             ? <div>
                                 <span style={{ fontWeight:600 }}>{row.preferred_contact_name}</span>
@@ -230,17 +234,17 @@ export default function CallingQueue() {
                               </div>
                             : <span style={{ color:'var(--gray-300)' }}>—</span>}
                         </td>
-                        <td style={{ whiteSpace:'nowrap' }}>
+                        <td className="col-due" style={{ whiteSpace:'nowrap' }}>
                           {row.due_date
                              ? <span style={{ fontSize:12, color:'var(--gray-700)', fontWeight:500 }}>
                                  {fmtDate(row.due_date)}
                                </span>
                              : <span style={{ fontSize:11, color:'var(--gray-300)' }}>No date set</span>}
                         </td>
-                        <td style={{ fontSize:11, color:'var(--gray-500)', maxWidth:140, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                        <td className="col-last" style={{ fontSize:11, color:'var(--gray-500)', maxWidth:140, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                           {row.last_contact_type || '—'}
                         </td>
-                        <td onClick={e=>e.stopPropagation()} style={{textAlign:'right'}}>
+                        <td className="col-actions" onClick={e=>e.stopPropagation()} style={{textAlign:'right'}}>
                           <RowActions
                             companyStatus={row.company_status || 'prospect'}
                             onStatusChange={async(status) => {

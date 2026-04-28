@@ -145,7 +145,7 @@ export default function Dashboard() {
 
         {/* ── Call Activity ─────────────────────────────────────────── */}
         {sectionLabel('📞 Call Activity')}
-        <div style={{ display:'grid', gridTemplateColumns:`repeat(${callCards.length},1fr)`, gap:12, marginBottom:16 }}>
+        <div className="dash-stat-grid" style={{ display:'grid', gridTemplateColumns:`repeat(${callCards.length},1fr)`, gap:12, marginBottom:16 }}>
           {callCards.map(([label, value, p]) => (
             <div key={label} onClick={() => clickStat('calls', p)}
               className="table-card"
@@ -160,7 +160,7 @@ export default function Dashboard() {
 
         {/* ── Total Contacts ────────────────────────────────────────── */}
         {sectionLabel('🤝 Total Contacts (all types)')}
-        <div style={{ display:'grid', gridTemplateColumns:`repeat(${ctcCards.length},1fr)`, gap:12, marginBottom:20 }}>
+        <div className="dash-stat-grid" style={{ display:'grid', gridTemplateColumns:`repeat(${ctcCards.length},1fr)`, gap:12, marginBottom:20 }}>
           {ctcCards.map(([label, value, p]) => (
             <div key={label} onClick={() => clickStat('contacts', p)}
               className="table-card"
@@ -234,7 +234,7 @@ export default function Dashboard() {
         {sectionLabel('📅 Upcoming Schedule')}
         {forecast.length > 0 && (
           <div className="table-card" style={{ padding:'16px 20px', marginBottom:20 }}>
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:8 }}>
+            <div className="dash-forecast-grid" style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:8 }}>
               {forecast.filter(d => !d.isOverdue).map((day) => {
                 const visibleDays = forecast.filter(d => !d.isOverdue);
                 const maxTotal = Math.max(...visibleDays.map(d => d.total), 1);
@@ -276,7 +276,7 @@ export default function Dashboard() {
 
         {/* ── Calls by Rep + Outcomes ───────────────────────────────── */}
         {(byRep.length > 0 || byOutcome.length > 0) && (
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:20 }}>
+          <div className="dash-rep-grid" style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:20 }}>
             {byRep.length > 0 && (
               <div className="table-card" style={{ padding:0 }}>
                 <div className="table-card-header">
@@ -308,7 +308,7 @@ export default function Dashboard() {
 
         {/* ── Pipeline Stages ───────────────────────────────────────── */}
         {sectionLabel('🗂️ Pipeline Stages — click any to see companies')}
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:10, marginBottom:16 }}>
+        <div className="dash-pipeline-grid" style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:10, marginBottom:16 }}>
           {STAGES.map(st => {
             const count  = counts[st.key] || 0;
             const pct    = total > 0 ? Math.round((count/total)*100) : 0;
