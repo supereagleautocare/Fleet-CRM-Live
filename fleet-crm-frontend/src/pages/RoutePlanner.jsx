@@ -1343,6 +1343,20 @@ function PersistentMap({ routeStops=[], startGeo=null, returnHome=false, nearbyC
   const LRef            = useRef(null);
   const [mapReady, setMapReady] = useState(false);
 
+  // Prevent parent scroll containers from stealing touch events from the map
+  useEffect(() => {
+    const el = mapRef.current;
+    if (!el) return;
+    const block = e => { e.stopPropagation(); };
+    const blockMove = e => { e.stopPropagation(); if (e.cancelable) e.preventDefault(); };
+    el.addEventListener('touchstart', block,    { passive: true });
+    el.addEventListener('touchmove',  blockMove, { passive: false });
+    return () => {
+      el.removeEventListener('touchstart', block);
+      el.removeEventListener('touchmove',  blockMove);
+    };
+  }, []);
+
   useEffect(() => {
     if (!mapRef.current) return;
     if (!document.getElementById('leaflet-css')) {
@@ -1354,7 +1368,7 @@ function PersistentMap({ routeStops=[], startGeo=null, returnHome=false, nearbyC
       const L = Lmod.default || Lmod;
       LRef.current = L;
       if (mapInstanceRef.current) return;
-      const map = L.map(mapRef.current, { zoomControl:true, tap:true, tapTolerance:15, dragging:true, touchZoom:true, scrollWheelZoom:false }).setView([35.2271, -80.8431], 10);
+      const map = L.map(mapRef.current, { zoomControl:true, tap:false, dragging:true, touchZoom:true, scrollWheelZoom:false }).setView([35.2271, -80.8431], 10);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution:'© OpenStreetMap', maxZoom:19 }).addTo(map);
       mapInstanceRef.current = map;
       routeLayerRef.current  = L.layerGroup().addTo(map);

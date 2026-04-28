@@ -506,8 +506,10 @@
 
   /* Allow Leaflet to handle all touch events — prevents browser scroll from stealing pan/zoom */
   .route-map-panel.mobile-visible,
+  .route-map-panel.mobile-visible > div,
   .route-map-panel.mobile-visible .leaflet-container {
     touch-action: none !important;
+    overflow: visible !important;
   }
 
   /* Compact stop cards */
