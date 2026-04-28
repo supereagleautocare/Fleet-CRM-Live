@@ -119,9 +119,21 @@ export default function RoutePlanner({ embedded = false }) {
   const [mapSearchOpen, setMapSearchOpen] = useState(false);
   const mapInstanceRef2                   = useRef(null);
 
-  // Invalidate map size when map tab becomes visible; re-enable drag in case it was lost
+  // Invalidate map size when map tab becomes visible; re-enable drag in case it was lost.
+  // Also lock the parent scroll container so touch gestures go to Leaflet, not the page scroll.
   useEffect(() => {
+    const mainContent = document.querySelector('.main-content');
+    const lockScroll = el => {
+      // Use setProperty with 'important' to override the !important rule in mobile.css
+      el.style.setProperty('overflow-y', 'hidden', 'important');
+      el.style.setProperty('touch-action', 'none', 'important');
+    };
+    const unlockScroll = el => {
+      el.style.removeProperty('overflow-y');
+      el.style.removeProperty('touch-action');
+    };
     if (mobileMapTab === 'map') {
+      if (mainContent) lockScroll(mainContent);
       [50, 150, 350, 700].forEach(ms => setTimeout(() => {
         try {
           const m = mapInstanceRef2.current;
@@ -131,7 +143,10 @@ export default function RoutePlanner({ embedded = false }) {
           m.touchZoom.enable();
         } catch(_) {}
       }, ms));
+    } else {
+      if (mainContent) unlockScroll(mainContent);
     }
+    return () => { if (mainContent) unlockScroll(mainContent); };
   }, [mobileMapTab]);
 
   // ── Nearby state ──────────────────────────────────────────────────────────
@@ -1349,13 +1364,16 @@ function PersistentMap({ routeStops=[], startGeo=null, returnHome=false, nearbyC
   const LRef            = useRef(null);
   const [mapReady, setMapReady] = useState(false);
 
-  // Prevent parent scroll containers from stealing touch events from the map
+  // Prevent parent scroll containers from stealing touch events from the map.
+  // touchstart is non-passive (so we can stop propagation early) but we do NOT call
+  // preventDefault on it — that would suppress iOS synthetic click events and break
+  // marker taps. touchmove is non-passive and does preventDefault to kill the scroll.
   useEffect(() => {
     const el = mapRef.current;
     if (!el) return;
     const onStart = e => e.stopPropagation();
     const onMove  = e => { e.stopPropagation(); if (e.cancelable) e.preventDefault(); };
-    el.addEventListener('touchstart', onStart, { passive: true  });
+    el.addEventListener('touchstart', onStart, { passive: false });
     el.addEventListener('touchmove',  onMove,  { passive: false });
     return () => {
       el.removeEventListener('touchstart', onStart);
