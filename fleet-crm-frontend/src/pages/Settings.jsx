@@ -441,8 +441,8 @@ export default function Settings() {
   const [addingType, setAddingType] = useState({});
   const { showToast, user: currentUser } = useApp();
 
-  async function load() {
-    setLoading(true);
+  async function load(silent = false) {
+    if (!silent) setLoading(true);
     try {
       const [r, s, u] = await Promise.all([api.rules(), api.settings(), api.users()]);
       setRules(r);
@@ -450,25 +450,25 @@ export default function Settings() {
       s.forEach(item => { obj[item.key] = item; });
       setSettings(obj);
       setUsers(u);
-    } finally { setLoading(false); }
+    } finally { if (!silent) setLoading(false); }
   }
   useEffect(() => { load(); }, []);
 
   async function updateSetting(key, value) {
     setSaving(key);
-    try { await api.updateSetting(key, value); await load(); }
+    try { await api.updateSetting(key, value); await load(true); }
     catch (err) { showToast(err.message, 'error'); }
     finally { setSaving(null); }
   }
 
   async function handleDeleteRule(id) {
     if (!confirm('Remove this type?')) return;
-    try { await api.deleteRule(id); await load(); }
+    try { await api.deleteRule(id); await load(true); }
     catch (err) { showToast(err.message, 'error'); }
   }
 
   async function handleUpdateRule(id, fields) {
-    try { await api.updateRule(id, fields); await load(); }
+    try { await api.updateRule(id, fields); await load(true); }
     catch (err) { showToast(err.message, 'error'); }
   }
 
@@ -479,7 +479,7 @@ export default function Settings() {
     try {
       await api.createRule({ action_type: actionKey, contact_type: name, days: defDays[actionKey], source: 'company' });
       setNewTypes(t => ({ ...t, [actionKey]: '' }));
-      await load();
+      await load(true);
       showToast('"' + name + '" added');
     } catch (err) { showToast(err.message, 'error'); }
     finally { setAddingType(a => ({ ...a, [actionKey]: false })); }
@@ -491,7 +491,7 @@ export default function Settings() {
       await api.addUser(newUser);
       showToast(newUser.name + ' added as ' + newUser.role);
       setNewUser({ name:'', email:'', password:'', role:'user' });
-      await load();
+      await load(true);
     } catch (err) { showToast(err.message, 'error'); }
   }
 
@@ -500,7 +500,7 @@ export default function Settings() {
     try {
       await api.deleteUser(u.id);
       showToast(u.name + ' removed');
-      await load();
+      await load(true);
     } catch(err) { showToast(err.message, 'error'); }
   }
 
