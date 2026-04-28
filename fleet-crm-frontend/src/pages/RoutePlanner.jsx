@@ -123,17 +123,20 @@ export default function RoutePlanner({ embedded = false }) {
   // Also lock the parent scroll container so touch gestures go to Leaflet, not the page scroll.
   useEffect(() => {
     const mainContent = document.querySelector('.main-content');
+    const targets = [document.body, document.documentElement, mainContent].filter(Boolean);
     const lockScroll = el => {
-      // Use setProperty with 'important' to override the !important rule in mobile.css
-      el.style.setProperty('overflow-y', 'hidden', 'important');
+      el.style.setProperty('overflow', 'hidden', 'important');
       el.style.setProperty('touch-action', 'none', 'important');
+      // Kill iOS momentum scroll layer so it can't steal gestures
+      el.style.setProperty('-webkit-overflow-scrolling', 'auto', 'important');
     };
     const unlockScroll = el => {
-      el.style.removeProperty('overflow-y');
+      el.style.removeProperty('overflow');
       el.style.removeProperty('touch-action');
+      el.style.removeProperty('-webkit-overflow-scrolling');
     };
     if (mobileMapTab === 'map') {
-      if (mainContent) lockScroll(mainContent);
+      targets.forEach(lockScroll);
       [50, 150, 350, 700].forEach(ms => setTimeout(() => {
         try {
           const m = mapInstanceRef2.current;
@@ -144,9 +147,9 @@ export default function RoutePlanner({ embedded = false }) {
         } catch(_) {}
       }, ms));
     } else {
-      if (mainContent) unlockScroll(mainContent);
+      targets.forEach(unlockScroll);
     }
-    return () => { if (mainContent) unlockScroll(mainContent); };
+    return () => targets.forEach(unlockScroll);
   }, [mobileMapTab]);
 
   // ── Nearby state ──────────────────────────────────────────────────────────
