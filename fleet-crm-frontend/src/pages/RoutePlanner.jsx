@@ -119,13 +119,23 @@ export default function RoutePlanner({ embedded = false }) {
   const [mapSearchOpen, setMapSearchOpen] = useState(false);
   const mapInstanceRef2                   = useRef(null);
 
-  // Invalidate map size whenever the map tab becomes visible on mobile
+  // When map tab is active: lock body scroll so Leaflet owns all touch events
   useEffect(() => {
+    const mainContent = document.querySelector('.main-content');
     if (mobileMapTab === 'map') {
-      [50, 150, 350].forEach(ms =>
+      document.body.style.overflow = 'hidden';
+      if (mainContent) { mainContent.style.overflow = 'hidden'; mainContent.style.touchAction = 'none'; }
+      [50, 150, 350, 700].forEach(ms =>
         setTimeout(() => { try { mapInstanceRef2.current?.invalidateSize(); } catch(_){} }, ms)
       );
+    } else {
+      document.body.style.overflow = '';
+      if (mainContent) { mainContent.style.overflow = ''; mainContent.style.touchAction = ''; }
     }
+    return () => {
+      document.body.style.overflow = '';
+      if (mainContent) { mainContent.style.overflow = ''; mainContent.style.touchAction = ''; }
+    };
   }, [mobileMapTab]);
 
   // ── Nearby state ──────────────────────────────────────────────────────────
@@ -1347,13 +1357,13 @@ function PersistentMap({ routeStops=[], startGeo=null, returnHome=false, nearbyC
   useEffect(() => {
     const el = mapRef.current;
     if (!el) return;
-    const block = e => { e.stopPropagation(); };
-    const blockMove = e => { e.stopPropagation(); if (e.cancelable) e.preventDefault(); };
-    el.addEventListener('touchstart', block,    { passive: true });
-    el.addEventListener('touchmove',  blockMove, { passive: false });
+    const onStart = e => e.stopPropagation();
+    const onMove  = e => { e.stopPropagation(); if (e.cancelable) e.preventDefault(); };
+    el.addEventListener('touchstart', onStart, { passive: true  });
+    el.addEventListener('touchmove',  onMove,  { passive: false });
     return () => {
-      el.removeEventListener('touchstart', block);
-      el.removeEventListener('touchmove',  blockMove);
+      el.removeEventListener('touchstart', onStart);
+      el.removeEventListener('touchmove',  onMove);
     };
   }, []);
 
