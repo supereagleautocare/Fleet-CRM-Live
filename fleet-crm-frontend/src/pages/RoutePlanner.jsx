@@ -520,7 +520,7 @@ useEffect(() => {
   if (loading) return <div className="loading-wrap"><div className="spinner"/></div>;
 
   return (
-    <div style={{display:'flex',flexDirection:'column',height:'calc(100vh - 54px)',minHeight:0,overflow:'hidden'}}>
+    <div className={`route-planner${mobileMapTab==='map'?' mobile-map-mode':''}`} style={{display:'flex',flexDirection:'column',height:'calc(100vh - 54px)',minHeight:0,overflow:'hidden'}}>
 
       {/* TOP BAR */}
       <div style={{flexShrink:0,borderBottom:'1px solid var(--gray-200)',background:'white'}}>
@@ -540,7 +540,7 @@ useEffect(() => {
           </div>
         </div>
 
-        <div style={{display:'flex',alignItems:'center',gap:16,padding:'10px 20px 12px',flexWrap:'wrap'}}>
+        <div className="route-controls-panel" style={{display:'flex',alignItems:'center',gap:16,padding:'10px 20px 12px',flexWrap:'wrap'}}>
           {/* Start address */}
           <div style={{display:'flex',alignItems:'center',gap:6}}>
             <span style={{fontSize:11,fontWeight:700,color:'var(--gray-500)',whiteSpace:'nowrap'}}>FROM</span>
@@ -701,7 +701,7 @@ useEffect(() => {
                       const isToday = v.scheduled_date === todayStr;
                       const isSel = selected.has(v.id);
                       return (
-                        <div key={v.id} onClick={()=>toggleStop(v.id)}
+                        <div key={v.id} className="stop-card" onClick={()=>toggleStop(v.id)}
                           style={{display:'flex',gap:10,padding:'10px 14px',borderBottom:'1px solid var(--gray-100)',cursor:'pointer',
                             background:isSel?'#fffbeb':'white',opacity:isSel?1:.55,
                             borderLeft:`3px solid ${isSel?'var(--gold-500)':'transparent'}`}}>
@@ -1264,7 +1264,7 @@ function PersistentMap({ routeStops=[], startGeo=null, returnHome=false, nearbyC
       const L = Lmod.default || Lmod;
       LRef.current = L;
       if (mapInstanceRef.current) return;
-      const map = L.map(mapRef.current, { zoomControl:true }).setView([35.2271, -80.8431], 10);
+      const map = L.map(mapRef.current, { zoomControl:true, tap:true, tapTolerance:15, dragging:true, touchZoom:true, scrollWheelZoom:false }).setView([35.2271, -80.8431], 10);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution:'© OpenStreetMap', maxZoom:19 }).addTo(map);
       mapInstanceRef.current = map;
       routeLayerRef.current  = L.layerGroup().addTo(map);

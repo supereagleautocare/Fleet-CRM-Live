@@ -53,21 +53,33 @@
     z-index: 10000;
   }
 
-  .mobile-menu-btn {
-    font-size: 22px;
-    cursor: pointer;
-    line-height: 1;
-    padding: 8px;
+  /* ── Top bar icon buttons (Companies, Settings) ─────────────────────────── */
+  .mbn-topbar-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    font-size: 20px;
+    text-decoration: none;
+    background: rgba(255,255,255,0.08);
+    transition: background 0.15s;
   }
 
-  /* ── Mobile bottom navigation ────────────────────────────────────────────── */
+  .mbn-topbar-btn.active,
+  .mbn-topbar-btn:active {
+    background: rgba(245,158,11,0.25);
+  }
+
+  /* ── Mobile bottom navigation (6 items) ─────────────────────────────────── */
   .mobile-bottom-nav {
     display: flex;
     position: fixed;
     bottom: 0;
     left: 0;
     right: 0;
-    height: 60px;
+    height: 58px;
     background: #020617;
     border-top: 1px solid rgba(255,255,255,0.1);
     z-index: 10001;
@@ -82,10 +94,10 @@
     justify-content: center;
     color: #64748b;
     text-decoration: none;
-    font-size: 10px;
-    gap: 2px;
+    gap: 1px;
     position: relative;
     transition: color 0.15s;
+    min-width: 0;
   }
 
   .mbn-item.active {
@@ -93,26 +105,27 @@
   }
 
   .mbn-icon {
-    font-size: 20px;
+    font-size: 18px;
     line-height: 1;
   }
 
   .mbn-label {
-    font-size: 10px;
+    font-size: 9px;
     font-weight: 600;
+    white-space: nowrap;
   }
 
   .mbn-badge {
     position: absolute;
-    top: 5px;
-    right: calc(50% - 20px);
+    top: 4px;
+    right: calc(50% - 18px);
     background: #ef4444;
     color: white;
-    font-size: 9px;
+    font-size: 8px;
     font-weight: 700;
-    padding: 1px 4px;
+    padding: 1px 3px;
     border-radius: 8px;
-    min-width: 14px;
+    min-width: 13px;
     text-align: center;
     line-height: 1.4;
   }
@@ -332,6 +345,17 @@
   }
 
   /* ── RoutePlanner ────────────────────────────────────────────────────────── */
+
+  /* RoutePlanner outer container: normal height accounting for topbar+bottomnav */
+  .route-planner {
+    height: calc(100dvh - 56px - 58px) !important;
+  }
+
+  /* In map mode: hide the route controls panel so the map gets maximum space */
+  .route-planner.mobile-map-mode .route-controls-panel {
+    display: none !important;
+  }
+
   .route-mobile-tabs {
     display: flex !important;
     background: white;
@@ -348,8 +372,9 @@
     font-weight: 600;
     color: var(--gray-500);
     cursor: pointer;
-    border-bottom: 2px solid transparent;
+    border-bottom: 3px solid transparent;
     transition: all 0.15s;
+    min-height: 44px;
   }
 
   .route-mobile-tab.active {
@@ -360,9 +385,9 @@
   .route-body {
     display: flex !important;
     flex-direction: column !important;
-    overflow: visible !important;
-    height: auto !important;
+    flex: 1 !important;
     min-height: 0 !important;
+    overflow: hidden !important;
   }
 
   .route-list-panel,
@@ -371,29 +396,40 @@
     width: 100% !important;
   }
 
-  .route-list-panel.mobile-visible,
+  .route-list-panel.mobile-visible {
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
   .route-map-panel.mobile-visible {
     display: flex !important;
-    flex-direction: column;
+    flex-direction: column !important;
+    flex: 1 !important;
+    min-height: 0 !important;
   }
 
-  .route-map-panel.mobile-visible {
-    height: calc(100dvh - 56px - 60px - 80px) !important;
-    min-height: 320px !important;
-  }
-
-  /* Map inside the panel */
-  .leaflet-container,
-  .mapboxgl-map {
+  /* Map fills its panel completely */
+  .route-map-panel.mobile-visible > div,
+  .route-map-panel.mobile-visible .leaflet-container,
+  .route-map-panel.mobile-visible .mapboxgl-map {
     width: 100% !important;
     height: 100% !important;
-    min-height: 320px !important;
+    flex: 1 !important;
+    min-height: 0 !important;
   }
 
-  /* Route list: allow full scroll */
-  .route-list-panel.mobile-visible {
-    max-height: calc(100dvh - 56px - 60px - 80px) !important;
-    overflow-y: auto !important;
+  /* Compact stop selector cards on mobile */
+  .stop-card {
+    padding: 8px 10px !important;
+  }
+
+  .stop-card .btn-sm {
+    font-size: 11px !important;
+    padding: 5px 8px !important;
+    min-height: 36px !important;
   }
 
   /* ── Dashboard ───────────────────────────────────────────────────────────── */

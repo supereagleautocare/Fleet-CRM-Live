@@ -29,6 +29,16 @@ function MobileBottomNav({ counts }) {
         {counts.calling > 0 && <span className="mbn-badge">{counts.calling}</span>}
         <span className="mbn-label">Calling</span>
       </NavLink>
+      <NavLink to="/mail-queue"  className={({isActive})=>`mbn-item${isActive?' active':''}`}>
+        <span className="mbn-icon">✉️</span>
+        {counts.mail > 0 && <span className="mbn-badge">{counts.mail}</span>}
+        <span className="mbn-label">Mail</span>
+      </NavLink>
+      <NavLink to="/email-queue" className={({isActive})=>`mbn-item${isActive?' active':''}`}>
+        <span className="mbn-icon">📧</span>
+        {counts.email > 0 && <span className="mbn-badge">{counts.email}</span>}
+        <span className="mbn-label">Email</span>
+      </NavLink>
       <NavLink to="/quicklog"    className={({isActive})=>`mbn-item${isActive?' active':''}`}>
         <span className="mbn-icon">⚡</span><span className="mbn-label">Log</span>
       </NavLink>
@@ -36,10 +46,6 @@ function MobileBottomNav({ counts }) {
         <span className="mbn-icon">📍</span>
         {counts.visits > 0 && <span className="mbn-badge">{counts.visits}</span>}
         <span className="mbn-label">Visits</span>
-      </NavLink>
-      <NavLink to="/companies"   className={({isActive})=>`mbn-item${isActive?' active':''}`}
-        onClick={() => window.dispatchEvent(new CustomEvent('companies-reset'))}>
-        <span className="mbn-icon">🏢</span><span className="mbn-label">Companies</span>
       </NavLink>
     </nav>
   );
@@ -130,10 +136,12 @@ export default function App() {
         ) : (
           <div className="app-layout">
            <div className="mobile-topbar">
-             <div className="mobile-menu-btn" onClick={() => setMobileOpen(!mobileOpen)}>
-              ☰
-            </div>
-            <div>Fleet CRM</div>
+             <div style={{ fontWeight:700, fontSize:15, color:'white', letterSpacing:'.01em' }}>🦅 Fleet CRM</div>
+             <div style={{ display:'flex', gap:4 }}>
+               <NavLink to="/companies" className="mbn-topbar-btn"
+                 onClick={() => window.dispatchEvent(new CustomEvent('companies-reset'))}>🏢</NavLink>
+               <NavLink to="/settings"  className="mbn-topbar-btn">⚙️</NavLink>
+             </div>
            </div>
            <Sidebar mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} />
            {mobileOpen && <div className="mobile-backdrop" onClick={() => setMobileOpen(false)} />}
