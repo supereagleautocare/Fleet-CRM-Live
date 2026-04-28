@@ -24,6 +24,7 @@ export default function EmailQueue() {
   const [contactTypes, setContactTypes] = useState([]);
   const [hist, setHist]           = useState([]);
   const [histLoading, setHistLoading] = useState(false);
+  const [expandedNote, setExpandedNote] = useState(null);
   const [selStatus, setSelStatus] = useState(null);
   const [allContacts, setAllContacts] = useState([]);
   const [prefContact, setPrefContact] = useState(null);
@@ -297,7 +298,13 @@ export default function EmailQueue() {
                         <span style={{ color:'rgba(255,255,255,.3)', fontSize:9.5, flexShrink:0 }}>{h.logged_at?.slice(0,10)}</span>
                       </div>
                       {h.contact_name && <div style={{ color:'rgba(255,255,255,.45)', fontSize:10, marginTop:1 }}>with {h.contact_name}</div>}
-                      {h.notes && <div style={{ color:'rgba(255,255,255,.35)', fontSize:10, marginTop:2, lineHeight:1.4 }}>{h.notes.length>80?h.notes.slice(0,80)+'…':h.notes}</div>}
+                      {h.notes && (() => { const long = h.notes.length > 100; return (
+                        <div style={{ color:'rgba(255,255,255,.35)', fontSize:10, marginTop:2, lineHeight:1.4,
+                          ...(long ? { overflow:'hidden', display:'-webkit-box', WebkitLineClamp:3, WebkitBoxOrient:'vertical', cursor:'pointer' } : {}) }}
+                          onClick={() => long && setExpandedNote(h.notes)}>
+                          {h.notes}{long && <span style={{ color:'var(--gold-400)', fontWeight:600 }}> read more</span>}
+                        </div>
+                      ); })()}
                     </div>
                   ))}
                 </div>
@@ -377,6 +384,21 @@ export default function EmailQueue() {
           onClose={() => setMovingId(null)}
           onMoved={() => { setMovingId(null); load(); }}
         />
+      )}
+
+      {expandedNote && (
+        <div onClick={() => setExpandedNote(null)}
+          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.55)', zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center', padding:24 }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background:'white', borderRadius:12, padding:24, maxWidth:520, width:'100%', maxHeight:'70vh', overflowY:'auto', boxShadow:'0 8px 32px rgba(0,0,0,.25)' }}>
+            <div style={{ fontWeight:700, fontSize:14, color:'var(--gray-900)', marginBottom:12 }}>📝 Full Note</div>
+            <div style={{ fontSize:13, color:'var(--gray-700)', lineHeight:1.6, whiteSpace:'pre-wrap' }}>{expandedNote}</div>
+            <button onClick={() => setExpandedNote(null)}
+              style={{ marginTop:18, padding:'8px 20px', background:'var(--navy-800)', color:'white', border:'none', borderRadius:7, cursor:'pointer', fontWeight:600 }}>
+              Close
+            </button>
+          </div>
+        </div>
       )}
     </>
   );
