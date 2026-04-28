@@ -109,6 +109,8 @@ export default function RoutePlanner({ embedded = false }) {
   const [loading, setLoading]             = useState(true);
   const [forecast, setForecast]           = useState([]);
   const [movingId, setMovingId]           = useState(null);
+  const [cancellingVisit, setCancellingVisit] = useState(null); // visit object being cancelled
+  const [cancelForm, setCancelForm]           = useState({ next_action:'Call', next_action_date_override:'', show_date:false });
   const [contactTypes, setContactTypes]   = useState([]);
   const [myGps, setMyGps]                 = useState(null);
   const [mapSearch, setMapSearch]         = useState('');
@@ -736,10 +738,7 @@ useEffect(() => {
                                 ✅ Log Visit
                               </button>
                               <button className="btn btn-sm btn-ghost" style={{fontSize:10,padding:'3px 8px',color:'#dc2626',border:'1px solid #fca5a5'}}
-                                onClick={async e=>{ e.stopPropagation(); if(!confirm('Cancel this scheduled visit?')) return;
-                                  try { await api.cancelVisit(v.id); const d=await api.visitsAll(); setVisits(d); await refreshCounts(); showToast('Visit cancelled'); }
-                                  catch(err){ showToast(err.message,'error'); }
-                                }}>✕ Cancel</button>
+                                onClick={e=>{ e.stopPropagation(); setCancellingVisit(v); setCancelForm({next_action:'Call',next_action_date_override:'',show_date:false}); }}>✕ Cancel</button>
                             </div>
                           </div>
                         </div>
@@ -1088,6 +1087,56 @@ useEffect(() => {
           onClose={() => setMovingId(null)}
           onMoved={() => { setMovingId(null); api.visitsAll().then(d=>setVisits(d)); refreshCounts(); }}
         />
+      )}
+
+      {/* Cancel visit — where to send modal */}
+      {cancellingVisit && (
+        <div onClick={()=>setCancellingVisit(null)}
+          style={{position:'fixed',inset:0,background:'rgba(0,0,0,.5)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',padding:24}}>
+          <div onClick={e=>e.stopPropagation()}
+            style={{background:'white',borderRadius:12,padding:24,maxWidth:440,width:'100%',boxShadow:'0 8px 32px rgba(0,0,0,.25)'}}>
+            <div style={{fontSize:16,fontWeight:800,color:'var(--gray-900)',marginBottom:4}}>Cancel Visit</div>
+            <div style={{fontSize:13,color:'var(--gray-500)',marginBottom:20}}>{cancellingVisit.entity_name} — where should this company go next?</div>
+
+            <div style={{fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--gray-400)',marginBottom:10}}>Next Action</div>
+            <div className="next-action-group" style={{marginBottom:16}}>
+              {[['Call','📞 Call'],['Mail','✉️ Mail'],['Email','📧 Email'],['Visit','📍 Reschedule'],['Stop','🚫 Stop']].map(([val,label])=>(
+                <button key={val} type="button"
+                  className={`action-btn${cancelForm.next_action===val ? val==='Stop'?' selected-stop':val==='Visit'?' selected-visit':' selected-call' : ''}`}
+                  onClick={()=>setCancelForm(f=>({...f,next_action:val}))}>
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <label style={{display:'flex',alignItems:'center',gap:7,cursor:'pointer',fontSize:12,color:'var(--gray-600)',marginBottom:8}}>
+              <input type="checkbox" checked={cancelForm.show_date} onChange={e=>setCancelForm(f=>({...f,show_date:e.target.checked}))} style={{width:13,height:13,accentColor:'var(--gold-500)'}}/>
+              Set follow-up date manually
+            </label>
+            {cancelForm.show_date && (
+              <input className="form-input" type="date" style={{marginBottom:16,width:200}}
+                value={cancelForm.next_action_date_override}
+                onChange={e=>setCancelForm(f=>({...f,next_action_date_override:e.target.value}))}
+                min={new Date().toISOString().split('T')[0]}/>
+            )}
+
+            <div style={{display:'flex',gap:10,marginTop:8}}>
+              <button className="btn btn-primary btn-lg" style={{flex:1}} onClick={async()=>{
+                try {
+                  await api.cancelVisitRoute(cancellingVisit.id, {
+                    next_action: cancelForm.next_action,
+                    next_action_date_override: cancelForm.show_date && cancelForm.next_action_date_override ? cancelForm.next_action_date_override : undefined,
+                  });
+                  setCancellingVisit(null);
+                  const d = await api.visitsAll(); setVisits(d);
+                  await refreshCounts();
+                  showToast('Visit cancelled — sent to ' + cancelForm.next_action);
+                } catch(err){ showToast(err.message,'error'); }
+              }}>Confirm</button>
+              <button className="btn btn-ghost btn-lg" onClick={()=>setCancellingVisit(null)}>Back</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

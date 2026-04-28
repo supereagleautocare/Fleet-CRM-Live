@@ -102,6 +102,31 @@ router.delete('/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// POST /api/visits/:id/cancel  — cancel and route to next action
+router.post('/:id/cancel', async (req, res) => {
+  try {
+    const { rows: vRows } = await pool.query('SELECT * FROM visit_queue WHERE id = $1', [req.params.id]);
+    const visit = vRows[0];
+    if (!visit) return res.status(404).json({ error: 'Visit not found.' });
+
+    const { rows: coRows } = await pool.query('SELECT * FROM companies WHERE id = $1', [visit.entity_id]);
+    const company = coRows[0];
+    if (!company) return res.status(404).json({ error: 'Company not found.' });
+
+    const { next_action, next_action_date_override } = req.body;
+    if (!next_action) return res.status(400).json({ error: 'next_action is required.' });
+
+    await clearAllCompanyQueues(company.id);
+    const { next_action_date } = await scheduleNextAction(pool, {
+      company, contact_type: 'Cancelled', next_action, next_action_date_override,
+      contact_name: visit.contact_name || null,
+      direct_line: visit.direct_line || null,
+    });
+
+    res.json({ message: 'Visit cancelled.', next_action, next_action_date });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // POST /api/visits/:id/complete
 router.post('/:id/complete', async (req, res) => {
   const client = await pool.connect();

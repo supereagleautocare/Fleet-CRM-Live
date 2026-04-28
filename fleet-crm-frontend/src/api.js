@@ -174,6 +174,7 @@ export const api = {
   visitQueueStatus:(company_id)    => req('GET',  `/visits/queue-status/${company_id}`),
   searchCompanyName:(q)             => req('GET',  `/companies/search-name?q=${encodeURIComponent(q)}`),
   cancelVisit:     (id)            => req('DELETE',`/visits/${id}`),
+  cancelVisitRoute:(id, body)      => req('POST',  `/visits/${id}/cancel`, body),
 
   // ── Config ──────────────────────────────────────────
   rules:           ()              => req('GET',  '/config/rules'),
