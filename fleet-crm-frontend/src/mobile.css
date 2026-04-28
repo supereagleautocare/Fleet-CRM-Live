@@ -382,6 +382,41 @@
     display: none !important;
   }
 
+  /* Mobile route settings panel */
+  .route-mobile-settings {
+    background: var(--gray-50);
+    border: 1px solid var(--gray-200);
+    border-radius: 10px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .rms-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .rms-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--gray-400);
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    width: 48px;
+    flex-shrink: 0;
+  }
+
+  /* Cancel button: match Log Visit size */
+  .stop-card-actions .btn-ghost {
+    font-size: 11px !important;
+    padding: 4px 8px !important;
+    min-height: 30px !important;
+  }
+
   .route-mobile-tabs {
     display: flex !important;
     background: white;
@@ -512,6 +547,9 @@
   /* Log Visit button: takes remaining space */
   .stop-card-actions .btn-primary {
     flex: 1 !important;
+    font-size: 11px !important;
+    padding: 4px 8px !important;
+    min-height: 30px !important;
   }
 
   /* Time adjuster buttons: slightly larger touch target */

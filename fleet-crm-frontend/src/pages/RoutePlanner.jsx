@@ -114,6 +114,7 @@ export default function RoutePlanner({ embedded = false }) {
   const [contactTypes, setContactTypes]   = useState([]);
   const [myGps, setMyGps]                 = useState(null);
   const [mobileMapTab, setMobileMapTab]   = useState('list'); // 'list' | 'map'
+  const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false);
   const [mapSearch, setMapSearch]         = useState('');
   const [mapSearchOpen, setMapSearchOpen] = useState(false);
   const mapInstanceRef2                   = useRef(null);
@@ -628,18 +629,82 @@ useEffect(() => {
             </button>
           )}
         </div>
-        {/* Mobile: Plan Route button always visible outside the collapsible controls */}
+        {/* Mobile: Plan Route + Settings */}
         {!route && (
           <div className="route-plan-btn-mobile" style={{padding:'8px 12px',borderTop:'1px solid var(--gray-100)'}}>
-            <button className="btn btn-primary" style={{width:'100%'}}
-              onClick={buildRoute} disabled={planning||selected.size===0}>
-              {planning ? (
-                <span style={{display:'flex',alignItems:'center',gap:6}}>
-                  <span style={{width:12,height:12,border:'2px solid rgba(0,0,0,.2)',borderTopColor:'var(--navy-950)',borderRadius:'50%',display:'inline-block',animation:'spin .7s linear infinite'}}/>
-                  {planStep||'Planning…'}
-                </span>
-              ) : `🗺️ Plan Route — ${selected.size} stop${selected.size!==1?'s':''}`}
-            </button>
+            <div style={{display:'flex',gap:8,marginBottom:mobileSettingsOpen?8:0}}>
+              <button className="btn btn-primary" style={{flex:1}}
+                onClick={buildRoute} disabled={planning||selected.size===0}>
+                {planning ? (
+                  <span style={{display:'flex',alignItems:'center',gap:6}}>
+                    <span style={{width:12,height:12,border:'2px solid rgba(0,0,0,.2)',borderTopColor:'var(--navy-950)',borderRadius:'50%',display:'inline-block',animation:'spin .7s linear infinite'}}/>
+                    {planStep||'Planning…'}
+                  </span>
+                ) : `🗺️ Plan Route — ${selected.size} stop${selected.size!==1?'s':''}`}
+              </button>
+              <button className="btn btn-ghost btn-sm" style={{flexShrink:0,padding:'0 12px'}}
+                onClick={()=>setMobileSettingsOpen(o=>!o)}>
+                ⚙️
+              </button>
+            </div>
+            {mobileSettingsOpen && (
+              <div className="route-mobile-settings">
+                <div className="rms-row">
+                  <span className="rms-label">FROM</span>
+                  <div style={{display:'flex',gap:4}}>
+                    {[{k:'gps',l:'📍 GPS'},{k:'address',l:'🏠 Address'}].map(o=>(
+                      <button key={o.k} onClick={()=>setStartMode(o.k)}
+                        className={`btn btn-sm ${startMode===o.k?'btn-navy':'btn-ghost'}`}
+                        style={{fontSize:12,padding:'4px 12px'}}>{o.l}</button>
+                    ))}
+                  </div>
+                  {startMode==='address' && (
+                    <AddressAutocomplete value={startAddr} onChange={setStartAddr}
+                      onSelect={({display})=>setStartAddr(display)} placeholder="Starting address…"/>
+                  )}
+                  {startMode==='gps' && (
+                    <span style={{fontSize:12,color:'var(--gray-500)',padding:'4px 8px',background:'var(--gray-50)',borderRadius:6,border:'1px solid var(--gray-200)'}}>
+                      {myGps ? `📍 ${myGps.lat.toFixed(3)}, ${myGps.lng.toFixed(3)}` : '⏳ Getting location…'}
+                    </span>
+                  )}
+                </div>
+                <div className="rms-row">
+                  <span className="rms-label">DEPART</span>
+                  <div style={{display:'flex',gap:4}}>
+                    {[{k:'now',l:'⏱ Now'},{k:'custom',l:'🕐 Custom'}].map(o=>(
+                      <button key={o.k} onClick={()=>setTimeMode(o.k)}
+                        className={`btn btn-sm ${timeMode===o.k?'btn-navy':'btn-ghost'}`}
+                        style={{fontSize:12,padding:'4px 12px'}}>{o.l}</button>
+                    ))}
+                  </div>
+                  {timeMode==='custom' && (
+                    <input className="form-input" type="time" value={startTime}
+                      onChange={e=>setStartTime(e.target.value)}
+                      style={{width:110,padding:'4px 8px',fontSize:13}}/>
+                  )}
+                </div>
+                <div className="rms-row">
+                  <span className="rms-label">END AT</span>
+                  <div style={{display:'flex',gap:4}}>
+                    {[{k:'none',l:'✕ None'},{k:'home',l:'🏠 Shop'},{k:'custom',l:'📌 Custom'}].map(o=>(
+                      <button key={o.k} onClick={()=>{ setEndMode(o.k); if(o.k!=='custom') setEndAddr(''); }}
+                        className={`btn btn-sm ${endMode===o.k?'btn-navy':'btn-ghost'}`}
+                        style={{fontSize:12,padding:'4px 10px'}}>{o.l}</button>
+                    ))}
+                  </div>
+                  {endMode==='custom' && (
+                    <AddressAutocomplete value={endAddr} onChange={setEndAddr}
+                      onSelect={({display})=>setEndAddr(display)} placeholder="Custom end address…" inputClass="form-input"/>
+                  )}
+                </div>
+                <div className="rms-row">
+                  <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',fontSize:13,color:'var(--gray-700)'}}>
+                    <input type="checkbox" checked={autoOpt} onChange={e=>setAutoOpt(e.target.checked)} style={{width:16,height:16,accentColor:'var(--gold-500)'}}/>
+                    Auto-optimize route order
+                  </label>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
