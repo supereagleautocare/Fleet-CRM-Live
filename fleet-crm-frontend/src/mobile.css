@@ -6,7 +6,6 @@
 .mobile-topbar,
 .mobile-bottom-nav,
 .route-mobile-tabs,
-.route-settings-toggle,
 .route-plan-btn-mobile,
 .col-sub-mobile {
   display: none;
@@ -348,12 +347,15 @@
 
   /* ── RoutePlanner ────────────────────────────────────────────────────────── */
 
-  /* Route controls hidden by default on mobile; shown when .mobile-open */
+  /* Correct height so list panel doesn't over-scroll past bottom nav */
+  .route-planner {
+    height: calc(100vh - 56px - 58px) !important;
+    max-height: calc(100vh - 56px - 58px) !important;
+  }
+
+  /* Route controls always hidden on mobile (no toggle button) */
   .route-controls-panel {
     display: none !important;
-  }
-  .route-controls-panel.mobile-open {
-    display: flex !important;
   }
 
   /* Plan Route button: hide desktop version, show mobile version */
@@ -364,19 +366,9 @@
     display: block !important;
   }
 
-  /* Settings toggle button: only visible on mobile */
-  .route-settings-toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 5px 10px;
-    border: 1px solid var(--gray-200);
-    border-radius: 6px;
-    background: white;
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--gray-600);
-    cursor: pointer;
+  /* Hide RowActions (...) from stop cards — pointless on mobile */
+  .stop-card-row-actions {
+    display: none !important;
   }
 
   .route-mobile-tabs {
@@ -468,36 +460,53 @@
 
   /* Compact stop cards */
   .stop-card {
-    padding: 8px 10px !important;
+    padding: 7px 10px !important;
+    gap: 6px !important;
   }
 
-  /* Up/down reorder arrows: hide on mobile, finger-friendly reorder is awkward */
-  .stop-card > div > div > div:last-child > div[style*="display:'flex'"][style*="gap:2"],
-  .stop-card [style*="gap:2"][style*="flexShrink:0"] {
+  /* Company name: smaller font */
+  .stop-card [style*="fontWeight:600"][style*="fontSize:13"] {
+    font-size: 12px !important;
+  }
+
+  /* Address line: tighter */
+  .stop-card [style*="fontSize:11"][style*="marginTop:1"] {
+    font-size: 10px !important;
+    margin-top: 0 !important;
+  }
+
+  /* Up/down reorder arrows: hide on mobile */
+  .stop-card [style*="gap:2"][style*="flexShrink:0"],
+  .stop-card [style*="gap:2"][style*="marginLeft:6"] {
     display: none !important;
+  }
+
+  /* Badge + time adjuster row: tighter */
+  .stop-card [style*="marginTop:5"] {
+    margin-top: 3px !important;
   }
 
   /* Action buttons row: smaller and tighter */
   .stop-card-actions {
-    gap: 5px !important;
+    gap: 4px !important;
     margin-top: 4px !important;
   }
 
   .stop-card-actions .btn-sm {
-    font-size: 12px !important;
-    padding: 6px 10px !important;
-    min-height: 36px !important;
+    font-size: 11px !important;
+    padding: 5px 8px !important;
+    min-height: 32px !important;
   }
 
-  /* The Log Visit button specifically */
+  /* Log Visit button: takes remaining space */
   .stop-card-actions .btn-primary {
     flex: 1 !important;
   }
 
   /* Time adjuster buttons: slightly larger touch target */
   .stop-card [style*="width:18px"] {
-    width: 24px !important;
-    height: 24px !important;
+    width: 22px !important;
+    height: 22px !important;
   }
 
   /* ── Dashboard ───────────────────────────────────────────────────────────── */

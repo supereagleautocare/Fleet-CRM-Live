@@ -114,7 +114,6 @@ export default function RoutePlanner({ embedded = false }) {
   const [contactTypes, setContactTypes]   = useState([]);
   const [myGps, setMyGps]                 = useState(null);
   const [mobileMapTab, setMobileMapTab]   = useState('list'); // 'list' | 'map'
-  const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false);
   const [mapSearch, setMapSearch]         = useState('');
   const [mapSearchOpen, setMapSearchOpen] = useState(false);
   const mapInstanceRef2                   = useRef(null);
@@ -547,14 +546,10 @@ useEffect(() => {
           <div style={{display:'flex',gap:8,alignItems:'center'}}>
             {route && <button className="btn btn-ghost btn-sm" onClick={()=>setRoute(null)}>← Edit Stops</button>}
             {route && <button className="btn btn-ghost btn-sm" onClick={printRoute}>🖨️ Print</button>}
-            {/* Mobile: toggle route settings */}
-            <button className="route-settings-toggle" onClick={()=>setMobileSettingsOpen(o=>!o)}>
-              ⚙️ {mobileSettingsOpen ? 'Hide' : 'Settings'}
-            </button>
           </div>
         </div>
 
-        <div className={`route-controls-panel${mobileSettingsOpen ? ' mobile-open' : ''}`} style={{display:'flex',alignItems:'center',gap:16,padding:'10px 20px 12px',flexWrap:'wrap'}}>
+        <div className="route-controls-panel" style={{display:'flex',alignItems:'center',gap:16,padding:'10px 20px 12px',flexWrap:'wrap'}}>
           {/* Start address */}
           <div style={{display:'flex',alignItems:'center',gap:6}}>
             <span style={{fontSize:11,fontWeight:700,color:'var(--gray-500)',whiteSpace:'nowrap'}}>FROM</span>
@@ -765,11 +760,13 @@ useEffect(() => {
                               </div>
                             </div>
                             <div className="stop-card-actions" style={{display:'flex',gap:4,marginTop:6,alignItems:'center'}} onClick={e=>e.stopPropagation()}>
-                              <RowActions
-                                companyStatus={v.company_status || 'prospect'}
-                                onStatusChange={async status => { await api.updateCompanyStatus(v.entity_id, status); const d=await api.visitsAll(); setVisits(d); }}
-                                onMove={() => setMovingId(v.entity_id)}
-                              />
+                              <div className="stop-card-row-actions">
+                                <RowActions
+                                  companyStatus={v.company_status || 'prospect'}
+                                  onStatusChange={async status => { await api.updateCompanyStatus(v.entity_id, status); const d=await api.visitsAll(); setVisits(d); }}
+                                  onMove={() => setMovingId(v.entity_id)}
+                                />
+                              </div>
                               <button className="btn btn-sm btn-primary" style={{flex:1,fontSize:10,padding:'3px 0'}}
                                 onClick={()=>{ setLogForm({contact_type:'',notes:'',contact_name:'',direct_line:'',next_action:'Call'}); setLoggingStop(v.id); }}>
                                 ✅ Log Visit
