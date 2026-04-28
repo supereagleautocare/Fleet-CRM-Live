@@ -238,6 +238,8 @@ function normRo(ro) {
     statusCode: ro.repairOrderStatus?.code,
     techId:     ro.technicianId,
     saId:       ro.serviceWriterId,
+    label:      ro.label ? { id: ro.label.id, name: ro.label.name, color: ro.label.hexColor || ro.label.color || '#6366f1' } : null,
+    statusCategory: ro.repairOrderStatus?.category || null,
     labor:      ro.laborSales    || 0,
     parts:      ro.partsSales    || 0,
     sublets:    ro.subletSales   || 0,

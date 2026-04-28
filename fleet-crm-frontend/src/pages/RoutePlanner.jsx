@@ -184,11 +184,13 @@ export default function RoutePlanner({ embedded = false }) {
   // ── 5. Get GPS ────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition(
-      pos => setMyGps({lat:pos.coords.latitude,lng:pos.coords.longitude}),
-      () => setMyGps({lat:35.2073,lng:-80.7980}),
-      {timeout:8000}
+    const opts = { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 };
+    const id = navigator.geolocation.watchPosition(
+      pos => setMyGps({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => {},
+      opts
     );
+    return () => navigator.geolocation.clearWatch(id);
   }, []);
 
   // ── 6. Load nearby companies + auto-refresh while geocoding is running ────

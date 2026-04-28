@@ -454,21 +454,34 @@ export default function Settings() {
   }
   useEffect(() => { load(); }, []);
 
+  async function reloadKeepScroll() {
+    const el = document.querySelector('.page-body');
+    const saved = el ? el.scrollTop : 0;
+    await load(true);
+    requestAnimationFrame(() => {
+      const el2 = document.querySelector('.page-body');
+      if (el2) el2.scrollTop = saved;
+    });
+  }
+
   async function updateSetting(key, value) {
     setSaving(key);
-    try { await api.updateSetting(key, value); await load(true); }
+    try {
+      await api.updateSetting(key, value);
+      setSettings(prev => ({ ...prev, [key]: { ...(prev[key] || { key }), value } }));
+    }
     catch (err) { showToast(err.message, 'error'); }
     finally { setSaving(null); }
   }
 
   async function handleDeleteRule(id) {
     if (!confirm('Remove this type?')) return;
-    try { await api.deleteRule(id); await load(true); }
+    try { await api.deleteRule(id); await reloadKeepScroll(); }
     catch (err) { showToast(err.message, 'error'); }
   }
 
   async function handleUpdateRule(id, fields) {
-    try { await api.updateRule(id, fields); await load(true); }
+    try { await api.updateRule(id, fields); await reloadKeepScroll(); }
     catch (err) { showToast(err.message, 'error'); }
   }
 
@@ -479,7 +492,7 @@ export default function Settings() {
     try {
       await api.createRule({ action_type: actionKey, contact_type: name, days: defDays[actionKey], source: 'company' });
       setNewTypes(t => ({ ...t, [actionKey]: '' }));
-      await load(true);
+      await reloadKeepScroll();
       showToast('"' + name + '" added');
     } catch (err) { showToast(err.message, 'error'); }
     finally { setAddingType(a => ({ ...a, [actionKey]: false })); }
@@ -491,7 +504,7 @@ export default function Settings() {
       await api.addUser(newUser);
       showToast(newUser.name + ' added as ' + newUser.role);
       setNewUser({ name:'', email:'', password:'', role:'user' });
-      await load(true);
+      await reloadKeepScroll();
     } catch (err) { showToast(err.message, 'error'); }
   }
 
@@ -500,7 +513,7 @@ export default function Settings() {
     try {
       await api.deleteUser(u.id);
       showToast(u.name + ' removed');
-      await load(true);
+      await reloadKeepScroll();
     } catch(err) { showToast(err.message, 'error'); }
   }
 
