@@ -878,6 +878,7 @@ useEffect(() => {
               if (nearbyFilter !== 'all' && c.priority !== nearbyFilter) return false;
               return true;
             })}
+            myGps={myGps}
             navigate={navigate}
             onMapReady={m => { mapInstanceRef2.current = m; }}
             onAddNearby={async(comp)=>{
@@ -1234,11 +1235,12 @@ function MissingAddressesPopup({ missing, navigate }) {
   );
 }
 // ── Persistent Leaflet Map ────────────────────────────────────────────────────
-function PersistentMap({ routeStops=[], startGeo=null, returnHome=false, nearbyCompanies=[], onAddNearby, navigate, onMapReady }) {
+function PersistentMap({ routeStops=[], startGeo=null, returnHome=false, nearbyCompanies=[], onAddNearby, navigate, onMapReady, myGps=null }) {
   const mapRef          = useRef(null);
   const mapInstanceRef  = useRef(null);
   const routeLayerRef   = useRef(null);
   const nearbyLayerRef  = useRef(null);
+  const gpsLayerRef     = useRef(null);
   const LRef            = useRef(null);
   const [mapReady, setMapReady] = useState(false);
 
@@ -1258,6 +1260,7 @@ function PersistentMap({ routeStops=[], startGeo=null, returnHome=false, nearbyC
       mapInstanceRef.current = map;
       routeLayerRef.current  = L.layerGroup().addTo(map);
       nearbyLayerRef.current = L.layerGroup().addTo(map);
+      gpsLayerRef.current    = L.layerGroup().addTo(map);
       onMapReady?.(map);
       setMapReady(true);
       [50,150,300,600,1200].forEach(ms => setTimeout(() => { try { map.invalidateSize(); } catch(_){} }, ms));
@@ -1336,6 +1339,26 @@ function PersistentMap({ routeStops=[], startGeo=null, returnHome=false, nearbyC
             window[`_navTo_${c.id}`] = () => { map.closePopup(); navigate('/companies?company=' + c.id); };
     });
   }, [nearbyCompanies.map(c=>c.id+'@'+(c.geoOk?1:0)).join('|'), routeStops.map(s=>(s.companyId??s.id)+':'+s.id).join(','), mapReady]);
+
+  // GPS blue dot
+  useEffect(() => {
+    const map = mapInstanceRef.current; const L = LRef.current;
+    if (!map || !L || !gpsLayerRef.current) return;
+    gpsLayerRef.current.clearLayers();
+    if (!myGps?.lat || !myGps?.lng) return;
+    const html = `
+      <div style="position:relative;width:22px;height:22px">
+        <div style="position:absolute;inset:0;border-radius:50%;background:rgba(59,130,246,.25);animation:gps-pulse 2s ease-out infinite"></div>
+        <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:14px;height:14px;border-radius:50%;background:#3b82f6;border:2.5px solid white;box-shadow:0 2px 6px rgba(0,0,0,.35)"></div>
+      </div>`;
+    if (!document.getElementById('gps-pulse-style')) {
+      const s = document.createElement('style'); s.id = 'gps-pulse-style';
+      s.textContent = '@keyframes gps-pulse{0%{transform:scale(1);opacity:.7}100%{transform:scale(2.8);opacity:0}}';
+      document.head.appendChild(s);
+    }
+    L.marker([myGps.lat, myGps.lng], { icon: L.divIcon({ html, className:'', iconAnchor:[11,11] }), zIndexOffset:1000 })
+      .addTo(gpsLayerRef.current).bindPopup('<b>📍 Your Location</b>');
+  }, [myGps?.lat, myGps?.lng, mapReady]);
 
   return <div ref={mapRef} style={{position:'absolute',inset:0}} />;
 }
