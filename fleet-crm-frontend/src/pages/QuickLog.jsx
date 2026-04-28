@@ -471,7 +471,7 @@ export default function QuickLog() {
                       <div style={{ fontSize:11, color:'var(--gray-400)', marginTop:3, lineHeight:1.4,
                         ...(long ? { overflow:'hidden', display:'-webkit-box', WebkitLineClamp:3, WebkitBoxOrient:'vertical', cursor:'pointer' } : {}) }}
                         onClick={() => long && setExpandedNote(h.notes)} title={long ? 'Click to read full note' : undefined}>
-                        {h.notes}{long && <span style={{ color:'var(--navy-600)', fontWeight:600 }}> … read more</span>}
+                        {h.notes}{long && <span style={{ color:'var(--navy-600)', fontWeight:600 }}> read more</span>}
                       </div>
                     ); })()}
                     <div style={{ fontSize:10, color:'var(--gray-300)', marginTop:2 }}>Next: {h.next_action}</div>
@@ -522,7 +522,7 @@ export default function QuickLog() {
                       <div style={{ fontSize:11, color:'var(--gray-400)', marginTop:3,
                         ...(long ? { overflow:'hidden', display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', cursor:'pointer' } : { overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }) }}
                         onClick={() => long && setExpandedNote(log.notes)} title={long ? 'Click to read full note' : undefined}>
-                        {log.notes}{long && <span style={{ color:'var(--navy-600)', fontWeight:600 }}> … read more</span>}
+                        {log.notes}{long && <span style={{ color:'var(--navy-600)', fontWeight:600 }}> read more</span>}
                       </div>
                     ); })()}
                     <div style={{ fontSize:10, color:'var(--gray-300)', marginTop:3 }}>

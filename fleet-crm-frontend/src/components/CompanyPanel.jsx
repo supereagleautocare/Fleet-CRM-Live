@@ -448,7 +448,7 @@ export default function CompanyPanel({ row, sourceType, contactTypes, onComplete
                               onClick={() => long && setExpandedNote(h.notes)}
                               title={long ? 'Click to read full note' : undefined}
                             >
-                              {h.notes}{long && <span style={{ color:'var(--navy-600)', fontWeight:600 }}> … read more</span>}
+                              {h.notes}{long && <span style={{ color:'var(--navy-600)', fontWeight:600 }}> read more</span>}
                             </div>
                           );
                         })()}
