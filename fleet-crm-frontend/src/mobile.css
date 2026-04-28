@@ -504,6 +504,12 @@
     height: 100% !important;
   }
 
+  /* Allow Leaflet to handle all touch events — prevents browser scroll from stealing pan/zoom */
+  .route-map-panel.mobile-visible,
+  .route-map-panel.mobile-visible .leaflet-container {
+    touch-action: none !important;
+  }
+
   /* Compact stop cards */
   .stop-card {
     padding: 7px 10px !important;
