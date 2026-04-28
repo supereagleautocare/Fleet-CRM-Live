@@ -266,194 +266,167 @@ export default function QuickLog() {
 
             {/* Log form */}
             {selected && !saved && (
-              <div className="table-card" style={{ padding:'24px' }}>
-                {/* Entity header */}
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:20 }}>
+              <div className="table-card" style={{ padding:0, overflow:'hidden' }}>
+
+                {/* Dark navy header — matches CompanyPanel */}
+                <div style={{ padding:'16px 24px', background:'var(--navy-950)', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                   <div>
-                    <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:4 }}>
-                      <span className="badge badge-blue" style={{ fontSize:11 }}>🏢 Company</span>
-                      {selected.followup_due && (
-                        <span className="badge badge-overdue" style={{ fontSize:11 }}>
-                          Follow-up was {fmtDate(selected.followup_due)}
-                        </span>
-                      )}
-                    </div>
-                    <div style={{ fontSize:22, fontWeight:800, color:'var(--gray-900)' }}>{companyDisplayName(selected)}</div>
-                    <div style={{ fontSize:13, color:'var(--gray-500)', marginTop:2 }}>
-                      {fmtPhone(selected.main_phone)}
-                      {selected.industry && ` · ${selected.industry}`}
-                      {selected.address && ` · ${selected.address}${selected.city?', '+selected.city:''}`}
-                    </div>
+                    <div style={{ fontSize:17, fontWeight:800, color:'white', lineHeight:1.3 }}>{companyDisplayName(selected)}</div>
+                    <div style={{ fontSize:13, color:'var(--gold-400)', fontFamily:'var(--font-mono)', marginTop:4 }}>{fmtPhone(selected.main_phone)}</div>
+                    {selected.industry && <div style={{ fontSize:11, color:'rgba(255,255,255,.45)', marginTop:2 }}>{selected.industry}</div>}
                     {shopPos && selected.lat && selected.lng && (() => {
                       const d = distMiles(shopPos, {lat:selected.lat, lng:selected.lng});
-                      return d ? <div style={{ fontSize:12, color:'var(--navy-700)', fontWeight:600, marginTop:3 }}>📏 {d.toFixed(1)} mi from shop · 🚗 ~{Math.round(d/25*60)} min drive</div> : null;
+                      return d ? <div style={{ fontSize:11, color:'rgba(255,255,255,.5)', marginTop:3 }}>📏 {d.toFixed(1)} mi · 🚗 ~{Math.round(d/25*60)} min</div> : null;
                     })()}
-                    {selected.last_contact_type && (
-                      <div style={{ fontSize:12, color:'var(--gray-400)', marginTop:4 }}>
-                        Last contact: <strong>{selected.last_contact_type}</strong> on {fmtDate(selected.last_contacted)}
-                      </div>
-                    )}
                   </div>
-                  <button className="btn btn-ghost btn-sm" onClick={() => setSelected(null)}>✕ Change</button>
+                  <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                    <select value={selStatus} onChange={e=>handleStatusChange(e.target.value)}
+                      style={{ fontSize:12, fontWeight:700, padding:'5px 10px', borderRadius:7, cursor:'pointer', border:'1px solid rgba(255,255,255,.2)', background:'rgba(255,255,255,.1)', color:'white' }}>
+                      <option value="prospect">Prospect</option>
+                      <option value="interested">⭐ Interested</option>
+                      <option value="customer">✅ Customer</option>
+                    </select>
+                    <button type="button" onClick={() => setSelected(null)}
+                      style={{ width:30, height:30, border:'1px solid rgba(255,255,255,.2)', borderRadius:'var(--r-md)', background:'rgba(255,255,255,.08)', cursor:'pointer', fontSize:16, color:'rgba(255,255,255,.6)', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                      ✕
+                    </button>
+                  </div>
                 </div>
 
-                {/* Status toggle */}
-                {selected && (
-                  <div style={{ marginBottom:14, padding:'10px 14px', background:'var(--gray-50)', borderRadius:9, border:'1px solid var(--gray-100)' }}>
-                    <div style={{ fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'.07em', color:'var(--gray-400)', marginBottom:7 }}>Company Status</div>
-                    <div style={{ display:'flex', gap:6 }}>
-                      {[['prospect','Prospect','#64748b','#f1f5f9'],['interested','⭐ Interested','#92400e','#fef9c3'],['customer','✅ Customer','#166534','#f0fdf4']].map(([val,label,col,bg])=>(
-                        <button key={val} type="button" onClick={()=>handleStatusChange(val)}
-                          style={{ fontSize:11, fontWeight:700, padding:'4px 12px', borderRadius:20, cursor:'pointer',
-                            border:`1.5px solid ${selStatus===val?col:'var(--gray-200)'}`,
-                            background: selStatus===val ? bg : 'white',
-                            color: selStatus===val ? col : 'var(--gray-500)',
-                          }}>{label}</button>
+                {/* Form body */}
+                <div style={{ padding:'20px 28px', display:'flex', flexDirection:'column', gap:22 }}>
+
+                  {/* Log type selector */}
+                  <div>
+                    <div style={{ fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'.1em', color:'var(--gray-400)', marginBottom:10 }}>Log Type</div>
+                    <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+                      {[
+                        { id:'call',  label:'📞 Called',  nextAction:'Call'  },
+                        { id:'mail',  label:'✉️ Mailed',  nextAction:'Call'  },
+                        { id:'email', label:'📧 Emailed', nextAction:'Call'  },
+                        { id:'visit', label:'📍 Visited', nextAction:'Visit' },
+                      ].map(m => (
+                        <button key={m.id} type="button"
+                          onClick={() => { setActionMode(m.id); set('next_action', m.nextAction); set('contact_type',''); set('mail_piece',''); set('email_template',''); set('email_to',''); }}
+                          style={{ padding:'7px 16px', borderRadius:'var(--r-sm)', fontSize:13, fontWeight:700, cursor:'pointer', transition:'all .1s',
+                            border:`2px solid ${actionMode===m.id?'var(--navy-700)':'var(--gray-200)'}`,
+                            background: actionMode===m.id?'var(--navy-800)':'white',
+                            color: actionMode===m.id?'white':'var(--gray-700)',
+                          }}>
+                          {m.label}
+                        </button>
                       ))}
                     </div>
                   </div>
-                )}
 
-                {/* ── What type of contact is this? ── */}
-                <div style={{ marginBottom:18 }}>
-                  <div style={{ fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'.07em', color:'var(--gray-400)', marginBottom:10 }}>What type of contact?</div>
-                  <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
-                    {[
-                      { id:'call',  label:'📞 Called',   nextAction:'Call'  },
-                      { id:'mail',  label:'✉️ Mailed',   nextAction:'Call'  },
-                      { id:'email', label:'📧 Emailed',  nextAction:'Call'  },
-                      { id:'visit', label:'📍 Visited',  nextAction:'Visit' },
-                    ].map(m => (
-                      <button key={m.id} type="button"
-                        onClick={() => {
-                          setActionMode(m.id);
-                          set('next_action', m.nextAction);
-                          set('contact_type', '');
-                          set('mail_piece', '');
-                          set('email_template', '');
-                          set('email_to', '');
-                        }}
-                        style={{ padding:'7px 16px', borderRadius:20, fontSize:13, fontWeight:700, cursor:'pointer',
-                          border:`2px solid ${actionMode===m.id?'var(--navy-700)':'var(--gray-200)'}`,
-                          background: actionMode===m.id?'var(--navy-800)':'white',
-                          color: actionMode===m.id?'white':'var(--gray-700)',
-                        }}>
-                        {m.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Mail piece field — mail mode only */}
-                {actionMode === 'mail' && (
-                  <div className="form-group">
-                    <label className="form-label">Mail Piece Sent</label>
-                    <input className="form-input" placeholder="e.g. Postcard A, Intro Letter…" value={form.mail_piece} onChange={e=>set('mail_piece',e.target.value)}/>
-                  </div>
-                )}
-
-                {/* Email fields — email mode only */}
-                {actionMode === 'email' && (
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+                  {/* Mail piece — mail mode only */}
+                  {actionMode === 'mail' && (
                     <div className="form-group" style={{ margin:0 }}>
-                      <label className="form-label">Template / Campaign</label>
-                      <input className="form-input" placeholder="e.g. Intro Email, Follow-up #1…" value={form.email_template} onChange={e=>set('email_template',e.target.value)}/>
+                      <label className="form-label">Mail Piece Sent</label>
+                      <input className="form-input" placeholder="e.g. Postcard A, Intro Letter…" value={form.mail_piece} onChange={e=>set('mail_piece',e.target.value)}/>
                     </div>
-                    <div className="form-group" style={{ margin:0 }}>
-                      <label className="form-label">Sent To (email)</label>
-                      <input className="form-input" type="email" placeholder="john@company.com" value={form.email_to} onChange={e=>set('email_to',e.target.value)}/>
-                    </div>
-                  </div>
-                )}
-
-                {/* Company contact fields — call and visit only */}
-                {isCompany && (actionMode === 'call' || actionMode === 'visit') && (
-                  <>
-                    <div style={{ fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'.07em', color:'var(--gray-400)', marginBottom:10 }}>Contact Person</div>
-                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:14 }}>
-                      <div className="form-group" style={{ margin:0 }}>
-                        <label className="form-label">Contact Name</label>
-                        <input className="form-input" placeholder="Who did you talk to?" value={form.contact_name} onChange={e=>set('contact_name',e.target.value)}/>
-                      </div>
-                      <div className="form-group" style={{ margin:0 }}>
-                        <label className="form-label">Title / Role</label>
-                        <input className="form-input" placeholder="Fleet Manager…" value={form.role_title} onChange={e=>set('role_title',e.target.value)}/>
-                      </div>
-                      <div className="form-group" style={{ margin:0 }}>
-                        <label className="form-label">Direct Line</label>
-                        <input className="form-input" placeholder="Direct number" value={form.direct_line} onChange={e=>set('direct_line',e.target.value)}/>
-                      </div>
-                      <div className="form-group" style={{ margin:0 }}>
-                        <label className="form-label">Email</label>
-                        <input className="form-input" type="email" placeholder="email@company.com" value={form.email} onChange={e=>set('email',e.target.value)}/>
-                      </div>
-                    </div>
-                    {form.contact_name && (
-                      <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', fontSize:13, color:'var(--gray-600)', marginBottom:16 }}>
-                        <input type="checkbox" checked={form.set_as_preferred} onChange={e=>set('set_as_preferred',e.target.checked)} style={{ width:15, height:15, accentColor:'var(--gold-500)' }}/>
-                        Set as preferred contact for this company
-                      </label>
-                    )}
-                  </>
-                )}
-
-                {/* What Happened — all modes */}
-                {(
-                <div>
-                <div style={{ fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'.07em', color:'var(--gray-400)', marginBottom:10 }}>What Happened</div>
-                <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:14 }}>
-                  {types.map(t => (
-                    <button key={t} type="button" onClick={() => set('contact_type', t)}
-                      style={{ padding:'6px 14px', borderRadius:20, fontSize:13, fontWeight:600, cursor:'pointer',
-                        border:`1.5px solid ${form.contact_type===t?'var(--navy-700)':'var(--gray-200)'}`,
-                        background: form.contact_type===t?'var(--navy-800)':'white',
-                        color: form.contact_type===t?'white':'var(--gray-700)',
-                      }}>
-                      {t}
-                    </button>
-                  ))}
-                </div>
-                </div>
-                )}
-
-                <div className="form-group">
-                  <label className="form-label">Notes</label>
-                  <textarea className="form-textarea" rows={4}
-                    placeholder={actionMode==='mail'?'Anything to note about this mailing…':actionMode==='email'?'Anything to note about this email…':'What was discussed? Key details, promises made, objections…'}
-                    value={form.notes} onChange={e=>set('notes',e.target.value)}/>
-                </div>
-
-                {/* Next action */}
-                <div style={{ fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'.07em', color:'var(--gray-400)', marginBottom:10 }}>Next Action</div>
-                <div className="next-action-group" style={{ marginBottom:14 }}>
-                  <button type="button" className={`action-btn${form.next_action==='Call'?' selected-call':''}`} onClick={()=>set('next_action','Call')}>📞 Call</button>
-                  <button type="button" className={`action-btn${form.next_action==='Mail'?' selected-call':''}`} onClick={()=>set('next_action','Mail')}>✉️ Mail</button>
-                  <button type="button" className={`action-btn${form.next_action==='Email'?' selected-call':''}`} onClick={()=>set('next_action','Email')}>📧 Email</button>
-                  {isCompany && <button type="button" className={`action-btn${form.next_action==='Visit'?' selected-visit':''}`} onClick={()=>set('next_action','Visit')}>📍 Visit</button>}
-                  <button type="button" className={`action-btn${form.next_action==='Stop'?' selected-stop':''}`} onClick={()=>set('next_action','Stop')}>🚫 Stop</button>
-                </div>
-
-                {/* Manual follow-up date */}
-                <div className="form-group">
-                  <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', fontSize:13, color:'var(--gray-600)' }}>
-                    <input type="checkbox" checked={form.show_date_override} onChange={e=>set('show_date_override',e.target.checked)} style={{ width:15, height:15, accentColor:'var(--gold-500)' }}/>
-                    Set follow-up date manually
-                  </label>
-                  {form.show_date_override && (
-                    <input className="form-input" type="date" style={{ marginTop:8 }}
-                      value={form.next_action_date_override}
-                      onChange={e=>set('next_action_date_override',e.target.value)}
-                      min={nowDateStr()}
-                    />
                   )}
-                </div>
 
-                <div style={{ display:'flex', gap:10, marginTop:6 }}>
-                  <button className="btn btn-primary btn-lg" style={{ flex:1 }} onClick={handleSave}
-                    disabled={saving || !form.contact_type}>
-                    {saving ? 'Saving…' : '✅ Save Log'}
-                  </button>
-                  <button className="btn btn-ghost btn-lg" onClick={()=>setSelected(null)}>Cancel</button>
+                  {/* Email fields — email mode only */}
+                  {actionMode === 'email' && (
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+                      <div className="form-group" style={{ margin:0 }}>
+                        <label className="form-label">Template / Campaign</label>
+                        <input className="form-input" placeholder="e.g. Intro Email, Follow-up #1…" value={form.email_template} onChange={e=>set('email_template',e.target.value)}/>
+                      </div>
+                      <div className="form-group" style={{ margin:0 }}>
+                        <label className="form-label">Sent To (email)</label>
+                        <input className="form-input" type="email" placeholder="john@company.com" value={form.email_to} onChange={e=>set('email_to',e.target.value)}/>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ① What Happened */}
+                  <div>
+                    <div style={{ fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'.1em', color:'var(--gold-500)', marginBottom:10 }}>① What Happened *</div>
+                    <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+                      {types.map(t => (
+                        <button key={t} type="button" onClick={() => set('contact_type', t)}
+                          style={{ padding:'7px 16px', borderRadius:'var(--r-sm)', fontSize:13, fontWeight:600, cursor:'pointer', transition:'all .1s',
+                            border:`1.5px solid ${form.contact_type===t?'var(--navy-700)':'var(--gray-200)'}`,
+                            background: form.contact_type===t?'var(--navy-800)':'white',
+                            color: form.contact_type===t?'white':'var(--gray-700)',
+                          }}>
+                          {t}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* ② Notes */}
+                  <div className="form-group" style={{ margin:0 }}>
+                    <label className="form-label" style={{ fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'.1em', color:'var(--gold-500)' }}>② Notes</label>
+                    <textarea className="form-textarea" rows={4}
+                      placeholder={actionMode==='mail'?'Anything to note about this mailing…':actionMode==='email'?'Anything to note about this email…':'What happened? What did they say? Tone? Any details worth remembering…'}
+                      value={form.notes} onChange={e=>set('notes',e.target.value)}/>
+                  </div>
+
+                  {/* ③ Who Answered — call and visit only */}
+                  {(actionMode === 'call' || actionMode === 'visit') && (
+                    <div>
+                      <div style={{ fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'.1em', color:'var(--gray-400)', marginBottom:10 }}>③ Who Answered</div>
+                      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+                        <div className="form-group" style={{ margin:0 }}>
+                          <label className="form-label">Name</label>
+                          <input className="form-input" placeholder="First name or full name" value={form.contact_name} onChange={e=>set('contact_name',e.target.value)}/>
+                        </div>
+                        <div className="form-group" style={{ margin:0 }}>
+                          <label className="form-label">Role / Title</label>
+                          <input className="form-input" placeholder="Fleet Manager, Owner…" value={form.role_title} onChange={e=>set('role_title',e.target.value)}/>
+                        </div>
+                        <div className="form-group" style={{ margin:0 }}>
+                          <label className="form-label">Direct Line</label>
+                          <input className="form-input" placeholder="Direct number" value={form.direct_line} onChange={e=>set('direct_line',e.target.value)}/>
+                        </div>
+                        <div className="form-group" style={{ margin:0 }}>
+                          <label className="form-label">Email</label>
+                          <input className="form-input" type="email" placeholder="email@company.com" value={form.email} onChange={e=>set('email',e.target.value)}/>
+                        </div>
+                      </div>
+                      {form.contact_name && (
+                        <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', fontSize:12, padding:'6px 10px', background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:7, color:'#15803d', marginTop:8 }}>
+                          <input type="checkbox" checked={form.set_as_preferred} onChange={e=>set('set_as_preferred',e.target.checked)} style={{ width:13, height:13, accentColor:'#15803d' }}/>
+                          ⭐ Set <strong style={{ margin:'0 3px' }}>{form.contact_name}</strong> as preferred contact
+                        </label>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ⑤ Next Action */}
+                  <div>
+                    <div style={{ fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'.1em', color:'var(--gray-400)', marginBottom:10 }}>⑤ Next Action *</div>
+                    <div className="next-action-group">
+                      {[['Call','📞 Call Again'],['Mail','✉️ Mail'],['Email','📧 Email'],['Visit','📍 Visit'],['Stop','🚫 Stop']].map(([val,label]) => (
+                        <button key={val} type="button"
+                          className={`action-btn${form.next_action===val ? val==='Stop'?' selected-stop':val==='Visit'?' selected-visit':' selected-call' : ''}`}
+                          onClick={() => set('next_action', val)}>
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    <label style={{ display:'flex', alignItems:'center', gap:7, cursor:'pointer', fontSize:12, color:'var(--gray-600)', marginTop:10 }}>
+                      <input type="checkbox" checked={form.show_date_override} onChange={e=>set('show_date_override',e.target.checked)} style={{ width:13, height:13, accentColor:'var(--gold-500)' }}/>
+                      Set follow-up date manually
+                    </label>
+                    {form.show_date_override && (
+                      <input className="form-input" type="date" style={{ marginTop:8, width:200 }}
+                        value={form.next_action_date_override} onChange={e=>set('next_action_date_override',e.target.value)}
+                        min={nowDateStr()}/>
+                    )}
+                  </div>
+
+                  <div style={{ display:'flex', gap:10 }}>
+                    <button className="btn btn-primary btn-lg" style={{ flex:1 }} onClick={handleSave}
+                      disabled={saving || !form.contact_type}>
+                      {saving ? 'Saving…' : '✅ Save Log'}
+                    </button>
+                    <button className="btn btn-ghost btn-lg" onClick={()=>setSelected(null)}>Cancel</button>
+                  </div>
                 </div>
               </div>
             )}
