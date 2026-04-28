@@ -119,23 +119,19 @@ export default function RoutePlanner({ embedded = false }) {
   const [mapSearchOpen, setMapSearchOpen] = useState(false);
   const mapInstanceRef2                   = useRef(null);
 
-  // When map tab is active: lock body scroll so Leaflet owns all touch events
+  // Invalidate map size when map tab becomes visible; re-enable drag in case it was lost
   useEffect(() => {
-    const mainContent = document.querySelector('.main-content');
     if (mobileMapTab === 'map') {
-      document.body.style.overflow = 'hidden';
-      if (mainContent) { mainContent.style.overflow = 'hidden'; mainContent.style.touchAction = 'none'; }
-      [50, 150, 350, 700].forEach(ms =>
-        setTimeout(() => { try { mapInstanceRef2.current?.invalidateSize(); } catch(_){} }, ms)
-      );
-    } else {
-      document.body.style.overflow = '';
-      if (mainContent) { mainContent.style.overflow = ''; mainContent.style.touchAction = ''; }
+      [50, 150, 350, 700].forEach(ms => setTimeout(() => {
+        try {
+          const m = mapInstanceRef2.current;
+          if (!m) return;
+          m.invalidateSize();
+          m.dragging.enable();
+          m.touchZoom.enable();
+        } catch(_) {}
+      }, ms));
     }
-    return () => {
-      document.body.style.overflow = '';
-      if (mainContent) { mainContent.style.overflow = ''; mainContent.style.touchAction = ''; }
-    };
   }, [mobileMapTab]);
 
   // ── Nearby state ──────────────────────────────────────────────────────────
