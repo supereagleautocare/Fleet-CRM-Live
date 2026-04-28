@@ -353,6 +353,17 @@
     max-height: calc(100vh - 56px - 58px) !important;
   }
 
+  /* Compact header: less padding, tighter */
+  .route-planner-header {
+    padding: 8px 12px 4px !important;
+  }
+
+  /* Hide forecast strip and subtitle — stats bar below already shows the info */
+  .route-forecast-wrap,
+  .route-plan-subtitle {
+    display: none !important;
+  }
+
   /* Route controls always hidden on mobile (no toggle button) */
   .route-controls-panel {
     display: none !important;

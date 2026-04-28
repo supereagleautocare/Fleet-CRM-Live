@@ -533,12 +533,12 @@ useEffect(() => {
 
       {/* TOP BAR */}
       <div style={{flexShrink:0,borderBottom:'1px solid var(--gray-200)',background:'white'}}>
-        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 20px 0',gap:12}}>
+        <div className="route-planner-header" style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 20px 0',gap:12}}>
           <div>
             <div className="page-title" style={{fontSize:16}}>🗺️ Route Planner</div>
-            <ForecastStrip forecast={forecast} queueKey="visits" />
+            <div className="route-forecast-wrap"><ForecastStrip forecast={forecast} queueKey="visits" /></div>
             {route && (
-              <div className="page-subtitle">
+              <div className="page-subtitle route-plan-subtitle">
                 {route.stops.length} stops · {route.totalMiles.toFixed(1)} mi · {fmt(route.totalDrive+route.totalStop)} total
               </div>
             )}
