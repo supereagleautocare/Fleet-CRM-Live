@@ -118,12 +118,26 @@ export default function RoutePlanner({ embedded = false }) {
   const [mapSearch, setMapSearch]         = useState('');
   const [mapSearchOpen, setMapSearchOpen] = useState(false);
   const mapInstanceRef2                   = useRef(null);
+  const mapPanelRef                       = useRef(null);
 
-  // Invalidate map size when the map tab becomes visible.
-  // The map panel is position:fixed on mobile so no scroll locking is needed —
-  // a fixed element is outside every scroll container by definition.
+  // On mobile: force position:fixed + touch-action:none on the map panel via
+  // setProperty(...,'important') so CSS !important rules can't override us.
   useEffect(() => {
+    if (window.innerWidth > 900) return;
+    const el = mapPanelRef.current;
+    if (!el) return;
     if (mobileMapTab === 'map') {
+      el.style.setProperty('display',       'block',   'important');
+      el.style.setProperty('position',      'fixed',   'important');
+      el.style.setProperty('top',           '56px',    'important');
+      el.style.setProperty('bottom',        '58px',    'important');
+      el.style.setProperty('left',          '0',       'important');
+      el.style.setProperty('right',         '0',       'important');
+      el.style.setProperty('width',         'auto',    'important');
+      el.style.setProperty('height',        'auto',    'important');
+      el.style.setProperty('z-index',       '200',     'important');
+      el.style.setProperty('touch-action',  'none',    'important');
+      el.style.setProperty('overflow',      'hidden',  'important');
       [50, 150, 350, 700].forEach(ms => setTimeout(() => {
         try {
           const m = mapInstanceRef2.current;
@@ -133,6 +147,9 @@ export default function RoutePlanner({ embedded = false }) {
           m.touchZoom.enable();
         } catch(_) {}
       }, ms));
+    } else {
+      ['display','position','top','bottom','left','right','width','height','z-index','touch-action','overflow']
+        .forEach(p => el.style.removeProperty(p));
     }
   }, [mobileMapTab]);
 
@@ -975,7 +992,7 @@ useEffect(() => {
         </div>
 
         {/* RIGHT: Map */}
-        <div className={`route-map-panel${mobileMapTab==='map'?' mobile-visible':''}`} style={mobileMapTab==='map' && window.innerWidth<=900 ? {position:'fixed',top:56,bottom:58,left:0,right:0,width:'auto',height:'auto',zIndex:200,touchAction:'none',overflow:'hidden'} : {position:'relative',overflow:'hidden',minWidth:0}}>
+        <div ref={mapPanelRef} className={`route-map-panel${mobileMapTab==='map'?' mobile-visible':''}`} style={{position:'relative',overflow:'hidden',minWidth:0}}>
           <PersistentMap
             routeStops={route ? (() => { const r=recalcTimeline(route.stops,routeStopMins,route.startTime,route.startGeo,route.returnHome); return r.stops; })() : []}
             startGeo={route?.startGeo || null}
