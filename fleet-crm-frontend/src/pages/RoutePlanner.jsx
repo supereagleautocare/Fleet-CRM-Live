@@ -1391,11 +1391,13 @@ function PersistentMap({ routeStops=[], startGeo=null, returnHome=false, nearbyC
       link.href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'; document.head.appendChild(link);
     }
     let ro = null;
-    import('leaflet').then(Lmod => {
-      const L = Lmod.default || Lmod;
-      LRef.current = L;
+    let initRo = null; // watches for the container to become visible before first init
+
+    const doInit = (L) => {
       if (mapInstanceRef.current) return;
-      const map = L.map(mapRef.current, { zoomControl:true, tap:false, dragging:true, touchZoom:true, scrollWheelZoom:false }).setView([35.2271, -80.8431], 10);
+      const el = mapRef.current;
+      if (!el || el.offsetWidth === 0 || el.offsetHeight === 0) return; // still hidden
+      const map = L.map(el, { zoomControl:true, tap:false, dragging:true, touchZoom:true, scrollWheelZoom:false }).setView([35.2271, -80.8431], 10);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution:'© OpenStreetMap', maxZoom:19 }).addTo(map);
       mapInstanceRef.current = map;
       routeLayerRef.current  = L.layerGroup().addTo(map);
@@ -1403,13 +1405,28 @@ function PersistentMap({ routeStops=[], startGeo=null, returnHome=false, nearbyC
       gpsLayerRef.current    = L.layerGroup().addTo(map);
       onMapReady?.(map);
       setMapReady(true);
+      // Invalidate after paint so Leaflet gets accurate dimensions
       [50,150,300,600,1200].forEach(ms => setTimeout(() => { try { map.invalidateSize(); } catch(_){} }, ms));
       if (typeof ResizeObserver !== 'undefined' && mapRef.current) {
         ro = new ResizeObserver(() => { try { map.invalidateSize(); } catch(_){} });
         ro.observe(mapRef.current);
       }
+      if (initRo) { initRo.disconnect(); initRo = null; }
+    };
+
+    import('leaflet').then(Lmod => {
+      const L = Lmod.default || Lmod;
+      LRef.current = L;
+      // Try to init immediately (works on desktop where container is visible)
+      doInit(L);
+      // On mobile the container starts display:none — watch for it to become visible
+      if (!mapInstanceRef.current && typeof ResizeObserver !== 'undefined' && mapRef.current) {
+        initRo = new ResizeObserver(() => doInit(L));
+        initRo.observe(mapRef.current);
+      }
     });
     return () => {
+      if (initRo) initRo.disconnect();
       if (ro) ro.disconnect();
       if (mapInstanceRef.current) { mapInstanceRef.current.remove(); mapInstanceRef.current = null; }
     };
