@@ -975,7 +975,7 @@ useEffect(() => {
         </div>
 
         {/* RIGHT: Map */}
-        <div className={`route-map-panel${mobileMapTab==='map'?' mobile-visible':''}`} style={{position:'relative',overflow:'hidden',minWidth:0}}>
+        <div className={`route-map-panel${mobileMapTab==='map'?' mobile-visible':''}`} style={mobileMapTab==='map' && window.innerWidth<=900 ? {position:'fixed',top:56,bottom:58,left:0,right:0,width:'auto',height:'auto',zIndex:200,touchAction:'none',overflow:'hidden'} : {position:'relative',overflow:'hidden',minWidth:0}}>
           <PersistentMap
             routeStops={route ? (() => { const r=recalcTimeline(route.stops,routeStopMins,route.startTime,route.startGeo,route.returnHome); return r.stops; })() : []}
             startGeo={route?.startGeo || null}
@@ -1497,5 +1497,5 @@ function PersistentMap({ routeStops=[], startGeo=null, returnHome=false, nearbyC
       .addTo(gpsLayerRef.current).bindPopup('<b>📍 Your Location</b>');
   }, [myGps?.lat, myGps?.lng, mapReady]);
 
-  return <div ref={mapRef} style={{position:'absolute',inset:0}} />;
+  return <div ref={mapRef} style={{position:'absolute',inset:0,touchAction:'none'}} />;
 }
