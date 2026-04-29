@@ -60,6 +60,15 @@ router.get('/', async (req, res) => {
       byOutcomeResult,
       byRepResult,
       totalsResult,
+      mailTodayResult,
+      mailWeekResult,
+      mailMonthResult,
+      emailTodayResult,
+      emailWeekResult,
+      emailMonthResult,
+      visitTodayResult,
+      visitWeekResult,
+      visitMonthResult,
     ] = await Promise.all([
       pool.query(`
         SELECT
@@ -102,6 +111,18 @@ router.get('/', async (req, res) => {
           (SELECT COUNT(*) FROM call_log WHERE log_type = 'company' AND counts_as_attempt=1) as total_company_calls,
           (SELECT COUNT(*) FROM call_log WHERE action_type = 'Visit') as total_visits
       `),
+      // Mail counts
+      pool.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) = $1 AND action_type='Mail'`, [today]),
+      pool.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND action_type='Mail'`, [weekStart]),
+      pool.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND action_type='Mail'`, [monthStart]),
+      // Email counts
+      pool.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) = $1 AND action_type='Email'`, [today]),
+      pool.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND action_type='Email'`, [weekStart]),
+      pool.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND action_type='Email'`, [monthStart]),
+      // Visit counts
+      pool.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) = $1 AND action_type='Visit'`, [today]),
+      pool.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND action_type='Visit'`, [weekStart]),
+      pool.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND action_type='Visit'`, [monthStart]),
     ]);
 
     res.json({
@@ -117,6 +138,15 @@ router.get('/', async (req, res) => {
         contacts_this_week:   parseInt(contactsWeekResult.rows[0].cnt),
         contacts_this_month:  parseInt(contactsMonthResult.rows[0].cnt),
         contacts_this_year:   parseInt(contactsYearResult.rows[0].cnt),
+        mail_today:           parseInt(mailTodayResult.rows[0].cnt),
+        mail_this_week:       parseInt(mailWeekResult.rows[0].cnt),
+        mail_this_month:      parseInt(mailMonthResult.rows[0].cnt),
+        email_today:          parseInt(emailTodayResult.rows[0].cnt),
+        email_this_week:      parseInt(emailWeekResult.rows[0].cnt),
+        email_this_month:     parseInt(emailMonthResult.rows[0].cnt),
+        visits_today:         parseInt(visitTodayResult.rows[0].cnt),
+        visits_this_week:     parseInt(visitWeekResult.rows[0].cnt),
+        visits_this_month:    parseInt(visitMonthResult.rows[0].cnt),
       },
       breakdowns: {
         by_type:    byTypeResult.rows,
