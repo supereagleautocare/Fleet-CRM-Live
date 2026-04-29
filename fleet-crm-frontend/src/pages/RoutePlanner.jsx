@@ -1367,21 +1367,17 @@ function PersistentMap({ routeStops=[], startGeo=null, returnHome=false, nearbyC
   const LRef            = useRef(null);
   const [mapReady, setMapReady] = useState(false);
 
-  // Prevent parent scroll containers from stealing touch events from the map.
-  // touchstart is non-passive (so we can stop propagation early) but we do NOT call
-  // preventDefault on it — that would suppress iOS synthetic click events and break
-  // marker taps. touchmove is non-passive and does preventDefault to kill the scroll.
+  // Block native browser scroll on touchmove inside the map.
+  // IMPORTANT: do NOT call stopPropagation() here — Leaflet registers its pan
+  // handler on document (not on the map element), so stopping propagation would
+  // cut off Leaflet's _onMove and the map would never pan.
+  // preventDefault() alone is enough to suppress the page scroll.
   useEffect(() => {
     const el = mapRef.current;
     if (!el) return;
-    const onStart = e => e.stopPropagation();
-    const onMove  = e => { e.stopPropagation(); if (e.cancelable) e.preventDefault(); };
-    el.addEventListener('touchstart', onStart, { passive: false });
-    el.addEventListener('touchmove',  onMove,  { passive: false });
-    return () => {
-      el.removeEventListener('touchstart', onStart);
-      el.removeEventListener('touchmove',  onMove);
-    };
+    const onMove = e => { if (e.cancelable) e.preventDefault(); };
+    el.addEventListener('touchmove', onMove, { passive: false });
+    return () => el.removeEventListener('touchmove', onMove);
   }, []);
 
   useEffect(() => {
