@@ -119,24 +119,11 @@ export default function RoutePlanner({ embedded = false }) {
   const [mapSearchOpen, setMapSearchOpen] = useState(false);
   const mapInstanceRef2                   = useRef(null);
 
-  // Invalidate map size when map tab becomes visible; re-enable drag in case it was lost.
-  // Also lock the parent scroll container so touch gestures go to Leaflet, not the page scroll.
+  // Invalidate map size when the map tab becomes visible.
+  // The map panel is position:fixed on mobile so no scroll locking is needed —
+  // a fixed element is outside every scroll container by definition.
   useEffect(() => {
-    const mainContent = document.querySelector('.main-content');
-    const targets = [document.body, document.documentElement, mainContent].filter(Boolean);
-    const lockScroll = el => {
-      el.style.setProperty('overflow', 'hidden', 'important');
-      el.style.setProperty('touch-action', 'none', 'important');
-      // Kill iOS momentum scroll layer so it can't steal gestures
-      el.style.setProperty('-webkit-overflow-scrolling', 'auto', 'important');
-    };
-    const unlockScroll = el => {
-      el.style.removeProperty('overflow');
-      el.style.removeProperty('touch-action');
-      el.style.removeProperty('-webkit-overflow-scrolling');
-    };
     if (mobileMapTab === 'map') {
-      targets.forEach(lockScroll);
       [50, 150, 350, 700].forEach(ms => setTimeout(() => {
         try {
           const m = mapInstanceRef2.current;
@@ -146,10 +133,7 @@ export default function RoutePlanner({ embedded = false }) {
           m.touchZoom.enable();
         } catch(_) {}
       }, ms));
-    } else {
-      targets.forEach(unlockScroll);
     }
-    return () => targets.forEach(unlockScroll);
   }, [mobileMapTab]);
 
   // ── Nearby state ──────────────────────────────────────────────────────────

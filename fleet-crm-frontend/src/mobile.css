@@ -475,19 +475,28 @@
     -webkit-overflow-scrolling: touch !important;
   }
 
-  /* Map tab: fills route-body. touch-action:none on the panel AND every descendant
-     so Leaflet's inner panes (.leaflet-tile-pane, .leaflet-map-pane, etc.) don't
-     let the browser claim the gesture as a page scroll. */
+  /* Map tab: break out of every scroll container by going position:fixed.
+     This is the only reliable way to give Leaflet full ownership of touch
+     events — no ancestor scroll layer can interfere with a fixed element. */
+  .route-map-panel.mobile-visible {
+    display: block !important;
+    position: fixed !important;
+    top: 56px !important;    /* below mobile top bar */
+    bottom: 58px !important; /* above bottom nav     */
+    left: 0 !important;
+    right: 0 !important;
+    width: auto !important;
+    height: auto !important;
+    inset: unset !important; /* override the absolute inset:0 above */
+    z-index: 200 !important;
+    touch-action: none !important;
+  }
+
   .route-map-panel.mobile-visible,
   .route-map-panel.mobile-visible * {
     touch-action: none !important;
   }
 
-  .route-map-panel.mobile-visible {
-    display: block !important;
-  }
-
-  .route-map-panel.mobile-visible .leaflet-container,
   .route-map-panel.mobile-visible > div {
     position: absolute !important;
     inset: 0 !important;
