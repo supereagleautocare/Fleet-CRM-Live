@@ -122,6 +122,8 @@ export default function RoutePlanner({ embedded = false }) {
 
   // On mobile: force position:fixed + touch-action:none on the map panel via
   // setProperty(...,'important') so CSS !important rules can't override us.
+  // Also inject a <style> tag covering ALL leaflet child elements so Chrome's
+  // Pointer Events API doesn't consume the touch gesture before Leaflet gets it.
   useEffect(() => {
     if (window.innerWidth > 900) return;
     const el = mapPanelRef.current;
@@ -138,6 +140,14 @@ export default function RoutePlanner({ embedded = false }) {
       el.style.setProperty('z-index',       '200',     'important');
       el.style.setProperty('touch-action',  'none',    'important');
       el.style.setProperty('overflow',      'hidden',  'important');
+      // Inject style covering every leaflet element — touch-action:none must be
+      // on the actual element the finger touches (tiles, panes), not just an ancestor.
+      if (!document.getElementById('leaflet-touch-fix')) {
+        const s = document.createElement('style');
+        s.id = 'leaflet-touch-fix';
+        s.textContent = '.leaflet-container, .leaflet-container * { touch-action: none !important; }';
+        document.head.appendChild(s);
+      }
       [50, 150, 350, 700].forEach(ms => setTimeout(() => {
         try {
           const m = mapInstanceRef2.current;
