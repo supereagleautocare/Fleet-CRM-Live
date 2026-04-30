@@ -120,43 +120,73 @@ export default function RoutePlanner({ embedded = false }) {
   const mapInstanceRef2                   = useRef(null);
   const mapPanelRef                       = useRef(null);
 
-  // On mobile: force position:fixed + touch-action:none on the map panel via
-  // setProperty(...,'important') so CSS !important rules can't override us.
-  // Also inject a <style> tag covering ALL leaflet child elements so Chrome's
-  // Pointer Events API doesn't consume the touch gesture before Leaflet gets it.
+  // On mobile: force position:fixed via setProperty (beats CSS !important),
+  // then wire up a manual touch-to-pan handler that calls map.panBy directly.
+  // Leaflet's native drag is unreliable on Android Chrome; panBy is guaranteed.
   useEffect(() => {
     if (window.innerWidth > 900) return;
     const el = mapPanelRef.current;
     if (!el) return;
+
     if (mobileMapTab === 'map') {
-      el.style.setProperty('display',       'block',   'important');
-      el.style.setProperty('position',      'fixed',   'important');
-      el.style.setProperty('top',           '56px',    'important');
-      el.style.setProperty('bottom',        '58px',    'important');
-      el.style.setProperty('left',          '0',       'important');
-      el.style.setProperty('right',         '0',       'important');
-      el.style.setProperty('width',         'auto',    'important');
-      el.style.setProperty('height',        'auto',    'important');
-      el.style.setProperty('z-index',       '200',     'important');
-      el.style.setProperty('touch-action',  'none',    'important');
-      el.style.setProperty('overflow',      'hidden',  'important');
-      // Inject style covering every leaflet element — touch-action:none must be
-      // on the actual element the finger touches (tiles, panes), not just an ancestor.
+      el.style.setProperty('display',      'block',  'important');
+      el.style.setProperty('position',     'fixed',  'important');
+      el.style.setProperty('top',          '56px',   'important');
+      el.style.setProperty('bottom',       '58px',   'important');
+      el.style.setProperty('left',         '0',      'important');
+      el.style.setProperty('right',        '0',      'important');
+      el.style.setProperty('width',        'auto',   'important');
+      el.style.setProperty('height',       'auto',   'important');
+      el.style.setProperty('z-index',      '200',    'important');
+      el.style.setProperty('touch-action', 'none',   'important');
+      el.style.setProperty('overflow',     'hidden', 'important');
+
       if (!document.getElementById('leaflet-touch-fix')) {
         const s = document.createElement('style');
         s.id = 'leaflet-touch-fix';
-        s.textContent = '.leaflet-container, .leaflet-container * { touch-action: none !important; }';
+        s.textContent = '.leaflet-container,.leaflet-container *{touch-action:none!important}';
         document.head.appendChild(s);
       }
+
+      // Manual touch-to-pan: intercept touchmove on the whole panel and call
+      // panBy so panning works even when overlays eat the touchstart.
+      let lastX = 0, lastY = 0, touching = false;
+      const onTouchStart = e => {
+        if (e.touches.length !== 1) return;
+        lastX = e.touches[0].clientX;
+        lastY = e.touches[0].clientY;
+        touching = true;
+      };
+      const onTouchMove = e => {
+        if (!touching || e.touches.length !== 1) return;
+        if (e.cancelable) e.preventDefault();
+        const dx = e.touches[0].clientX - lastX;
+        const dy = e.touches[0].clientY - lastY;
+        lastX = e.touches[0].clientX;
+        lastY = e.touches[0].clientY;
+        try { mapInstanceRef2.current?.panBy([-dx, -dy], { animate: false }); } catch(_) {}
+      };
+      const onTouchEnd = () => { touching = false; };
+
+      el.addEventListener('touchstart', onTouchStart, { passive: true });
+      el.addEventListener('touchmove',  onTouchMove,  { passive: false });
+      el.addEventListener('touchend',   onTouchEnd,   { passive: true });
+
       [50, 150, 350, 700].forEach(ms => setTimeout(() => {
         try {
           const m = mapInstanceRef2.current;
           if (!m) return;
           m.invalidateSize();
-          m.dragging.enable();
+          m.dragging.disable(); // we handle drag ourselves above
           m.touchZoom.enable();
         } catch(_) {}
       }, ms));
+
+      return () => {
+        el.removeEventListener('touchstart', onTouchStart);
+        el.removeEventListener('touchmove',  onTouchMove);
+        el.removeEventListener('touchend',   onTouchEnd);
+      };
     } else {
       ['display','position','top','bottom','left','right','width','height','z-index','touch-action','overflow']
         .forEach(p => el.style.removeProperty(p));
