@@ -119,6 +119,7 @@ export default function RoutePlanner({ embedded = false }) {
   const [mapSearchOpen, setMapSearchOpen] = useState(false);
   const mapInstanceRef2                   = useRef(null);
   const mapPanelRef                       = useRef(null);
+  const mobileTabsRef                     = useRef(null);
 
   // On mobile: force position:fixed via setProperty (beats CSS !important),
   // then wire up a manual touch-to-pan handler that calls map.panBy directly.
@@ -128,11 +129,12 @@ export default function RoutePlanner({ embedded = false }) {
     const el = mapPanelRef.current;
     if (!el) return;
 
+    const tabsEl = mobileTabsRef.current;
     if (mobileMapTab === 'map') {
       el.style.setProperty('display',      'block',  'important');
       el.style.setProperty('position',     'fixed',  'important');
       el.style.setProperty('top',          '56px',   'important');
-      el.style.setProperty('bottom',       '58px',   'important');
+      el.style.setProperty('bottom',       '102px',  'important'); // 58px bottom nav + ~44px tabs
       el.style.setProperty('left',         '0',      'important');
       el.style.setProperty('right',        '0',      'important');
       el.style.setProperty('width',        'auto',   'important');
@@ -140,6 +142,15 @@ export default function RoutePlanner({ embedded = false }) {
       el.style.setProperty('z-index',      '200',    'important');
       el.style.setProperty('touch-action', 'none',   'important');
       el.style.setProperty('overflow',     'hidden', 'important');
+      // Float the Stops/Map tab bar above the bottom nav so user can switch back
+      if (tabsEl) {
+        tabsEl.style.setProperty('position', 'fixed',  'important');
+        tabsEl.style.setProperty('bottom',   '58px',   'important');
+        tabsEl.style.setProperty('left',     '0',      'important');
+        tabsEl.style.setProperty('right',    '0',      'important');
+        tabsEl.style.setProperty('z-index',  '201',    'important');
+        tabsEl.style.setProperty('display',  'flex',   'important');
+      }
 
       if (!document.getElementById('leaflet-touch-fix')) {
         const s = document.createElement('style');
@@ -190,6 +201,7 @@ export default function RoutePlanner({ embedded = false }) {
     } else {
       ['display','position','top','bottom','left','right','width','height','z-index','touch-action','overflow']
         .forEach(p => el.style.removeProperty(p));
+      if (tabsEl) ['position','bottom','left','right','z-index'].forEach(p => tabsEl.style.removeProperty(p));
     }
   }, [mobileMapTab]);
 
@@ -777,7 +789,7 @@ useEffect(() => {
       {error && <div style={{padding:'8px 20px',background:'#fef2f2',borderBottom:'1px solid #fca5a5',color:'#dc2626',fontSize:13,flexShrink:0}}>❌ {error}</div>}
 
       {/* Mobile map/list toggle */}
-      <div className="route-mobile-tabs">
+      <div ref={mobileTabsRef} className="route-mobile-tabs">
         <button className={`route-mobile-tab${mobileMapTab==='list'?' active':''}`} onClick={()=>setMobileMapTab('list')}>📋 Stops</button>
         <button className={`route-mobile-tab${mobileMapTab==='map'?' active':''}`} onClick={()=>setMobileMapTab('map')}>🗺️ Map</button>
       </div>
@@ -1073,8 +1085,8 @@ useEffect(() => {
             }}
           />
 
-          {/* Map search bar */}
-          <div style={{position:'absolute',top:10,left:10,zIndex:1000,width:250}}>
+          {/* Map search bar — hidden on mobile (overlays block panning area) */}
+          <div style={{position:'absolute',top:10,left:10,zIndex:1000,width:250,display:window.innerWidth<=900?'none':undefined}}>
             <div style={{position:'relative'}}>
               <input
                 type="text"
@@ -1115,32 +1127,34 @@ useEffect(() => {
           </div>
 
           {/* Nearby filter pills */}
-          <div style={{position:'absolute',top:10,right:10,zIndex:1000,maxWidth:220}}>
-            <div style={{display:'flex',gap:4,background:'rgba(255,255,255,.92)',backdropFilter:'blur(6px)',borderRadius:20,padding:'5px 8px',boxShadow:'0 2px 10px rgba(0,0,0,.15)',flexWrap:'wrap'}}>
-              {[{k:'all',l:'All'},{k:'hot',l:'🔴 Drop In'},{k:'warm',l:'🟡 Due Soon'},{k:'good',l:'🟢 Recent'},{k:'none',l:'⚪ No Contact'}].map(f=>(
+          <div style={{position:'absolute',top:10,right:10,zIndex:1000,maxWidth:window.innerWidth<=900?140:220}}>
+            <div style={{display:'flex',gap:3,background:'rgba(255,255,255,.92)',backdropFilter:'blur(6px)',borderRadius:20,padding:'4px 6px',boxShadow:'0 2px 10px rgba(0,0,0,.15)',flexWrap:'wrap'}}>
+              {[{k:'all',l:'All'},{k:'hot',l:'🔴'},{k:'warm',l:'🟡'},{k:'good',l:'🟢'},{k:'none',l:'⚪'}].map(f=>(
                 <button key={f.k} onClick={()=>setNearbyFilter(f.k)}
-                  style={{padding:'3px 10px',borderRadius:14,fontSize:11,fontWeight:700,cursor:'pointer',border:'none',
+                  style={{padding:'2px 8px',borderRadius:14,fontSize:window.innerWidth<=900?11:11,fontWeight:700,cursor:'pointer',border:'none',
                     background:nearbyFilter===f.k?'var(--navy-800)':'transparent',
                     color:nearbyFilter===f.k?'white':'var(--gray-500)',transition:'all .12s'}}>
-                  {f.l}
+                  {window.innerWidth<=900 ? f.l : ({all:'All',hot:'🔴 Drop In',warm:'🟡 Due Soon',good:'🟢 Recent',none:'⚪ No Contact'}[f.k])}
                 </button>
               ))}
             </div>
-            <div style={{marginTop:6,fontSize:10,color:'var(--gray-500)',textAlign:'right',padding:'2px 8px',background:'rgba(255,255,255,.8)',borderRadius:8}}>
-              {nearbyMapped.length} companies on map
-              {stillGeocoding > 0 && (
-                <div style={{marginTop:4,fontSize:10,color:'var(--gray-400)'}}>
-                 ⏳ locating {stillGeocoding} more…
-               </div>
-             )}
-              {(() => {
-                const missing = nearbyCompanies.filter(c => !c.lat || !c.lng);
-                if (missing.length === 0) return null;
-                return (
-                  <MissingAddressesPopup missing={missing} navigate={navigate} />
-                );
-              })()}
-            </div>
+            {window.innerWidth > 900 && (
+              <div style={{marginTop:6,fontSize:10,color:'var(--gray-500)',textAlign:'right',padding:'2px 8px',background:'rgba(255,255,255,.8)',borderRadius:8}}>
+                {nearbyMapped.length} companies on map
+                {stillGeocoding > 0 && (
+                  <div style={{marginTop:4,fontSize:10,color:'var(--gray-400)'}}>
+                   ⏳ locating {stillGeocoding} more…
+                 </div>
+               )}
+                {(() => {
+                  const missing = nearbyCompanies.filter(c => !c.lat || !c.lng);
+                  if (missing.length === 0) return null;
+                  return (
+                    <MissingAddressesPopup missing={missing} navigate={navigate} />
+                  );
+                })()}
+              </div>
+            )}
           </div>
 
           {/* Google Maps link */}
@@ -1434,7 +1448,8 @@ function PersistentMap({ routeStops=[], startGeo=null, returnHome=false, nearbyC
       if (mapInstanceRef.current) return;
       const el = mapRef.current;
       if (!el || el.offsetWidth === 0 || el.offsetHeight === 0) return; // still hidden
-      const map = L.map(el, { zoomControl:true, tap:false, dragging:true, touchZoom:true, scrollWheelZoom:false }).setView([35.2271, -80.8431], 10);
+      const map = L.map(el, { zoomControl:false, tap:false, dragging:true, touchZoom:true, scrollWheelZoom:false }).setView([35.2271, -80.8431], 10);
+      L.control.zoom({ position: 'bottomleft' }).addTo(map);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution:'© OpenStreetMap', maxZoom:19 }).addTo(map);
       mapInstanceRef.current = map;
       routeLayerRef.current  = L.layerGroup().addTo(map);
