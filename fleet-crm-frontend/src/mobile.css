@@ -425,8 +425,32 @@
     background: white;
     border-bottom: 1px solid var(--gray-200);
     flex-shrink: 0 !important;
-    position: relative !important;   /* never fixed — stays in flow */
+    position: relative !important;
     z-index: 1;
+  }
+
+  /* Google Maps-style bottom sheet when map is showing */
+  .route-mobile-tabs.map-mode {
+    border-radius: 16px 16px 0 0 !important;
+    box-shadow: 0 -4px 20px rgba(0,0,0,.18) !important;
+    border-bottom: none !important;
+    padding-top: 14px !important;
+  }
+
+  .mobile-tab-handle {
+    display: none;
+    width: 36px;
+    height: 4px;
+    background: var(--gray-300);
+    border-radius: 2px;
+    position: absolute;
+    top: 6px;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+
+  .route-mobile-tabs.map-mode .mobile-tab-handle {
+    display: block;
   }
 
   .route-mobile-tab {
@@ -497,7 +521,8 @@
     touch-action: none !important;
   }
 
-  .route-map-panel.mobile-visible > div {
+  /* Only target the PersistentMap div (first child) — overlay divs keep their own positioning */
+  .route-map-panel.mobile-visible > div:first-child {
     position: absolute !important;
     inset: 0 !important;
     width: 100% !important;

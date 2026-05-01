@@ -641,12 +641,13 @@ useEffect(() => {
             {startMode==='address' && (
               <div style={{width:280}}>
                 <AddressAutocomplete value={startAddr} onChange={setStartAddr}
-                  onSelect={({display})=>setStartAddr(display)} placeholder="Starting address…"/>
+                  onSelect={({display})=>setStartAddr(display)} placeholder="Choose starting point"/>
               </div>
             )}
             {startMode==='gps' && (
-              <span style={{fontSize:11,color:'var(--gray-500)',padding:'4px 8px',background:'var(--gray-50)',borderRadius:6,border:'1px solid var(--gray-200)'}}>
-                {myGps ? `📍 ${myGps.lat.toFixed(3)}, ${myGps.lng.toFixed(3)}` : '⏳ Getting location…'}
+              <span style={{fontSize:11,color:'#2563eb',padding:'4px 10px',background:'#eff6ff',borderRadius:6,border:'1px solid #bfdbfe',display:'flex',alignItems:'center',gap:6}}>
+                <span style={{width:8,height:8,borderRadius:'50%',background:'#2563eb',flexShrink:0,boxShadow:'0 0 0 3px rgba(37,99,235,.2)'}}/>
+                {myGps ? 'Your location' : '⏳ Getting location…'}
               </span>
             )}
           </div>
@@ -676,7 +677,9 @@ useEffect(() => {
           <div style={{display:'flex',gap:14,alignItems:'center',flexWrap:'wrap'}}>
             <label style={{display:'flex',alignItems:'center',gap:5,cursor:'pointer',fontSize:12,color:'var(--gray-700)',whiteSpace:'nowrap'}}>
               <input type="checkbox" checked={autoOpt} onChange={e=>setAutoOpt(e.target.checked)} style={{accentColor:'var(--gold-500)'}}/>
-              Auto-optimize
+              Auto-optimize stop order
+              <span style={{fontSize:10,color:'var(--gray-400)',background:'var(--gray-100)',borderRadius:'50%',width:15,height:15,display:'inline-flex',alignItems:'center',justifyContent:'center',fontWeight:700,cursor:'help',flexShrink:0}}
+                title="Automatically reorders your stops to minimize total driving time — like Google Maps route optimization">?</span>
             </label>
             <div style={{display:'flex',alignItems:'center',gap:6}}>
               <span style={{fontSize:12,color:'var(--gray-500)',whiteSpace:'nowrap'}}>End at:</span>
@@ -737,11 +740,12 @@ useEffect(() => {
                   </div>
                   {startMode==='address' && (
                     <AddressAutocomplete value={startAddr} onChange={setStartAddr}
-                      onSelect={({display})=>setStartAddr(display)} placeholder="Starting address…"/>
+                      onSelect={({display})=>setStartAddr(display)} placeholder="Choose starting point"/>
                   )}
                   {startMode==='gps' && (
-                    <span style={{fontSize:12,color:'var(--gray-500)',padding:'4px 8px',background:'var(--gray-50)',borderRadius:6,border:'1px solid var(--gray-200)'}}>
-                      {myGps ? `📍 ${myGps.lat.toFixed(3)}, ${myGps.lng.toFixed(3)}` : '⏳ Getting location…'}
+                    <span style={{fontSize:12,color:'#2563eb',padding:'4px 10px',background:'#eff6ff',borderRadius:6,border:'1px solid #bfdbfe',display:'flex',alignItems:'center',gap:6}}>
+                      <span style={{width:8,height:8,borderRadius:'50%',background:'#2563eb',flexShrink:0}}/>
+                      {myGps ? 'Your location' : '⏳ Getting location…'}
                     </span>
                   )}
                 </div>
@@ -777,7 +781,7 @@ useEffect(() => {
                 <div className="rms-row">
                   <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',fontSize:13,color:'var(--gray-700)'}}>
                     <input type="checkbox" checked={autoOpt} onChange={e=>setAutoOpt(e.target.checked)} style={{width:16,height:16,accentColor:'var(--gold-500)'}}/>
-                    Auto-optimize route order
+                    <span>Auto-optimize stop order <span style={{fontSize:11,color:'var(--gray-400)'}}>— minimizes drive time</span></span>
                   </label>
                 </div>
               </div>
@@ -789,7 +793,8 @@ useEffect(() => {
       {error && <div style={{padding:'8px 20px',background:'#fef2f2',borderBottom:'1px solid #fca5a5',color:'#dc2626',fontSize:13,flexShrink:0}}>❌ {error}</div>}
 
       {/* Mobile map/list toggle */}
-      <div ref={mobileTabsRef} className="route-mobile-tabs">
+      <div ref={mobileTabsRef} className={`route-mobile-tabs${mobileMapTab==='map'?' map-mode':''}`}>
+        <div className="mobile-tab-handle" />
         <button className={`route-mobile-tab${mobileMapTab==='list'?' active':''}`} onClick={()=>setMobileMapTab('list')}>📋 Stops</button>
         <button className={`route-mobile-tab${mobileMapTab==='map'?' active':''}`} onClick={()=>setMobileMapTab('map')}>🗺️ Map</button>
       </div>
