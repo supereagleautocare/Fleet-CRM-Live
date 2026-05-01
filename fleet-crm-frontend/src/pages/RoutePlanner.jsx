@@ -1448,7 +1448,7 @@ function PersistentMap({ routeStops=[], startGeo=null, returnHome=false, nearbyC
       if (mapInstanceRef.current) return;
       const el = mapRef.current;
       if (!el || el.offsetWidth === 0 || el.offsetHeight === 0) return; // still hidden
-      const map = L.map(el, { zoomControl:false, tap:false, dragging:true, touchZoom:true, scrollWheelZoom:false }).setView([35.2271, -80.8431], 10);
+      const map = L.map(el, { zoomControl:false, tap:false, dragging:true, touchZoom:true, scrollWheelZoom:true }).setView([35.2271, -80.8431], 10);
       L.control.zoom({ position: 'bottomleft' }).addTo(map);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution:'© OpenStreetMap', maxZoom:19 }).addTo(map);
       mapInstanceRef.current = map;
