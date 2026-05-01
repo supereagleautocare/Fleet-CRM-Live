@@ -1131,36 +1131,72 @@ useEffect(() => {
             </div>
           </div>
 
-          {/* Nearby filter pills */}
-          <div style={{position:'absolute',top:10,right:10,zIndex:1000,maxWidth:window.innerWidth<=900?140:220}}>
-            <div style={{display:'flex',gap:3,background:'rgba(255,255,255,.92)',backdropFilter:'blur(6px)',borderRadius:20,padding:'4px 6px',boxShadow:'0 2px 10px rgba(0,0,0,.15)',flexWrap:'wrap'}}>
-              {[{k:'all',l:'All'},{k:'hot',l:'🔴'},{k:'warm',l:'🟡'},{k:'good',l:'🟢'},{k:'none',l:'⚪'}].map(f=>(
-                <button key={f.k} onClick={()=>setNearbyFilter(f.k)}
-                  style={{padding:'2px 8px',borderRadius:14,fontSize:window.innerWidth<=900?11:11,fontWeight:700,cursor:'pointer',border:'none',
-                    background:nearbyFilter===f.k?'var(--navy-800)':'transparent',
-                    color:nearbyFilter===f.k?'white':'var(--gray-500)',transition:'all .12s'}}>
-                  {window.innerWidth<=900 ? f.l : ({all:'All',hot:'🔴 Drop In',warm:'🟡 Due Soon',good:'🟢 Recent',none:'⚪ No Contact'}[f.k])}
-                </button>
-              ))}
+          {/* Nearby companies legend + filter */}
+          {window.innerWidth <= 900 ? (
+            /* Mobile: compact dot legend at top-right */
+            <div style={{position:'absolute',top:10,right:10,zIndex:1000}}>
+              <div style={{background:'rgba(255,255,255,.96)',backdropFilter:'blur(6px)',borderRadius:10,padding:'6px 8px',boxShadow:'0 2px 12px rgba(0,0,0,.18)'}}>
+                <div style={{fontSize:9,fontWeight:800,color:'var(--gray-400)',textTransform:'uppercase',letterSpacing:'.07em',marginBottom:5,textAlign:'center'}}>Map Legend</div>
+                {[
+                  {dot:'#ef4444',label:'Drop In'},
+                  {dot:'#f59e0b',label:'Due Soon'},
+                  {dot:'#22c55e',label:'Visited'},
+                  {dot:'#94a3b8',label:'No Contact'},
+                ].map(f=>(
+                  <div key={f.label} style={{display:'flex',alignItems:'center',gap:5,padding:'2px 0',fontSize:10,color:'var(--gray-700)'}}>
+                    <span style={{width:9,height:9,borderRadius:'50%',background:f.dot,flexShrink:0,border:'1px solid rgba(0,0,0,.12)'}}/>
+                    {f.label}
+                  </div>
+                ))}
+              </div>
             </div>
-            {window.innerWidth > 900 && (
-              <div style={{marginTop:6,fontSize:10,color:'var(--gray-500)',textAlign:'right',padding:'2px 8px',background:'rgba(255,255,255,.8)',borderRadius:8}}>
-                {nearbyMapped.length} companies on map
-                {stillGeocoding > 0 && (
-                  <div style={{marginTop:4,fontSize:10,color:'var(--gray-400)'}}>
-                   ⏳ locating {stillGeocoding} more…
-                 </div>
-               )}
+          ) : (
+            /* Desktop: full filter panel */
+            <div style={{position:'absolute',top:10,right:10,zIndex:1000,minWidth:230}}>
+              <div style={{background:'rgba(255,255,255,.96)',backdropFilter:'blur(6px)',borderRadius:12,padding:'8px 10px',boxShadow:'0 2px 14px rgba(0,0,0,.18)'}}>
+                <div style={{fontSize:9,fontWeight:800,color:'var(--gray-400)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:6,textAlign:'center'}}>
+                  Filter Nearby Companies
+                </div>
+                <div style={{display:'flex',flexDirection:'column',gap:3}}>
+                  {[
+                    {k:'all',  dot:null,      label:'All companies'},
+                    {k:'hot',  dot:'#ef4444', label:'🔴 Drop In — overdue visit'},
+                    {k:'warm', dot:'#f59e0b', label:'🟡 Due Soon'},
+                    {k:'good', dot:'#22c55e', label:'🟢 Recently visited'},
+                    {k:'none', dot:'#94a3b8', label:'⚪ No contact yet'},
+                  ].map(f=>(
+                    <button key={f.k} onClick={()=>setNearbyFilter(f.k)}
+                      style={{display:'flex',alignItems:'center',gap:7,padding:'4px 8px',borderRadius:8,fontSize:11,fontWeight:600,cursor:'pointer',border:'none',
+                        background:nearbyFilter===f.k?'var(--navy-800)':'transparent',
+                        color:nearbyFilter===f.k?'white':'var(--gray-700)',transition:'all .12s',textAlign:'left',width:'100%'}}>
+                      {f.dot
+                        ? <span style={{width:10,height:10,borderRadius:'50%',background:f.dot,flexShrink:0,border:'1.5px solid rgba(0,0,0,.15)'}}/>
+                        : <span style={{width:10,height:10,flexShrink:0}}/>}
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+                <div style={{marginTop:6,paddingTop:6,borderTop:'1px solid var(--gray-100)',fontSize:10,color:'var(--gray-400)',textAlign:'center'}}>
+                  {nearbyMapped.length} companies on map
+                  {stillGeocoding > 0 && <span> · ⏳ {stillGeocoding} more loading</span>}
+                </div>
                 {(() => {
                   const missing = nearbyCompanies.filter(c => !c.lat || !c.lng);
                   if (missing.length === 0) return null;
-                  return (
-                    <MissingAddressesPopup missing={missing} navigate={navigate} />
-                  );
+                  return <MissingAddressesPopup missing={missing} navigate={navigate} />;
                 })()}
               </div>
-            )}
-          </div>
+            </div>
+          )}
+
+          {/* Reset view button — desktop only */}
+          {window.innerWidth > 900 && (
+            <button
+              onClick={() => { try { mapInstanceRef2.current?.setView([35.2271, -80.8431], 10); } catch(_){} }}
+              style={{position:'absolute',bottom:60,left:10,zIndex:1000,background:'rgba(255,255,255,.92)',backdropFilter:'blur(6px)',borderRadius:8,padding:'5px 10px',fontSize:11,fontWeight:700,color:'var(--gray-700)',border:'1px solid var(--gray-200)',cursor:'pointer',boxShadow:'0 1px 6px rgba(0,0,0,.12)'}}>
+              ⌖ Reset view
+            </button>
+          )}
 
           {/* Google Maps link */}
           {route && (() => {
