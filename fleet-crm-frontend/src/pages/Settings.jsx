@@ -452,22 +452,44 @@ function FleetFinderSettings({ showToast }) {
   return (
     <div style={{ maxWidth: 700, display: 'flex', flexDirection: 'column', gap: 20 }}>
 
-      {/* API Key */}
+      {/* API Keys */}
       <div className="table-card" style={{ padding: '18px 22px' }}>
-        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>Anthropic API Key</div>
-        <div style={{ fontSize: 12, color: 'var(--gray-400)', marginBottom: 12 }}>
-          Required to run searches. Get your key at console.anthropic.com → API Keys.
+        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 16 }}>API Keys</div>
+
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>Anthropic API Key</div>
+          <div style={{ fontSize: 12, color: 'var(--gray-400)', marginBottom: 8 }}>
+            Required to run searches. Get your key at console.anthropic.com → API Keys.
+          </div>
+          <input
+            type="password"
+            defaultValue={ffSettings.ff_anthropic_key || ''}
+            placeholder="sk-ant-..."
+            onBlur={e => save({ ff_anthropic_key: e.target.value.trim() })}
+            style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--gray-200)', borderRadius: 7, fontSize: 13, fontFamily: 'var(--font-mono)' }}
+          />
+          {ffSettings.ff_anthropic_key && (
+            <div style={{ fontSize: 11, color: 'var(--green-600)', marginTop: 5 }}>✓ Key saved</div>
+          )}
         </div>
-        <input
-          type="password"
-          defaultValue={ffSettings.ff_anthropic_key || ''}
-          placeholder="sk-ant-..."
-          onBlur={e => save({ ff_anthropic_key: e.target.value.trim() })}
-          style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--gray-200)', borderRadius: 7, fontSize: 13, fontFamily: 'var(--font-mono)' }}
-        />
-        {ffSettings.ff_anthropic_key && (
-          <div style={{ fontSize: 11, color: 'var(--green-600)', marginTop: 5 }}>✓ Key saved</div>
-        )}
+
+        <div style={{ borderTop: '1px solid var(--gray-100)', paddingTop: 18 }}>
+          <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>Serper API Key</div>
+          <div style={{ fontSize: 12, color: 'var(--gray-400)', marginBottom: 8 }}>
+            Enables pre-searching Google, FMCSA, LinkedIn, and job boards before Claude runs — finds more companies for less cost. Get a free key at serper.dev.
+          </div>
+          <input
+            type="password"
+            defaultValue={ffSettings.ff_serper_key || ''}
+            placeholder="your-serper-key..."
+            onBlur={e => save({ ff_serper_key: e.target.value.trim() })}
+            style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--gray-200)', borderRadius: 7, fontSize: 13, fontFamily: 'var(--font-mono)' }}
+          />
+          {ffSettings.ff_serper_key
+            ? <div style={{ fontSize: 11, color: 'var(--green-600)', marginTop: 5 }}>✓ Key saved — pre-searches enabled</div>
+            : <div style={{ fontSize: 11, color: 'var(--gray-400)', marginTop: 5 }}>Optional but recommended — searches run Claude-only without it</div>
+          }
+        </div>
       </div>
 
       {/* Budget + Radius */}
@@ -829,12 +851,12 @@ export default function Settings() {
                   </div>
                 </div>
                 {Object.entries(settings)
-  .filter(([k])=>!['shop_address','shop_lat','shop_lng','fuel_price','mpg','mail_followup_days','email_followup_days','visit_delay_days','tekmetric_token','tekmetric_shop_id','tekmetric_env','tekmetric_poll_interval','tekmetric_oil_interval','carfax_api_key','carfax_enabled','biz_hours_start','biz_hours_end','floor_poll_seconds','twilio_to_phone','scorecard_enabled','ff_monthly_budget','ff_default_radius','ff_industries','ff_custom_industries','ff_vehicle_types','ff_anthropic_key'].includes(k))
+  .filter(([k])=>!['shop_address','shop_lat','shop_lng','fuel_price','mpg','mail_followup_days','email_followup_days','visit_delay_days','tekmetric_token','tekmetric_shop_id','tekmetric_env','tekmetric_poll_interval','tekmetric_oil_interval','carfax_api_key','carfax_enabled','biz_hours_start','biz_hours_end','floor_poll_seconds','twilio_to_phone','scorecard_enabled','ff_monthly_budget','ff_default_radius','ff_industries','ff_custom_industries','ff_vehicle_types','ff_anthropic_key','ff_serper_key'].includes(k))
   .length > 0 && (
   <div className="table-card" style={{ padding:'20px 24px' }}>
     <div style={{ fontWeight:700, fontSize:15, marginBottom:16 }}>⚙️ Other Settings</div>
     {Object.entries(settings)
-      .filter(([k])=>!['shop_address','shop_lat','shop_lng','fuel_price','mpg','mail_followup_days','email_followup_days','visit_delay_days','tekmetric_token','tekmetric_shop_id','tekmetric_env','tekmetric_poll_interval','tekmetric_oil_interval','carfax_api_key','carfax_enabled','biz_hours_start','biz_hours_end','floor_poll_seconds','twilio_to_phone','scorecard_enabled','ff_monthly_budget','ff_default_radius','ff_industries','ff_custom_industries','ff_vehicle_types','ff_anthropic_key'].includes(k))
+      .filter(([k])=>!['shop_address','shop_lat','shop_lng','fuel_price','mpg','mail_followup_days','email_followup_days','visit_delay_days','tekmetric_token','tekmetric_shop_id','tekmetric_env','tekmetric_poll_interval','tekmetric_oil_interval','carfax_api_key','carfax_enabled','biz_hours_start','biz_hours_end','floor_poll_seconds','twilio_to_phone','scorecard_enabled','ff_monthly_budget','ff_default_radius','ff_industries','ff_custom_industries','ff_vehicle_types','ff_anthropic_key','ff_serper_key'].includes(k))
                       .map(([key,item])=>(
                       <div key={key} style={{ paddingBottom:16, marginBottom:16, borderBottom:'1px solid var(--gray-100)' }}>
                         <div style={{ fontWeight:600, fontSize:13, marginBottom:4 }}>{item.label||key}</div>

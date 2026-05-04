@@ -9,9 +9,9 @@ const { pool }  = require('../db/schema');
 const { requireAuth: auth } = require('../middleware/auth');
 const Anthropic = require('@anthropic-ai/sdk');
 
-// ── Pricing constants (claude-sonnet-4-6) ────────────────────────────────────
-const PRICE_INPUT_PER_M  = 3.00;   // $ per million input tokens
-const PRICE_OUTPUT_PER_M = 15.00;  // $ per million output tokens
+// ── Pricing constants (claude-haiku-4-5) ─────────────────────────────────────
+const PRICE_INPUT_PER_M  = 0.80;   // $ per million input tokens
+const PRICE_OUTPUT_PER_M = 4.00;   // $ per million output tokens
 
 // ── Address normalization for fuzzy duplicate detection ──────────────────────
 function normalizeAddress(addr) {
@@ -80,6 +80,53 @@ function levenshtein(a, b) {
     }
   }
   return matrix[b.length][a.length];
+}
+
+// Reverse geocode lat/lng → city name via Nominatim (free, no key needed)
+async function reverseGeocode(lat, lng) {
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`;
+    const resp = await fetch(url, { headers: { 'User-Agent': 'FleetCRM/1.0' } });
+    const data = await resp.json();
+    return data.address?.city || data.address?.town || data.address?.village || data.address?.county || '';
+  } catch (_) {
+    return '';
+  }
+}
+
+// Run a batch of Google searches via Serper and return compact result objects
+async function runSerperSearches(queries, serperKey) {
+  const results = [];
+  for (const query of queries) {
+    try {
+      const resp = await fetch('https://google.serper.dev/search', {
+        method:  'POST',
+        headers: { 'X-API-KEY': serperKey, 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ q: query, num: 10, gl: 'us' }),
+      });
+      const data = await resp.json();
+      results.push({ query, items: (data.organic || []).slice(0, 8) });
+    } catch (e) {
+      console.error('[serper] query failed:', query, e.message);
+    }
+  }
+  return results;
+}
+
+// Format Serper results into a compact text block for Claude's context
+function formatSerperResults(searchResults) {
+  if (!searchResults.length) return '';
+  const lines = ['=== PRE-SEARCHED RESULTS (Google, FMCSA, LinkedIn, job boards) ===\n'];
+  for (const { query, items } of searchResults) {
+    lines.push(`[Search: "${query}"]`);
+    if (!items.length) { lines.push('  (no results)\n'); continue; }
+    for (const item of items) {
+      const snippet = (item.snippet || '').replace(/\n/g, ' ').slice(0, 180);
+      lines.push(`• ${item.title} | ${item.link} | ${snippet}`);
+    }
+    lines.push('');
+  }
+  return lines.join('\n');
 }
 
 // Determine which US states a lat/lng + radius circle touches
@@ -236,10 +283,11 @@ router.delete('/dismiss/:id', auth, async (req, res) => {
 router.post('/estimate', auth, async (req, res) => {
   try {
     const { industries = [], radius_miles = 25 } = req.body;
-    // Rough estimate: base $0.08, +$0.01 per industry, +$0.02 per 10 miles over 15
-    const base        = 0.08;
-    const industryAdd = Math.min(industries.length, 15) * 0.01;
-    const radiusAdd   = Math.max(0, radius_miles - 15) / 10 * 0.02;
+    // Estimate: 6 Serper searches ($0.006) + Haiku with 1-2 Claude follow-ups (~$0.09)
+    // Without Serper key: Haiku doing 2-3 searches directly (~$0.12)
+    const base        = 0.10;
+    const industryAdd = Math.min(industries.length, 15) * 0.002;
+    const radiusAdd   = Math.max(0, radius_miles - 15) / 10 * 0.003;
     const estimate    = parseFloat((base + industryAdd + radiusAdd).toFixed(3));
     res.json({ estimate_usd: estimate });
   } catch (e) {
@@ -336,6 +384,16 @@ router.post('/search', auth, async (req, res) => {
     // ── 2. Determine search states ─────────────────────────────────────────────
     const searchStates = getStatesInRadius(lat, lng, radius_miles);
 
+    // ── 2b. Resolve Serper key ────────────────────────────────────────────────
+    let serperKey = process.env.SERPER_API_KEY;
+    if (!serperKey) {
+      const serperRow = await pool.query(`SELECT value FROM config_settings WHERE key = 'ff_serper_key'`);
+      serperKey = serperRow.rows[0]?.value?.trim() || '';
+    }
+
+    // ── 2c. Reverse geocode shop location → nearest city name ─────────────────
+    const shopCity = await reverseGeocode(lat, lng);
+
     // ── 3. Pull existing companies for dedup ──────────────────────────────────
     const existing = await pool.query(
       `SELECT name, address, city, main_phone FROM companies WHERE status = 'active'`
@@ -376,80 +434,48 @@ router.post('/search', auth, async (req, res) => {
 
     const industryList = industries.length ? industries.join(', ') : 'all industries';
 
+    // ── 5b. Run Serper pre-searches ───────────────────────────────────────────
+    const searchIndustry = industries.length <= 2
+      ? industries.join(' ')
+      : industries.slice(0, 2).join(' and ');
+    const locationStr = shopCity ? `${shopCity} ${stateList}` : stateList;
+
+    const serperQueries = serperKey ? [
+      `${searchIndustry} ${locationStr} fleet trucks company`,
+      `${searchIndustry} ${locationStr} FMCSA motor carrier registered`,
+      `${searchIndustry} ${locationStr} site:indeed.com technician "company vehicle"`,
+      `${searchIndustry} ${locationStr} site:linkedin.com company`,
+      `${searchIndustry} ${locationStr} fleet vehicle maintenance`,
+      `${searchIndustry} ${stateList} site:yellowpages.com`,
+    ] : [];
+
+    const serperResults = serperKey ? await runSerperSearches(serperQueries, serperKey) : [];
+    const serperContext = formatSerperResults(serperResults);
+    const serperCost    = serperResults.length * 0.001;
+
     // ── 6. Call Claude with web_search ────────────────────────────────────────
     const anthropic = new Anthropic({ apiKey: anthropicKey });
 
-    const systemPrompt = `You are a fleet business intelligence agent for an automotive repair shop. Your job is to find LOCAL businesses that operate vehicle fleets and would need regular vehicle maintenance. You search thoroughly across multiple sources and return only structured JSON.
+    const systemPrompt = `You are a fleet business discovery agent for an auto repair shop. Find LOCAL businesses that operate vehicle fleets and need regular vehicle maintenance. Your final response must be ONLY a raw JSON array — no markdown, no explanation, just [ ... ].`;
 
-CRITICAL: Your final response must be ONLY a valid JSON array. No intro text, no explanation, no markdown code blocks. Just the raw JSON array starting with [ and ending with ].`;
+    const userPrompt = `Find 8-15 businesses with vehicle fleets in ${locationDesc} (states: ${stateList}).
 
-    const userPrompt = `Find businesses that operate vehicle fleets in ${locationDesc}. The search area includes these states: ${stateList}.
+Industries: ${industryList}
+Vehicle types: ${vehicleDesc}
+Fleet size: ${fleetSizeDesc}
 
-SEARCH CRITERIA:
-- Industries: ${industryList}
-- Vehicle types of interest: ${vehicleDesc}
-- Fleet size: ${fleetSizeDesc}
+${serperContext
+  ? `${serperContext}
+The pre-searched results above were gathered from Google, FMCSA, LinkedIn, job boards, and Yellow Pages. Use them as your starting point.
 
-SEARCH SOURCES — check ALL of these:
-1. Google Search for each industry type in the area
-2. FMCSA motor carrier database (fmcsa.dot.gov) — search by city/state for registered carriers
-3. LinkedIn company search for the area and industries
-4. Indeed/ZipRecruiter job postings mentioning "company vehicle", "fleet", "CDL", "driving record"
-5. State business registries for ${stateList} — search by industry NAICS codes
-6. SAM.gov government contractor database for the area
-7. Better Business Bureau local listings
-8. Industry-specific directories (NPMA for pest, NECA for electrical, etc.)
-9. Local Chamber of Commerce directories
-10. Yellow Pages / Manta for service businesses
+Now use your web_search tool to do 1-2 additional searches for anything you think is missing — for example specific company details, businesses with physical presence but weak web presence, additional registry sources, or anything the pre-search may have missed. Focus on finding real local companies that operate fleets in the area, including smaller owner-operated businesses that may not rank well on Google.`
+  : `Run 2-3 targeted web searches across Google, FMCSA (site:safer.fmcsa.dot.gov), LinkedIn, and Indeed. On Indeed, search for technician job postings in the industry — most fleet businesses post jobs like "HVAC Technician" or "Pest Control Technician" with phrases like "company vehicle provided" or "valid driver's license required" buried in the description, not "driver needed." A company hiring multiple technicians almost certainly runs a fleet of light duty trucks or vans. Look for businesses with physical operations in the area, including smaller companies that may not have a strong web presence.`
+}
 
-FLEET SIGNALS to look for:
-- FMCSA/DOT registration with vehicle count
-- Service area covering multiple counties (requires multiple vehicles)
-- "Our technicians" / "our team" (plural field workers)
-- Same-day/next-day service across wide area
-- Franchise or regional branch of larger company
-- Job postings requiring CDL or clean driving record
-- Multiple employee reviews mentioning different techs visiting
+Skip these (already in CRM): ${existingNames.slice(0, 30).join(', ')}
 
-VEHICLE TYPE DETERMINATION:
-- Light duty gas: F-150/250/350 gas, RAM 1500/2500/3500 gas, no CDL required
-- Light duty diesel: F-250/350 diesel, RAM 2500/3500 diesel — job postings may mention diesel experience
-- Medium duty: F-450 and above, box trucks, step vans — may require CDL depending on weight
-- Heavy duty diesel: F-750+, Class 7-8, always requires CDL-A
-- Check FMCSA registration vehicle class for confirmed data
-- Job postings: "CDL-A" = heavy duty diesel confirmed, "diesel mechanic" or "diesel" = diesel variant
-
-IMPORTANT: Include BOTH public-facing consumer businesses AND B2B/contract companies that don't have Google Business pages but own commercial buildings and serve contracts.
-
-EXCLUDE these companies already in our CRM (by normalized name):
-${existingNames.slice(0, 100).join(', ')}
-
-For each company found, return this exact JSON structure:
-[
-  {
-    "name": "Company Legal Name",
-    "industry": "Industry Type",
-    "address": "Street Address",
-    "city": "City",
-    "state": "ST",
-    "zip": "12345",
-    "main_phone": "(704) 555-1234",
-    "website": "https://example.com",
-    "contact_name": "First Last",
-    "contact_title": "Operations Manager",
-    "fleet_probability": 85,
-    "fleet_note": "Specific reasons why this company likely has a fleet — mention sources found",
-    "vehicle_types_detected": ["light_duty", "cargo_van"],
-    "vehicle_type_confidence": "confirmed",
-    "estimated_fleet_size": "5-10",
-    "is_multi_location": true,
-    "is_chain": false,
-    "sources_found": ["Google", "FMCSA", "LinkedIn"],
-    "distance_miles": null
-  }
-]
-
-Find 15-25 companies. Prioritize quality. Set fleet_probability 75-100 only when you have strong signals. Use null for any field you could not find. Set vehicle_type_confidence to "confirmed" (FMCSA data), "likely" (strong signals), or "unknown".`;
+Return this JSON only — use null for unknown fields:
+[{"name":"...","industry":"...","address":"...","city":"...","state":"...","zip":"...","main_phone":"...","website":"...","contact_name":"...","contact_title":"...","fleet_probability":85,"fleet_note":"...","vehicle_types_detected":["light_duty_gas"],"vehicle_type_confidence":"likely","estimated_fleet_size":"5-10","is_multi_location":false,"is_chain":false,"sources_found":["Google"],"distance_miles":null}]`;
 
     let fullText = '';
     let inputTokens  = 0;
@@ -460,13 +486,14 @@ Find 15-25 companies. Prioritize quality. Set fleet_probability 75-100 only when
     let continueLoop = true;
     let turnCount = 0;
 
-    while (continueLoop && turnCount < 8) {
+    while (continueLoop && turnCount < 3) {
       turnCount++;
       const response = await anthropic.messages.create({
-        model:      'claude-sonnet-4-6',
-        max_tokens: 8000,
+        model:      'claude-haiku-4-5-20251001',
+        max_tokens: 3000,
         system:     systemPrompt,
         tools:      [{ type: 'web_search_20250305', name: 'web_search' }],
+        betas:      ['web-search-2025-03-05'],
         messages,
       });
 
@@ -544,7 +571,8 @@ Find 15-25 companies. Prioritize quality. Set fleet_probability 75-100 only when
     // ── 11. Log cost ──────────────────────────────────────────────────────────
     const costUsd = parseFloat(
       ((inputTokens / 1_000_000) * PRICE_INPUT_PER_M +
-       (outputTokens / 1_000_000) * PRICE_OUTPUT_PER_M).toFixed(5)
+       (outputTokens / 1_000_000) * PRICE_OUTPUT_PER_M +
+       serperCost).toFixed(5)
     );
     await pool.query(
       `INSERT INTO fleet_finder_cost_log
@@ -562,12 +590,13 @@ Find 15-25 companies. Prioritize quality. Set fleet_probability 75-100 only when
     );
 
     res.json({
-      results:       filtered,
-      result_count:  filtered.length,
-      cost_usd:      costUsd,
-      input_tokens:  inputTokens,
-      output_tokens: outputTokens,
+      results:         filtered,
+      result_count:    filtered.length,
+      cost_usd:        costUsd,
+      input_tokens:    inputTokens,
+      output_tokens:   outputTokens,
       states_searched: searchStates,
+      serper_searches: serperResults.length,
     });
 
   } catch (e) {
