@@ -6,7 +6,7 @@
 const express   = require('express');
 const router    = express.Router();
 const { pool }  = require('../db/schema');
-const auth      = require('../middleware/auth');
+const { requireAuth: auth } = require('../middleware/auth');
 const Anthropic = require('@anthropic-ai/sdk');
 
 // ── Pricing constants (claude-sonnet-4-6) ────────────────────────────────────
