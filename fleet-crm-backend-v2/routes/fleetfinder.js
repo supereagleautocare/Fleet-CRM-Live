@@ -303,9 +303,8 @@ router.delete('/dismiss/:id', auth, async (req, res) => {
 router.post('/estimate', auth, async (req, res) => {
   try {
     const { industries = [], radius_miles = 25 } = req.body;
-    // Estimate: 6 Serper searches ($0.006) + Haiku with 1-2 Claude follow-ups (~$0.09)
-    // Without Serper key: Haiku doing 2-3 searches directly (~$0.12)
-    const base        = 0.10;
+    // Estimate: 2 Serper searches ($0.002) + Haiku with 4-5 Claude follow-ups (~$0.35)
+    const base        = 0.35;
     const industryAdd = Math.min(industries.length, 15) * 0.002;
     const radiusAdd   = Math.max(0, radius_miles - 15) / 10 * 0.003;
     const estimate    = parseFloat((base + industryAdd + radiusAdd).toFixed(3));
@@ -454,31 +453,24 @@ router.post('/search', auth, async (req, res) => {
 
     const industryList = industries.length ? industries.join(', ') : 'all industries';
 
-    // ── 5b. Run Serper pre-searches ───────────────────────────────────────────
-    const locationStr   = shopCity ? `${shopCity} ${stateList}` : stateList;
-    const searchIndustry = industries.length <= 3
-      ? industries.join(' ')
-      : industries.slice(0, 3).join(', ');
+    // ── 5b. Run Serper pre-searches (2 fixed searches) ───────────────────────
+    const locationStr = shopCity ? `${shopCity} ${stateList}` : stateList;
 
-    // Load custom fleet signal keywords (shop-configurable, default "company vehicle")
+    // Load custom fleet signal keywords (default "company vehicle")
     const kwRow = await pool.query(`SELECT value FROM config_settings WHERE key = 'ff_search_keywords'`);
     const customKeywords = (kwRow.rows[0]?.value || 'company vehicle')
       .split(',').map(k => k.trim()).filter(Boolean);
     const keywordFilter = customKeywords.map(k => `"${k}"`).join(' OR ');
 
-    // 4 base searches + 1 Indeed search per selected industry (all run in parallel)
-    const baseQueries = serperKey ? [
-      `${searchIndustry} ${locationStr} company`,
-      `FMCSA ${searchIndustry} ${stateList} motor carrier`,
-      `${searchIndustry} ${locationStr} site:linkedin.com`,
-      `${searchIndustry} ${stateList} site:yellowpages.com`,
+    const allIndustries = industries.length ? industries.join(' ') : industryList;
+
+    // 1 — straight Google search for the industry + location
+    // 2 — same search on Indeed with fleet keyword signal
+    const serperQueries = serperKey ? [
+      `${allIndustries} ${locationStr}`,
+      `${allIndustries} ${locationStr} ${keywordFilter} site:indeed.com`,
     ] : [];
 
-    const indeedQueries = serperKey
-      ? industries.map(ind => `site:indeed.com "${getJobTitle(ind)}" ${locationStr} ${keywordFilter}`)
-      : [];
-
-    const serperQueries = [...baseQueries, ...indeedQueries];
     const serperResults = serperKey ? await runSerperSearches(serperQueries, serperKey) : [];
     const serperContext = formatSerperResults(serperResults);
     const serperCost    = serperResults.length * 0.001;
@@ -486,24 +478,27 @@ router.post('/search', auth, async (req, res) => {
     // ── 6. Call Claude with web_search ────────────────────────────────────────
     const anthropic = new Anthropic({ apiKey: anthropicKey });
 
-    const systemPrompt = `You are a fleet business discovery agent for an auto repair shop. Find LOCAL businesses that operate vehicle fleets and need regular vehicle maintenance. Your final response must be ONLY a raw JSON array — no markdown, no explanation, just [ ... ].`;
+    const systemPrompt = `You are a fleet business discovery agent for an auto repair shop. Your job is to find LOCAL businesses that operate fleets of vehicles — trucks, vans, cars — and need regular vehicle maintenance.
+
+These businesses come in two types:
+1. CONSUMER-FACING — pest control, HVAC, plumbing, landscaping companies. They show up on Google, Yelp, and BBB. Find them through local directories and job boards.
+2. CONTRACT-DRIVEN — telecom subcontractors, utility contractors, electrical contractors, construction subs. They have warehouses and fleets but ZERO consumer web presence. They won't be on Yelp. Find them through LinkedIn, FMCSA (site:safer.fmcsa.dot.gov), SAM.gov (government contracts), and state contractor license registries.
+
+Fleet signals in job postings: "company vehicle", "company truck", "take home vehicle", "service van provided" — a company hiring 5 technicians almost certainly runs 5 trucks. Most fleet vehicles are light duty (F-150s, vans) — not semis or CDL vehicles.
+
+Your final response must be ONLY a raw JSON array — no markdown, no explanation, just [ ... ].`;
 
     const userPrompt = `Find 8-15 businesses with vehicle fleets in ${locationDesc} (states: ${stateList}).
 
-Industries: ${industryList}
-Vehicle types: ${vehicleDesc}
-Fleet size: ${fleetSizeDesc}
+Industries selected: ${industryList}
+Vehicle types the shop services: ${vehicleDesc}
+Fleet size target: ${fleetSizeDesc}
 
-${serperContext
-  ? `${serperContext}
-The pre-searched results above came from Google, FMCSA, LinkedIn, Yellow Pages, and Indeed (one search per industry using the correct technician job title + fleet signal keywords).
-
-These exact queries were already run — do NOT repeat them:
+${serperContext ? `${serperContext}
+These 2 queries were already searched — do NOT repeat them:
 ${serperQueries.map(q => `  • ${q}`).join('\n')}
 
-Use your web_search tool for 1-2 additional searches covering angles NOT in the list above. Good follow-up angles: specific company websites, BBB listings, state contractor license registries, Yelp, or any industry-specific directories you know about. Focus on businesses with physical presence in the area that may not rank well on Google.`
-  : `Run 2-3 targeted web searches. On Indeed, search for the technician job title for each industry — fleet companies post jobs like "Pest Control Technician" or "HVAC Technician" with "company vehicle" mentioned in the description, not "driver wanted." Also check Google, FMCSA (site:safer.fmcsa.dot.gov), LinkedIn, and Yellow Pages. A company hiring multiple technicians almost certainly runs a fleet of light duty trucks or vans.`
-}
+` : ''}Use your web_search tool to run 4-5 searches across sources that will surface both consumer-facing AND contract-driven fleet businesses. Think about which industries above are likely contract-driven with no consumer presence and search the right sources for those. Good sources to consider: LinkedIn, FMCSA, SAM.gov, Yelp, BBB, state contractor license registries, local business directories, and any industry-specific databases you know about. Do not just search Google repeatedly — go where the hidden companies are.
 
 Skip these (already in CRM): ${existingNames.slice(0, 30).join(', ')}
 
@@ -519,7 +514,7 @@ Return this JSON only — use null for unknown fields:
     let continueLoop = true;
     let turnCount = 0;
 
-    while (continueLoop && turnCount < 3) {
+    while (continueLoop && turnCount < 5) {
       turnCount++;
       const response = await anthropic.messages.create({
         model:      'claude-haiku-4-5-20251001',
