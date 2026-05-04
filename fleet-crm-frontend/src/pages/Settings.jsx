@@ -492,6 +492,24 @@ function FleetFinderSettings({ showToast }) {
         </div>
       </div>
 
+      {/* Fleet Signal Keywords */}
+      <div className="table-card" style={{ padding: '18px 22px' }}>
+        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>Fleet Signal Keywords</div>
+        <div style={{ fontSize: 12, color: 'var(--gray-400)', marginBottom: 12 }}>
+          Words to look for in job postings that signal a company has a fleet. Separate multiple keywords with commas.
+        </div>
+        <input
+          type="text"
+          defaultValue={ffSettings.ff_search_keywords || 'company vehicle'}
+          placeholder="company vehicle, take home vehicle, company truck"
+          onBlur={e => save({ ff_search_keywords: e.target.value.trim() })}
+          style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--gray-200)', borderRadius: 7, fontSize: 13 }}
+        />
+        <div style={{ fontSize: 11, color: 'var(--gray-400)', marginTop: 6 }}>
+          Default: <b>company vehicle</b> — the phrase that appears in job postings when a company provides trucks to their techs. Add more signals your market uses, like "take home truck" or "service van provided."
+        </div>
+      </div>
+
       {/* Budget + Radius */}
       <div className="table-card" style={{ padding: '18px 22px' }}>
         <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 16 }}>Budget & Search Defaults</div>
@@ -851,12 +869,12 @@ export default function Settings() {
                   </div>
                 </div>
                 {Object.entries(settings)
-  .filter(([k])=>!['shop_address','shop_lat','shop_lng','fuel_price','mpg','mail_followup_days','email_followup_days','visit_delay_days','tekmetric_token','tekmetric_shop_id','tekmetric_env','tekmetric_poll_interval','tekmetric_oil_interval','carfax_api_key','carfax_enabled','biz_hours_start','biz_hours_end','floor_poll_seconds','twilio_to_phone','scorecard_enabled','ff_monthly_budget','ff_default_radius','ff_industries','ff_custom_industries','ff_vehicle_types','ff_anthropic_key','ff_serper_key'].includes(k))
+  .filter(([k])=>!['shop_address','shop_lat','shop_lng','fuel_price','mpg','mail_followup_days','email_followup_days','visit_delay_days','tekmetric_token','tekmetric_shop_id','tekmetric_env','tekmetric_poll_interval','tekmetric_oil_interval','carfax_api_key','carfax_enabled','biz_hours_start','biz_hours_end','floor_poll_seconds','twilio_to_phone','scorecard_enabled','ff_monthly_budget','ff_default_radius','ff_industries','ff_custom_industries','ff_vehicle_types','ff_anthropic_key','ff_serper_key','ff_search_keywords'].includes(k))
   .length > 0 && (
   <div className="table-card" style={{ padding:'20px 24px' }}>
     <div style={{ fontWeight:700, fontSize:15, marginBottom:16 }}>⚙️ Other Settings</div>
     {Object.entries(settings)
-      .filter(([k])=>!['shop_address','shop_lat','shop_lng','fuel_price','mpg','mail_followup_days','email_followup_days','visit_delay_days','tekmetric_token','tekmetric_shop_id','tekmetric_env','tekmetric_poll_interval','tekmetric_oil_interval','carfax_api_key','carfax_enabled','biz_hours_start','biz_hours_end','floor_poll_seconds','twilio_to_phone','scorecard_enabled','ff_monthly_budget','ff_default_radius','ff_industries','ff_custom_industries','ff_vehicle_types','ff_anthropic_key','ff_serper_key'].includes(k))
+      .filter(([k])=>!['shop_address','shop_lat','shop_lng','fuel_price','mpg','mail_followup_days','email_followup_days','visit_delay_days','tekmetric_token','tekmetric_shop_id','tekmetric_env','tekmetric_poll_interval','tekmetric_oil_interval','carfax_api_key','carfax_enabled','biz_hours_start','biz_hours_end','floor_poll_seconds','twilio_to_phone','scorecard_enabled','ff_monthly_budget','ff_default_radius','ff_industries','ff_custom_industries','ff_vehicle_types','ff_anthropic_key','ff_serper_key','ff_search_keywords'].includes(k))
                       .map(([key,item])=>(
                       <div key={key} style={{ paddingBottom:16, marginBottom:16, borderBottom:'1px solid var(--gray-100)' }}>
                         <div style={{ fontWeight:600, fontSize:13, marginBottom:4 }}>{item.label||key}</div>

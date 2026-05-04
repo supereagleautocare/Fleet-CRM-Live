@@ -13,6 +13,27 @@ const Anthropic = require('@anthropic-ai/sdk');
 const PRICE_INPUT_PER_M  = 0.80;   // $ per million input tokens
 const PRICE_OUTPUT_PER_M = 4.00;   // $ per million output tokens
 
+// ── Industry → Indeed job title mapping ──────────────────────────────────────
+const INDUSTRY_JOB_TITLES = {
+  'Pest Control':            'pest control technician',
+  'Telecom & Cable':         'cable technician',
+  'HVAC':                    'HVAC technician',
+  'Plumbing':                'plumber',
+  'Electrical Contractors':  'electrician',
+  'Landscaping & Lawn Care': 'lawn care technician',
+  'Delivery & Courier':      'delivery driver',
+  'Construction':            'construction foreman',
+  'Utilities':               'utility technician',
+  'Security & Alarm':        'alarm technician',
+  'Medical & Home Health':   'home health aide',
+  'Government & Municipal':  'public works technician',
+  'Vending & Distribution':  'route driver',
+};
+
+function getJobTitle(industry) {
+  return INDUSTRY_JOB_TITLES[industry] || `${industry.toLowerCase()} technician`;
+}
+
 // ── Address normalization for fuzzy duplicate detection ──────────────────────
 function normalizeAddress(addr) {
   if (!addr) return '';
@@ -94,10 +115,9 @@ async function reverseGeocode(lat, lng) {
   }
 }
 
-// Run a batch of Google searches via Serper and return compact result objects
+// Run a batch of Google searches via Serper in parallel
 async function runSerperSearches(queries, serperKey) {
-  const results = [];
-  for (const query of queries) {
+  return Promise.all(queries.map(async query => {
     try {
       const resp = await fetch('https://google.serper.dev/search', {
         method:  'POST',
@@ -105,12 +125,12 @@ async function runSerperSearches(queries, serperKey) {
         body:    JSON.stringify({ q: query, num: 10, gl: 'us' }),
       });
       const data = await resp.json();
-      results.push({ query, items: (data.organic || []).slice(0, 8) });
+      return { query, items: (data.organic || []).slice(0, 8) };
     } catch (e) {
       console.error('[serper] query failed:', query, e.message);
+      return { query, items: [] };
     }
-  }
-  return results;
+  }));
 }
 
 // Format Serper results into a compact text block for Claude's context
@@ -435,20 +455,30 @@ router.post('/search', auth, async (req, res) => {
     const industryList = industries.length ? industries.join(', ') : 'all industries';
 
     // ── 5b. Run Serper pre-searches ───────────────────────────────────────────
-    const searchIndustry = industries.length <= 2
+    const locationStr   = shopCity ? `${shopCity} ${stateList}` : stateList;
+    const searchIndustry = industries.length <= 3
       ? industries.join(' ')
-      : industries.slice(0, 2).join(' and ');
-    const locationStr = shopCity ? `${shopCity} ${stateList}` : stateList;
+      : industries.slice(0, 3).join(', ');
 
-    const serperQueries = serperKey ? [
-      `${searchIndustry} ${locationStr} fleet trucks company`,
-      `${searchIndustry} ${locationStr} FMCSA motor carrier registered`,
-      `${searchIndustry} ${locationStr} site:indeed.com technician "company vehicle"`,
-      `${searchIndustry} ${locationStr} site:linkedin.com company`,
-      `${searchIndustry} ${locationStr} fleet vehicle maintenance`,
+    // Load custom fleet signal keywords (shop-configurable, default "company vehicle")
+    const kwRow = await pool.query(`SELECT value FROM config_settings WHERE key = 'ff_search_keywords'`);
+    const customKeywords = (kwRow.rows[0]?.value || 'company vehicle')
+      .split(',').map(k => k.trim()).filter(Boolean);
+    const keywordFilter = customKeywords.map(k => `"${k}"`).join(' OR ');
+
+    // 4 base searches + 1 Indeed search per selected industry (all run in parallel)
+    const baseQueries = serperKey ? [
+      `${searchIndustry} ${locationStr} company`,
+      `FMCSA ${searchIndustry} ${stateList} motor carrier`,
+      `${searchIndustry} ${locationStr} site:linkedin.com`,
       `${searchIndustry} ${stateList} site:yellowpages.com`,
     ] : [];
 
+    const indeedQueries = serperKey
+      ? industries.map(ind => `site:indeed.com "${getJobTitle(ind)}" ${locationStr} ${keywordFilter}`)
+      : [];
+
+    const serperQueries = [...baseQueries, ...indeedQueries];
     const serperResults = serperKey ? await runSerperSearches(serperQueries, serperKey) : [];
     const serperContext = formatSerperResults(serperResults);
     const serperCost    = serperResults.length * 0.001;
@@ -466,10 +496,13 @@ Fleet size: ${fleetSizeDesc}
 
 ${serperContext
   ? `${serperContext}
-The pre-searched results above were gathered from Google, FMCSA, LinkedIn, job boards, and Yellow Pages. Use them as your starting point.
+The pre-searched results above came from Google, FMCSA, LinkedIn, Yellow Pages, and Indeed (one search per industry using the correct technician job title + fleet signal keywords).
 
-Now use your web_search tool to do 1-2 additional searches for anything you think is missing — for example specific company details, businesses with physical presence but weak web presence, additional registry sources, or anything the pre-search may have missed. Focus on finding real local companies that operate fleets in the area, including smaller owner-operated businesses that may not rank well on Google.`
-  : `Run 2-3 targeted web searches across Google, FMCSA (site:safer.fmcsa.dot.gov), LinkedIn, and Indeed. On Indeed, search for technician job postings in the industry — most fleet businesses post jobs like "HVAC Technician" or "Pest Control Technician" with phrases like "company vehicle provided" or "valid driver's license required" buried in the description, not "driver needed." A company hiring multiple technicians almost certainly runs a fleet of light duty trucks or vans. Look for businesses with physical operations in the area, including smaller companies that may not have a strong web presence.`
+These exact queries were already run — do NOT repeat them:
+${serperQueries.map(q => `  • ${q}`).join('\n')}
+
+Use your web_search tool for 1-2 additional searches covering angles NOT in the list above. Good follow-up angles: specific company websites, BBB listings, state contractor license registries, Yelp, or any industry-specific directories you know about. Focus on businesses with physical presence in the area that may not rank well on Google.`
+  : `Run 2-3 targeted web searches. On Indeed, search for the technician job title for each industry — fleet companies post jobs like "Pest Control Technician" or "HVAC Technician" with "company vehicle" mentioned in the description, not "driver wanted." Also check Google, FMCSA (site:safer.fmcsa.dot.gov), LinkedIn, and Yellow Pages. A company hiring multiple technicians almost certainly runs a fleet of light duty trucks or vans.`
 }
 
 Skip these (already in CRM): ${existingNames.slice(0, 30).join(', ')}
