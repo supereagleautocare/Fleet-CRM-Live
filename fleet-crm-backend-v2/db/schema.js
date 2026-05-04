@@ -288,6 +288,37 @@ async function initDb() {
         last_notes   TEXT,
         UNIQUE(source_type, entity_id)
       );
+
+      CREATE TABLE IF NOT EXISTS fleet_finder_dismissed (
+        id           SERIAL PRIMARY KEY,
+        name         TEXT NOT NULL,
+        address      TEXT,
+        phone        TEXT,
+        city         TEXT,
+        state        TEXT,
+        dismissed_at TEXT NOT NULL DEFAULT (to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"'))
+      );
+
+      CREATE TABLE IF NOT EXISTS fleet_finder_seen (
+        id         SERIAL PRIMARY KEY,
+        name       TEXT NOT NULL,
+        address    TEXT,
+        city       TEXT,
+        state      TEXT,
+        expires_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS fleet_finder_cost_log (
+        id            SERIAL PRIMARY KEY,
+        search_label  TEXT,
+        industries    TEXT,
+        radius_miles  REAL,
+        result_count  INTEGER,
+        input_tokens  INTEGER,
+        output_tokens INTEGER,
+        cost_usd      REAL,
+        ran_at        TEXT NOT NULL DEFAULT (to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"'))
+      );
     `);
 
     // ─── Seed default settings ──────────────────────────────────────────────
@@ -315,7 +346,13 @@ async function initDb() {
         ('twilio_to_phone',     '',      'SMS Alert Phone Number'),
         ('biz_hours_start',     '7',     'Business Hours Start'),
         ('biz_hours_end',       '19',    'Business Hours End'),
-        ('floor_poll_seconds',  '60',    'Shop Floor Refresh Seconds')
+        ('floor_poll_seconds',  '60',    'Shop Floor Refresh Seconds'),
+        ('ff_monthly_budget',   '50',    'Fleet Finder Monthly Budget ($)'),
+        ('ff_default_radius',   '25',    'Fleet Finder Default Search Radius (miles)'),
+        ('ff_industries',       '["Pest Control","Telecom & Cable","HVAC","Plumbing","Electrical Contractors","Landscaping & Lawn Care","Delivery & Courier","Construction","Utilities","Security & Alarm","Medical & Home Health","Government & Municipal","Vending & Distribution","Cleaning & Janitorial","Fire Protection"]', 'Fleet Finder Enabled Industries'),
+        ('ff_custom_industries','[]',    'Fleet Finder Custom Industries'),
+        ('ff_vehicle_types',    '["passenger","light_duty","cargo_van","medium_duty","heavy_duty","diesel"]', 'Fleet Finder Vehicle Types'),
+        ('ff_anthropic_key',    '',      'Fleet Finder Anthropic API Key')
       ON CONFLICT (key) DO NOTHING;
     `);
 

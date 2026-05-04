@@ -176,6 +176,18 @@ export const api = {
   cancelVisit:     (id)            => req('DELETE',`/visits/${id}`),
   cancelVisitRoute:(id, body)      => req('POST',  `/visits/${id}/cancel`, body),
 
+  // ── Fleet Finder ────────────────────────────────────
+  ffSettings:        ()            => req('GET',  '/fleetfinder/settings'),
+  ffUpdateSettings:  (data)        => req('PUT',  '/fleetfinder/settings', data),
+  ffBudget:          ()            => req('GET',  '/fleetfinder/budget'),
+  ffCostLog:         ()            => req('GET',  '/fleetfinder/cost-log'),
+  ffEstimate:        (data)        => req('POST', '/fleetfinder/estimate', data),
+  ffSearch:          (data)        => req('POST', '/fleetfinder/search', data),
+  ffDismissed:       ()            => req('GET',  '/fleetfinder/dismissed'),
+  ffDismiss:         (data)        => req('POST', '/fleetfinder/dismiss', data),
+  ffUndismiss:       (id)          => req('DELETE',`/fleetfinder/dismiss/${id}`),
+  ffCheckDuplicate:  (data)        => req('POST', '/fleetfinder/check-duplicate', data),
+
   // ── Config ──────────────────────────────────────────
   rules:           ()              => req('GET',  '/config/rules'),
   createRule:      (data)          => req('POST', '/config/rules', data),

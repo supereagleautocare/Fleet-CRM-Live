@@ -52,8 +52,9 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 // ─── API Routes ───────────────────────────────────────────────────────────────
-app.use('/api/auth',       require('./routes/auth'));
-app.use('/api/companies',  require('./routes/companies'));
+app.use('/api/auth',        require('./routes/auth'));
+app.use('/api/fleetfinder', require('./routes/fleetfinder'));
+app.use('/api/companies',   require('./routes/companies'));
 
 app.use('/api/followups',  require('./routes/followups'));
 app.use('/api/visits',     require('./routes/visits'));

@@ -54,8 +54,11 @@ export default function Sidebar({ mobileOpen = false, setMobileOpen = () => {} }
       <div className="sidebar-section-label">Database</div>
       <nav className="sidebar-nav">
         <NavLink to="/companies" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
-  onClick={() => window.dispatchEvent(new CustomEvent('companies-reset'))}>
-  <span className="icon">🏢</span> Companies
+          onClick={() => window.dispatchEvent(new CustomEvent('companies-reset'))}>
+          <span className="icon">🏢</span> Companies
+        </NavLink>
+        <NavLink to="/fleet-finder" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
+          <span className="icon">🔍</span> Find Companies
         </NavLink>
       </nav>
 

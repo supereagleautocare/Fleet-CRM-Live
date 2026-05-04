@@ -14,6 +14,7 @@ import QuickLog from './pages/QuickLog.jsx';
 import ScriptPopup from './pages/ScriptPopup.jsx';
 import ActiveFleet from './pages/ActiveFleet.jsx';
 import ResetPassword from './pages/ResetPassword.jsx';
+import FleetFinder from './pages/FleetFinder.jsx';
 
 export const AppCtx = createContext(null);
 export const useApp = () => useContext(AppCtx);
@@ -155,7 +156,8 @@ export default function App() {
                 <Route path="/mail-queue"   element={<MailQueue />} />
                 <Route path="/email-queue"  element={<EmailQueue />} />
                 <Route path="/visit-queue"  element={<VisitQueue />} />
-                <Route path="/companies"    element={<Companies />} />
+                <Route path="/companies"     element={<Companies />} />
+                <Route path="/fleet-finder" element={<FleetFinder />} />
                 <Route path="/quicklog"     element={<QuickLog />} />
                 <Route path="/settings"     element={<Settings />} />
                 <Route path="/script-popup" element={<ScriptPopup />} />

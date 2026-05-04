@@ -413,6 +413,188 @@ function ApiLogTab() {
   );
 }
 
+function FleetFinderSettings({ showToast }) {
+  const [ffSettings, setFfSettings] = useState(null);
+  const [dismissed,  setDismissed]  = useState([]);
+  const [saving,     setSaving]     = useState(false);
+  const [newIndustry, setNewIndustry] = useState('');
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const [s, d] = await Promise.all([api.ffSettings(), api.ffDismissed()]);
+        setFfSettings(s);
+        setDismissed(d);
+      } catch (e) { showToast(e.message, 'error'); }
+    }
+    load();
+  }, []);
+
+  async function save(updates) {
+    setSaving(true);
+    try {
+      await api.ffUpdateSettings(updates);
+      setFfSettings(prev => ({ ...prev, ...updates }));
+      showToast('Fleet Finder settings saved');
+    } catch (e) { showToast(e.message, 'error'); }
+    finally { setSaving(false); }
+  }
+
+  async function addCustomIndustry() {
+    const name = newIndustry.trim();
+    if (!name) return;
+    const current = ffSettings?.ff_custom_industries || [];
+    if (current.includes(name)) return;
+    const updated = [...current, name];
+    await save({ ff_custom_industries: updated });
+    setNewIndustry('');
+  }
+
+  async function removeCustomIndustry(ind) {
+    const current = ffSettings?.ff_custom_industries || [];
+    await save({ ff_custom_industries: current.filter(i => i !== ind) });
+  }
+
+  async function undismiss(id) {
+    try {
+      await api.ffUndismiss(id);
+      setDismissed(prev => prev.filter(d => d.id !== id));
+      showToast('Company restored to search results');
+    } catch (e) { showToast(e.message, 'error'); }
+  }
+
+  if (!ffSettings) return <div className="loading-wrap"><div className="spinner"/></div>;
+
+  const defaultIndustries = ffSettings.ff_industries || [];
+  const customIndustries  = ffSettings.ff_custom_industries || [];
+
+  return (
+    <div style={{ maxWidth: 700, display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+      {/* API Key */}
+      <div className="table-card" style={{ padding: '18px 22px' }}>
+        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>Anthropic API Key</div>
+        <div style={{ fontSize: 12, color: 'var(--gray-400)', marginBottom: 12 }}>
+          Required to run searches. Get your key at console.anthropic.com → API Keys.
+        </div>
+        <input
+          type="password"
+          defaultValue={ffSettings.ff_anthropic_key || ''}
+          placeholder="sk-ant-..."
+          onBlur={e => save({ ff_anthropic_key: e.target.value.trim() })}
+          style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--gray-200)', borderRadius: 7, fontSize: 13, fontFamily: 'var(--font-mono)' }}
+        />
+        {ffSettings.ff_anthropic_key && (
+          <div style={{ fontSize: 11, color: 'var(--green-600)', marginTop: 5 }}>✓ Key saved</div>
+        )}
+      </div>
+
+      {/* Budget + Radius */}
+      <div className="table-card" style={{ padding: '18px 22px' }}>
+        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 16 }}>Budget & Search Defaults</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <div>
+            <label style={{ fontSize: 12, color: 'var(--gray-500)', display: 'block', marginBottom: 5 }}>Monthly Budget Cap ($)</label>
+            <input
+              type="number" min={1} max={500}
+              defaultValue={ffSettings.ff_monthly_budget || 50}
+              onBlur={e => save({ ff_monthly_budget: e.target.value })}
+              style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--gray-200)', borderRadius: 7, fontSize: 13 }}
+            />
+            <div style={{ fontSize: 11, color: 'var(--gray-400)', marginTop: 4 }}>
+              Hard stop — searches lock when this amount is reached each month.
+            </div>
+          </div>
+          <div>
+            <label style={{ fontSize: 12, color: 'var(--gray-500)', display: 'block', marginBottom: 5 }}>Default Search Radius (miles)</label>
+            <input
+              type="number" min={5} max={100}
+              defaultValue={ffSettings.ff_default_radius || 25}
+              onBlur={e => save({ ff_default_radius: e.target.value })}
+              style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--gray-200)', borderRadius: 7, fontSize: 13 }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Default Industries */}
+      <div className="table-card" style={{ padding: '18px 22px' }}>
+        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>Industry Categories</div>
+        <div style={{ fontSize: 12, color: 'var(--gray-400)', marginBottom: 14 }}>
+          These are the pre-built fleet industry categories. Add custom ones below.
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
+          {defaultIndustries.map(ind => (
+            <span key={ind} style={{
+              padding: '4px 10px', borderRadius: 20, fontSize: 11, fontWeight: 600,
+              background: 'var(--blue-50)', border: '1px solid var(--blue-100)', color: 'var(--navy-700)',
+            }}>{ind}</span>
+          ))}
+        </div>
+
+        <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Custom Industries</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+          {customIndustries.length === 0 && (
+            <span style={{ fontSize: 12, color: 'var(--gray-400)' }}>None added yet.</span>
+          )}
+          {customIndustries.map(ind => (
+            <span key={ind} style={{
+              padding: '4px 10px', borderRadius: 20, fontSize: 11, fontWeight: 600,
+              background: 'var(--yellow-50)', border: '1px solid var(--yellow-100)', color: '#92400e',
+              display: 'flex', alignItems: 'center', gap: 6,
+            }}>
+              {ind}
+              <button onClick={() => removeCustomIndustry(ind)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#92400e', fontSize: 12, padding: 0, lineHeight: 1 }}>✕</button>
+            </span>
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input
+            type="text" placeholder="Add custom industry..."
+            value={newIndustry}
+            onChange={e => setNewIndustry(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && addCustomIndustry()}
+            style={{ flex: 1, padding: '7px 10px', border: '1px solid var(--gray-200)', borderRadius: 7, fontSize: 12 }}
+          />
+          <button onClick={addCustomIndustry} className="btn btn-navy btn-sm">Add</button>
+        </div>
+      </div>
+
+      {/* Dismissed Companies */}
+      <div className="table-card" style={{ padding: '18px 22px' }}>
+        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>Dismissed Companies</div>
+        <div style={{ fontSize: 12, color: 'var(--gray-400)', marginBottom: 14 }}>
+          Companies you marked "Never Show Again." Un-dismiss to let them appear in future searches.
+        </div>
+        {dismissed.length === 0 ? (
+          <div style={{ fontSize: 12, color: 'var(--gray-400)' }}>No dismissed companies.</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {dismissed.map(d => (
+              <div key={d.id} style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '8px 12px', background: 'var(--gray-50)', border: '1px solid var(--gray-200)', borderRadius: 7,
+              }}>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>{d.name}</div>
+                  <div style={{ fontSize: 11, color: 'var(--gray-400)' }}>
+                    {[d.city, d.state].filter(Boolean).join(', ')}
+                    {d.dismissed_at && <span style={{ marginLeft: 8 }}>Dismissed {new Date(d.dismissed_at).toLocaleDateString()}</span>}
+                  </div>
+                </div>
+                <button onClick={() => undismiss(d.id)} style={{
+                  padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600,
+                  border: '1px solid var(--gray-200)', background: 'white', cursor: 'pointer', color: 'var(--blue-500)',
+                }}>Restore</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function Settings() {
   const [rules, setRules]     = useState([]);
   const [settings, setSettings] = useState({});
@@ -518,12 +700,13 @@ export default function Settings() {
   }
 
   const tabs = [
-    { id:'scripts',   label:'📋 Scripts' },
-    { id:'scorecard', label:'🏆 Scorecard' },
-    { id:'followups', label:'📅 Follow-Ups' },
-    { id:'settings',  label:'🔧 System' },
-    { id:'team',      label:'👥 Team' },
-    { id:'apilog',    label:'🔌 API Log' },
+    { id:'scripts',     label:'📋 Scripts' },
+    { id:'scorecard',   label:'🏆 Scorecard' },
+    { id:'followups',   label:'📅 Follow-Ups' },
+    { id:'settings',    label:'🔧 System' },
+    { id:'fleetfinder', label:'🔍 Fleet Finder' },
+    { id:'team',        label:'👥 Team' },
+    { id:'apilog',      label:'🔌 API Log' },
   ];
 
   const qOrder  = ['call','mail','email','visit'];
@@ -708,12 +891,12 @@ export default function Settings() {
                   </div>
                 </div>
                 {Object.entries(settings)
-  .filter(([k])=>!['shop_address','shop_lat','shop_lng','fuel_price','mpg','mail_followup_days','email_followup_days','visit_delay_days','tekmetric_token','tekmetric_shop_id','tekmetric_env','tekmetric_poll_interval','tekmetric_oil_interval','carfax_api_key','carfax_enabled','biz_hours_start','biz_hours_end','floor_poll_seconds','twilio_to_phone','scorecard_enabled'].includes(k))
+  .filter(([k])=>!['shop_address','shop_lat','shop_lng','fuel_price','mpg','mail_followup_days','email_followup_days','visit_delay_days','tekmetric_token','tekmetric_shop_id','tekmetric_env','tekmetric_poll_interval','tekmetric_oil_interval','carfax_api_key','carfax_enabled','biz_hours_start','biz_hours_end','floor_poll_seconds','twilio_to_phone','scorecard_enabled','ff_monthly_budget','ff_default_radius','ff_industries','ff_custom_industries','ff_vehicle_types','ff_anthropic_key'].includes(k))
   .length > 0 && (
   <div className="table-card" style={{ padding:'20px 24px' }}>
     <div style={{ fontWeight:700, fontSize:15, marginBottom:16 }}>⚙️ Other Settings</div>
     {Object.entries(settings)
-      .filter(([k])=>!['shop_address','shop_lat','shop_lng','fuel_price','mpg','mail_followup_days','email_followup_days','visit_delay_days','tekmetric_token','tekmetric_shop_id','tekmetric_env','tekmetric_poll_interval','tekmetric_oil_interval','carfax_api_key','carfax_enabled','biz_hours_start','biz_hours_end','floor_poll_seconds','twilio_to_phone','scorecard_enabled'].includes(k))
+      .filter(([k])=>!['shop_address','shop_lat','shop_lng','fuel_price','mpg','mail_followup_days','email_followup_days','visit_delay_days','tekmetric_token','tekmetric_shop_id','tekmetric_env','tekmetric_poll_interval','tekmetric_oil_interval','carfax_api_key','carfax_enabled','biz_hours_start','biz_hours_end','floor_poll_seconds','twilio_to_phone','scorecard_enabled','ff_monthly_budget','ff_default_radius','ff_industries','ff_custom_industries','ff_vehicle_types','ff_anthropic_key'].includes(k))
                       .map(([key,item])=>(
                       <div key={key} style={{ paddingBottom:16, marginBottom:16, borderBottom:'1px solid var(--gray-100)' }}>
                         <div style={{ fontWeight:600, fontSize:13, marginBottom:4 }}>{item.label||key}</div>
@@ -784,6 +967,9 @@ export default function Settings() {
             )}
             {/* ── API LOG ── */}
             {tab === 'apilog' && <ApiLogTab />}
+
+            {/* ── FLEET FINDER ── */}
+            {tab === 'fleetfinder' && <FleetFinderSettings showToast={showToast} />}
           </>
         )}
       </div>
