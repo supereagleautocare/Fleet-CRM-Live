@@ -417,7 +417,6 @@ function FleetFinderSettings({ showToast }) {
   const [ffSettings, setFfSettings] = useState(null);
   const [dismissed,  setDismissed]  = useState([]);
   const [saving,     setSaving]     = useState(false);
-  const [newIndustry, setNewIndustry] = useState('');
 
   useEffect(() => {
     async function load() {
@@ -440,21 +439,6 @@ function FleetFinderSettings({ showToast }) {
     finally { setSaving(false); }
   }
 
-  async function addCustomIndustry() {
-    const name = newIndustry.trim();
-    if (!name) return;
-    const current = ffSettings?.ff_custom_industries || [];
-    if (current.includes(name)) return;
-    const updated = [...current, name];
-    await save({ ff_custom_industries: updated });
-    setNewIndustry('');
-  }
-
-  async function removeCustomIndustry(ind) {
-    const current = ffSettings?.ff_custom_industries || [];
-    await save({ ff_custom_industries: current.filter(i => i !== ind) });
-  }
-
   async function undismiss(id) {
     try {
       await api.ffUndismiss(id);
@@ -464,9 +448,6 @@ function FleetFinderSettings({ showToast }) {
   }
 
   if (!ffSettings) return <div className="loading-wrap"><div className="spinner"/></div>;
-
-  const defaultIndustries = ffSettings.ff_industries || [];
-  const customIndustries  = ffSettings.ff_custom_industries || [];
 
   return (
     <div style={{ maxWidth: 700, display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -514,49 +495,6 @@ function FleetFinderSettings({ showToast }) {
               style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--gray-200)', borderRadius: 7, fontSize: 13 }}
             />
           </div>
-        </div>
-      </div>
-
-      {/* Default Industries */}
-      <div className="table-card" style={{ padding: '18px 22px' }}>
-        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>Industry Categories</div>
-        <div style={{ fontSize: 12, color: 'var(--gray-400)', marginBottom: 14 }}>
-          These are the pre-built fleet industry categories. Add custom ones below.
-        </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
-          {defaultIndustries.map(ind => (
-            <span key={ind} style={{
-              padding: '4px 10px', borderRadius: 20, fontSize: 11, fontWeight: 600,
-              background: 'var(--blue-50)', border: '1px solid var(--blue-100)', color: 'var(--navy-700)',
-            }}>{ind}</span>
-          ))}
-        </div>
-
-        <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Custom Industries</div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
-          {customIndustries.length === 0 && (
-            <span style={{ fontSize: 12, color: 'var(--gray-400)' }}>None added yet.</span>
-          )}
-          {customIndustries.map(ind => (
-            <span key={ind} style={{
-              padding: '4px 10px', borderRadius: 20, fontSize: 11, fontWeight: 600,
-              background: 'var(--yellow-50)', border: '1px solid var(--yellow-100)', color: '#92400e',
-              display: 'flex', alignItems: 'center', gap: 6,
-            }}>
-              {ind}
-              <button onClick={() => removeCustomIndustry(ind)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#92400e', fontSize: 12, padding: 0, lineHeight: 1 }}>✕</button>
-            </span>
-          ))}
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <input
-            type="text" placeholder="Add custom industry..."
-            value={newIndustry}
-            onChange={e => setNewIndustry(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && addCustomIndustry()}
-            style={{ flex: 1, padding: '7px 10px', border: '1px solid var(--gray-200)', borderRadius: 7, fontSize: 12 }}
-          />
-          <button onClick={addCustomIndustry} className="btn btn-navy btn-sm">Add</button>
         </div>
       </div>
 

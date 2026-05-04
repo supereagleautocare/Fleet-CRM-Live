@@ -357,12 +357,13 @@ router.post('/search', auth, async (req, res) => {
     const stateList = searchStates.join(', ');
     const vehicleDesc = vehicle_types.length
       ? vehicle_types.map(v => ({
-          passenger:   'Passenger cars/sedans',
-          light_duty:  'Light duty trucks (F-150 through F-350, RAM 1500-3500)',
-          cargo_van:   'Cargo/Sprinter vans',
-          medium_duty: 'Medium duty trucks (F-450, F-550, F-650, box trucks, step vans)',
-          heavy_duty:  'Heavy duty diesel trucks (F-750+, Class 7-8 semis, dump trucks)',
-          diesel:      'Diesel-powered vehicles of any class',
+          passenger:          'Passenger cars/sedans (gas)',
+          light_duty_gas:     'Light duty gas trucks (F-150 through F-350 gas, RAM 1500-3500 gas)',
+          light_duty_diesel:  'Light duty diesel trucks (F-250/F-350 diesel, RAM 2500/3500 diesel, Sprinter diesel)',
+          cargo_van:          'Cargo/Sprinter vans',
+          medium_duty:        'Medium duty gas trucks (F-450, F-550, F-650, box trucks, step vans — gas)',
+          medium_duty_diesel: 'Medium duty diesel trucks (F-450/F-550/F-650 diesel, medium box trucks)',
+          heavy_duty_diesel:  'Heavy duty diesel trucks (F-750+, Class 7-8 semis, dump trucks, large construction equipment)',
         }[v] || v)).join('; ')
       : 'any vehicle type';
 
@@ -411,9 +412,12 @@ FLEET SIGNALS to look for:
 - Multiple employee reviews mentioning different techs visiting
 
 VEHICLE TYPE DETERMINATION:
-- Check FMCSA registration for vehicle class
-- Job postings: "CDL-A" = heavy duty, no CDL = light/medium
-- Company type: pest control/telecom = vans/light trucks, construction = varies widely, distribution = medium/heavy
+- Light duty gas: F-150/250/350 gas, RAM 1500/2500/3500 gas, no CDL required
+- Light duty diesel: F-250/350 diesel, RAM 2500/3500 diesel — job postings may mention diesel experience
+- Medium duty: F-450 and above, box trucks, step vans — may require CDL depending on weight
+- Heavy duty diesel: F-750+, Class 7-8, always requires CDL-A
+- Check FMCSA registration vehicle class for confirmed data
+- Job postings: "CDL-A" = heavy duty diesel confirmed, "diesel mechanic" or "diesel" = diesel variant
 
 IMPORTANT: Include BOTH public-facing consumer businesses AND B2B/contract companies that don't have Google Business pages but own commercial buildings and serve contracts.
 
