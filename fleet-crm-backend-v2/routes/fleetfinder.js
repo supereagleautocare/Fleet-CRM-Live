@@ -504,47 +504,75 @@ router.post('/search', auth, async (req, res) => {
 
     // ── Phase 1: Research (web searches, no JSON pressure) ────────────────────
     const researchSystem = `You are a fleet vehicle research agent for an auto repair shop in ${locationStr}.
-Your only job right now is to SEARCH and GATHER information. Do not output JSON yet.
+Your job right now: SEARCH and GATHER information. Do not output JSON yet.
 
-HOW TO CLASSIFY INDUSTRIES (decide for each one):
-• CONSUMER-FACING (techs drive to customers — high fleet likelihood): pest control, HVAC, plumbing, landscaping, pool service, roofing, electrical, cleaning, alarm install, fire protection.
-  → Search: Google Maps, Yelp, BBB, then Indeed for job postings.
-• CONTRACT-DRIVEN (win contracts, operate from yards — need deeper digging): telecom subs, fiber crews, utility contractors, construction subs, government service.
-  → Search: LinkedIn people search filtered to ${shopCity}, FMCSA (site:safer.fmcsa.dot.gov), SAM.gov via Google, state contractor registries.
-• When in doubt about which type — use BOTH strategies.
+══ BEFORE EACH SEARCH: DECIDE IF THE SOURCE IS WORTH IT ════════════════════
+You have limited search credits. Before calling web_search, ask yourself:
+"Will this source actually have data for this industry?"
 
-LEADING SIGNALS to look for (strongest evidence of a real local fleet):
-1. LinkedIn employees in ${shopCity} with FIELD titles (technician, installer, driver, route tech, crew lead, foreman, field supervisor). Each field employee = one vehicle minimum. Search LinkedIn People filtered by company AND city.
-2. A physical office, warehouse, or service yard confirmed in the local area.
+FMCSA (site:safer.fmcsa.dot.gov):
+  → Only useful for companies that haul freight across state lines or operate heavy commercial vehicles requiring a DOT number.
+  → Ask: "Would a ${industryList} company near ${shopCity} need a federal motor carrier number?"
+  → If the answer is probably NO (local pest control, local HVAC, local landscaping, local cleaning) — skip FMCSA entirely and use that search credit on LinkedIn or Indeed instead.
+  → If the answer is maybe YES (construction equipment haulers, waste haulers, bulk material delivery, large utility crews) — then check FMCSA.
 
-SUPPORTING SIGNALS: job postings mentioning "company vehicle provided" or "take-home truck" · FMCSA DOT record · "fleet manager" job posting · "route technician" · 24/7 service with multiple techs listed.
+RULE: Let the industry tell you which sources make sense. There is no fixed list. Reason it out each time.
 
-IMPORTANT RESEARCH RULES:
-• National chains are valid targets — research their LOCAL ${shopCity} branch specifically (local address, local employees, estimated local fleet — NOT their national fleet).
-• Do NOT use FMCSA for purely local consumer-facing industries (pest control, landscaping, HVAC) — they don't register interstate. Save those search credits for contract-driven or heavy equipment industries.
-• Search LinkedIn People with company name + city filter to find local field employees — don't just look at the company overview page.
-• Include any company that likely operates 2+ vehicles locally, even if you can't confirm exact count.`;
+══ FINDING COMPANIES ════════════════════════════════════════════════════════
+• Search Google Maps / Yelp for "[industry] ${shopCity}" to find 5-8 companies fast.
+• For each consumer-facing industry (techs drive to customer sites): Google Maps → BBB → Indeed job postings.
+• For each contract-driven industry (wins government/utility contracts): LinkedIn company search → SAM.gov via Google → state contractor license registry.
 
-    const researchPrompt = `Research fleet businesses in ${locationDesc} (states: ${stateList}).
+NATIONAL CHAINS — fully valid leads, handle them like this:
+  1. Confirm they have a LOCAL ${shopCity} branch: search "[chain name] ${shopCity}" on Google Maps.
+  2. Find their LOCAL employees (next section below).
+  3. Estimate LOCAL fleet for ${shopCity} only — not their national total.
+  A chain with 3,000 trucks nationally but 15 in ${shopCity} is a 15-truck lead for this shop.
+
+══ LINKEDIN EMPLOYEE SEARCH — most important signal ════════════════════════
+For every promising company, run this exact search to find LOCAL field employees:
+  Search Google: site:linkedin.com/in "[company name]" "${shopCity}"
+  This surfaces individual employee profile pages, not just the company page.
+
+• Count ONLY employees whose listed location is ${shopCity} or a city within the search radius.
+• Classify each title found:
+  FIELD (= 1 vehicle each): technician, installer, driver, route tech, service tech, crew lead, foreman, field supervisor, cable tech, fiber tech, pest control tech, HVAC tech, plumber, electrician, groundsman
+  OFFICE (no vehicle): HR, recruiter, admin, accountant, dispatcher, inside sales, marketing
+• Report: "Found X employees at [company] in ${shopCity}: Y field roles ([titles]). Minimum Y vehicles."
+• 3+ local field employees on LinkedIn = strong fleet signal even without other evidence.
+
+══ WHAT TO INCLUDE ═════════════════════════════════════════════════════════
+• Any company with confirmed or likely local vehicles — even 2 trucks counts.
+• National chains with a confirmed local branch.
+• Companies where job postings mention "company vehicle", "take-home truck", "route technician", "stocked service van".
+• Do NOT drop a company just because you couldn't confirm exact fleet size — note uncertainty and move on.`;
+
+    const researchPrompt = `Find fleet businesses in ${locationDesc} (states: ${stateList}).
 
 Target area: ${locationStr}
-Industries to research: ${industryList}
+Industries: ${industryList}
 Vehicle types this shop services: ${vehicleDesc}
-Fleet size preference (not a hard cutoff): ${fleetSizeDesc}
-Fleet signal keywords: "${customKeywords.join('", "')}"
+Fleet size preference (soft preference only — include companies close to this range): ${fleetSizeDesc}
+Fleet signal keywords to watch for: "${customKeywords.join('", "')}"
 
-Run at least 4 web searches covering different sources and companies.
-For each company you find, note:
-- Name, industry, local address if found
-- Any LinkedIn field employees in ${shopCity}
-- Any job postings mentioning company vehicles
-- Whether it's a national chain or local independent
-- Your confidence that they run a local fleet here
+Run these 5 searches in order:
+1. Google Maps: "[industry] ${shopCity}" — find 5-8 local companies
+2. Indeed: "[industry] ${shopCity} company vehicle" — find job postings with fleet signals
+3. Google: site:linkedin.com/in "[most promising company from step 1]" "${shopCity}" — count field employees
+4. Google: site:linkedin.com/in "[second company]" "${shopCity}" — count field employees
+5. Use your best judgment for #5: another LinkedIn search, BBB, Google Maps for a different industry, or confirm a national chain's local branch
 
-Already in CRM (still research these if found — just note "already in CRM"):
+For each company, report:
+• Name, industry, local address (or "no local address found")
+• LinkedIn field employees found in ${shopCity} and their titles
+• Job posting signals (company vehicle, routes, take-home truck, fleet manager)
+• National chain or local independent
+• Your confidence they run local vehicles here and why
+
+Already in CRM (research anyway — just note "already in CRM"):
 ${existingNames.slice(0, 40).join(', ')}
 
-Search now. Summarize what you found for each company.`;
+Begin searching now.`;
 
     const researchMessages = [{ role: 'user', content: researchPrompt }];
     let continueLoop = true;
