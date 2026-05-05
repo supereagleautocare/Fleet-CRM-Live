@@ -181,36 +181,112 @@ function FleetFinderMap({ shopLat, shopLng, radiusMiles, mode, onPolygonChange, 
   return <div ref={mapRef} style={{ width: '100%', height: '100%' }} />;
 }
 
-// ── Duplicate modal ────────────────────────────────────────────────────────────
-function DuplicateModal({ company, matches, onDecision, onCancel }) {
-  const opts = [
-    { d: 'duplicate',      label: 'Skip — already in CRM',                        border:'#e5e7eb', bg:'#f9fafb' },
-    { d: 'new',            label: 'Import as a new separate company',              border:'#1a3358', bg:'#eef2ff' },
-    { d: 'multi_location', label: 'Import as a new location of the matched chain', border:'#0369a1', bg:'#f0f9ff' },
-  ];
+// ── Shared modal shell ─────────────────────────────────────────────────────────
+function ModalShell({ title, subtitle, children, onCancel }) {
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.5)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
-      <div style={{ background:'white', borderRadius:16, padding:28, maxWidth:460, width:'100%', boxShadow:'0 24px 64px rgba(0,0,0,.22)' }}>
-        <div style={{ fontWeight:800, fontSize:17, marginBottom:6, color:'#111827' }}>Possible Duplicate</div>
-        <div style={{ fontSize:13, color:'#6b7280', marginBottom:16 }}>
-          <b>{company.name}</b> may already be in your CRM:
-          {matches.map(m => (
-            <div key={m.id} style={{ marginTop:8, padding:'10px 14px', background:'#f9fafb', borderRadius:10, border:'1px solid #e5e7eb', fontSize:12 }}>
-              <b>{m.name}</b> — {m.city}, {m.state} <span style={{ color:'#9ca3af' }}>({m.match_score}% match)</span>
-            </div>
-          ))}
-        </div>
-        <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-          {opts.map(({ d, label, border, bg }) => (
-            <button key={d} onClick={() => onDecision(d)} style={{
-              padding:'11px 18px', borderRadius:10, border:`2px solid ${border}`,
-              background:bg, fontSize:13, fontWeight:600, cursor:'pointer', textAlign:'left', color:'#111827',
-            }}>{label}</button>
-          ))}
-        </div>
+      <div style={{ background:'white', borderRadius:16, padding:28, maxWidth:480, width:'100%', boxShadow:'0 24px 64px rgba(0,0,0,.22)' }}>
+        <div style={{ fontWeight:800, fontSize:17, marginBottom:4, color:'#111827' }}>{title}</div>
+        {subtitle && <div style={{ fontSize:13, color:'#6b7280', marginBottom:16 }}>{subtitle}</div>}
+        {children}
         <button onClick={onCancel} style={{ marginTop:14, width:'100%', padding:'9px', borderRadius:8, border:'1px solid #e5e7eb', background:'white', fontSize:12, color:'#9ca3af', cursor:'pointer' }}>Cancel</button>
       </div>
     </div>
+  );
+}
+
+function ModalBtn({ onClick, border='#e5e7eb', bg='#f9fafb', children }) {
+  return (
+    <button onClick={onClick} style={{
+      padding:'11px 18px', borderRadius:10, border:`2px solid ${border}`,
+      background:bg, fontSize:13, fontWeight:600, cursor:'pointer', textAlign:'left', color:'#111827', width:'100%',
+    }}>{children}</button>
+  );
+}
+
+// ── Duplicate modal ────────────────────────────────────────────────────────────
+function DuplicateModal({ company, matches, onDecision, onCancel }) {
+  return (
+    <ModalShell
+      title="Possible Duplicate"
+      subtitle={<><b>{company.name}</b> looks like it may already be in your CRM:</>}
+      onCancel={onCancel}
+    >
+      {matches.map(m => (
+        <div key={m.id} style={{ marginBottom:12, padding:'10px 14px', background:'#f9fafb', borderRadius:10, border:'1px solid #e5e7eb', fontSize:12 }}>
+          <div style={{ fontWeight:700, color:'#111827' }}>{m.name}</div>
+          <div style={{ color:'#6b7280', marginTop:2 }}>{m.city}, {m.state} · <span style={{ color:'#9ca3af' }}>{m.match_score}% name match</span></div>
+        </div>
+      ))}
+      <div style={{ display:'flex', flexDirection:'column', gap:8, marginTop:4 }}>
+        <ModalBtn onClick={() => onDecision('duplicate')} border='#e5e7eb' bg='#f9fafb'>
+          Skip — already have this one
+        </ModalBtn>
+        <ModalBtn onClick={() => onDecision('multi_location')} border='#0369a1' bg='#f0f9ff'>
+          ➕ Add as a new location of this chain
+        </ModalBtn>
+        <ModalBtn onClick={() => onDecision('new')} border='#1a3358' bg='#eef2ff'>
+          Import as a completely separate company
+        </ModalBtn>
+      </div>
+    </ModalShell>
+  );
+}
+
+// ── Chain modal (national chain detected in CRM) ───────────────────────────────
+function ChainModal({ company, chainInfo, onDecision, onCancel }) {
+  const locList = chainInfo.existing_locations?.slice(0, 4) || [];
+  return (
+    <ModalShell
+      title={`${company.chain_name || company.name} is already in your CRM`}
+      onCancel={onCancel}
+    >
+      <div style={{ marginBottom:14, padding:'12px 14px', background:'#f0f9ff', borderRadius:10, border:'1px solid #bae6fd', fontSize:12 }}>
+        <div style={{ fontWeight:700, color:'#0369a1', marginBottom:6 }}>
+          {chainInfo.location_count} location{chainInfo.location_count !== 1 ? 's' : ''} already in CRM
+        </div>
+        {locList.map((l, i) => (
+          <div key={i} style={{ color:'#374151', marginTop:3 }}>• {l.name}{l.city ? ` — ${l.city}, ${l.state}` : ''}</div>
+        ))}
+        {chainInfo.existing_locations?.length > 4 && (
+          <div style={{ color:'#9ca3af', marginTop:4 }}>+ {chainInfo.existing_locations.length - 4} more</div>
+        )}
+      </div>
+      <div style={{ fontWeight:600, fontSize:13, color:'#374151', marginBottom:10 }}>
+        What do you want to do with <b>{company.name}</b>{company.city ? ` (${company.city})` : ''}?
+      </div>
+      <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+        <ModalBtn onClick={() => onDecision('chain_location')} border='#0369a1' bg='#f0f9ff'>
+          ➕ Add as a new {company.chain_name || company.name} location
+        </ModalBtn>
+        <ModalBtn onClick={() => onDecision('new')} border='#1a3358' bg='#eef2ff'>
+          Import as a separate standalone company
+        </ModalBtn>
+        <ModalBtn onClick={() => onDecision('skip')} border='#e5e7eb' bg='#f9fafb'>
+          Skip this one
+        </ModalBtn>
+      </div>
+    </ModalShell>
+  );
+}
+
+// ── New chain modal (first location of a chain) ────────────────────────────────
+function NewChainModal({ company, onDecision, onCancel }) {
+  return (
+    <ModalShell
+      title={`Start a chain group for ${company.chain_name || company.name}?`}
+      subtitle={`This looks like a national chain. Starting a chain group lets you track all local locations together.`}
+      onCancel={onCancel}
+    >
+      <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+        <ModalBtn onClick={() => onDecision('start_chain')} border='#0369a1' bg='#f0f9ff'>
+          ➕ Import and start a "{company.chain_name || company.name}" chain group
+        </ModalBtn>
+        <ModalBtn onClick={() => onDecision('new')} border='#1a3358' bg='#eef2ff'>
+          Import as a regular standalone company
+        </ModalBtn>
+      </div>
+    </ModalShell>
   );
 }
 
@@ -471,8 +547,10 @@ export default function FleetFinder() {
   const [lastDebug,    setLastDebug]     = useState(null);
   const [results,      setResults]       = useState([]);
   const [searchMeta,   setSearchMeta]    = useState(null);
-  const [importing,    setImporting]     = useState({});
-  const [dupModal,     setDupModal]      = useState(null);
+  const [importing,      setImporting]      = useState({});
+  const [dupModal,       setDupModal]       = useState(null);
+  const [chainModal,     setChainModal]     = useState(null);  // { company, chainInfo, index }
+  const [newChainModal,  setNewChainModal]  = useState(null);  // { company, index }
 
   const [shopLat, setShopLat] = useState(35.1965);
   const [shopLng, setShopLng] = useState(-80.7812);
@@ -565,10 +643,33 @@ export default function FleetFinder() {
   async function handleImport(company, index) {
     setImporting(p => ({ ...p, [index]: true }));
     try {
-      const { matches } = await api.ffCheckDuplicate({ name: company.name, address: company.address, phone: company.main_phone, city: company.city });
-      if (matches.length > 0) { setDupModal({ company, matches, index }); return; }
+      // 1. Check for fuzzy name duplicates
+      const { matches } = await api.ffCheckDuplicate({
+        name: company.name, address: company.address,
+        phone: company.main_phone, city: company.city,
+      });
+      if (matches.length > 0) {
+        setDupModal({ company, matches, index });
+        return;
+      }
+
+      // 2. If national chain, check if that chain already exists in CRM
+      if (company.is_national_chain && company.chain_name) {
+        const chainInfo = await api.ffCheckChain({ chain_name: company.chain_name });
+        if (chainInfo.found) {
+          setChainModal({ company, chainInfo, index });
+          return;
+        }
+        // Chain not in CRM yet — ask if they want to start a chain group
+        setNewChainModal({ company, index });
+        return;
+      }
+
       await doImport(company, 'new', null, index);
-    } catch (e) { showToast(e.message || 'Import failed', 'error'); setImporting(p => ({ ...p, [index]: false })); }
+    } catch (e) {
+      showToast(e.message || 'Import failed', 'error');
+      setImporting(p => ({ ...p, [index]: false }));
+    }
   }
 
   async function handleDupDecision(decision, company, index, matches) {
@@ -581,30 +682,77 @@ export default function FleetFinder() {
     finally { setImporting(p => ({ ...p, [index]: false })); }
   }
 
-  async function doImport(company, decision, matches, index) {
-    const isMulti = decision === 'multi_location' || company.is_multi_location;
+  async function handleChainDecision(decision, company, chainInfo, index) {
+    setChainModal(null);
+    setImporting(p => ({ ...p, [index]: true }));
+    try {
+      if (decision === 'skip') { removeResult(index); return; }
+      await doImport(company, decision, null, index, chainInfo);
+    } catch (e) { showToast(e.message || 'Import failed', 'error'); }
+    finally { setImporting(p => ({ ...p, [index]: false })); }
+  }
+
+  async function handleNewChainDecision(decision, company, index) {
+    setNewChainModal(null);
+    setImporting(p => ({ ...p, [index]: true }));
+    try {
+      await doImport(company, decision, null, index, null);
+    } catch (e) { showToast(e.message || 'Import failed', 'error'); }
+    finally { setImporting(p => ({ ...p, [index]: false })); }
+  }
+
+  async function doImport(company, decision, matches, index, chainInfo = null) {
+    const isChainLocation = decision === 'multi_location' || decision === 'chain_location';
+    const isStartChain    = decision === 'start_chain';
+    const isMulti         = isChainLocation || company.is_multi_location;
+
+    // Determine location_group for chain linking
+    let locationGroup = null;
+    if (isChainLocation && chainInfo) {
+      locationGroup = chainInfo.location_group || company.chain_name || company.name;
+    } else if (isChainLocation && matches?.length) {
+      locationGroup = matches[0].location_group || matches[0].name;
+    } else if (isStartChain) {
+      locationGroup = company.chain_name || company.name;
+    }
+
     await api.createCompany({
-      name: company.name, main_phone: company.main_phone || null, industry: company.industry || null,
-      address: company.address || null, city: company.city || null, state: company.state || null,
-      zip: company.zip || null, website: company.website || null,
+      name:       company.name,
+      main_phone: company.main_phone  || null,
+      industry:   company.industry    || null,
+      address:    company.address     || null,
+      city:       company.city        || null,
+      state:      company.state       || null,
+      zip:        company.zip         || null,
+      website:    company.website     || null,
       fleet_research: {
-        fleet_note: company.fleet_note || null, research_notes: company.research_notes || null,
-        fleet_probability: company.fleet_probability || null, fleet_signals: company.fleet_signals || [],
-        estimated_fleet_size: company.estimated_fleet_size || null, vehicle_types: company.vehicle_types_detected || [],
-        vehicle_type_confidence: company.vehicle_type_confidence || null, industry_category: company.industry_category || null,
-        local_office_found: company.local_office_found || false, local_office_address: company.local_office_address || null,
+        fleet_note:                  company.fleet_note                 || null,
+        research_notes:              company.research_notes             || null,
+        fleet_probability:           company.fleet_probability          || null,
+        fleet_signals:               company.fleet_signals              || [],
+        score_factors:               company.score_factors              || [],
+        estimated_fleet_size:        company.estimated_fleet_size       || null,
+        vehicle_types:               company.vehicle_types_detected     || [],
+        vehicle_type_confidence:     company.vehicle_type_confidence    || null,
+        industry_category:           company.industry_category          || null,
+        local_office_found:          company.local_office_found         || false,
+        local_office_address:        company.local_office_address       || null,
         local_field_employees_found: company.local_field_employees_found || null,
         local_field_employee_titles: company.local_field_employee_titles || [],
-        is_local_independent: company.is_local_independent ?? null, is_national_chain: company.is_national_chain ?? null,
-        contact_name: company.contact_name || null, contact_title: company.contact_title || null,
-        sources: company.sources || [],
-        distance_miles: company.distance_miles != null ? parseFloat(company.distance_miles.toFixed(1)) : null,
-        searched_at: new Date().toISOString(),
+        is_local_independent:        company.is_local_independent       ?? null,
+        is_national_chain:           company.is_national_chain          ?? null,
+        chain_name:                  company.chain_name                 || null,
+        contact_name:                company.contact_name               || null,
+        contact_title:               company.contact_title              || null,
+        sources:                     company.sources                    || [],
+        distance_miles:              company.distance_miles != null ? parseFloat(company.distance_miles.toFixed(1)) : null,
+        searched_at:                 new Date().toISOString(),
       },
-      is_multi_location: isMulti ? 1 : 0,
-      location_name: isMulti ? (company.city || null) : null,
-      location_group: isMulti && matches?.length ? (matches[0].location_group || matches[0].name) : (company.is_chain ? company.name : null),
+      is_multi_location: isMulti || isStartChain ? 1 : 0,
+      location_name:     isMulti || isStartChain ? (company.city || null) : null,
+      location_group:    locationGroup,
     });
+
     showToast(`${company.name} imported`, 'success');
     removeResult(index);
   }
@@ -966,6 +1114,20 @@ export default function FleetFinder() {
           company={dupModal.company} matches={dupModal.matches}
           onDecision={d => handleDupDecision(d, dupModal.company, dupModal.index, dupModal.matches)}
           onCancel={() => { setDupModal(null); setImporting(p => ({ ...p, [dupModal.index]: false })); }}
+        />
+      )}
+      {chainModal && (
+        <ChainModal
+          company={chainModal.company} chainInfo={chainModal.chainInfo}
+          onDecision={d => handleChainDecision(d, chainModal.company, chainModal.chainInfo, chainModal.index)}
+          onCancel={() => { setChainModal(null); setImporting(p => ({ ...p, [chainModal.index]: false })); }}
+        />
+      )}
+      {newChainModal && (
+        <NewChainModal
+          company={newChainModal.company}
+          onDecision={d => handleNewChainDecision(d, newChainModal.company, newChainModal.index)}
+          onCancel={() => { setNewChainModal(null); setImporting(p => ({ ...p, [newChainModal.index]: false })); }}
         />
       )}
     </div>

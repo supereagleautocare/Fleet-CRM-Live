@@ -407,6 +407,40 @@ router.post('/check-duplicate', auth, async (req, res) => {
   }
 });
 
+// ── POST /api/fleetfinder/check-chain ────────────────────────────────────────
+// Check if a national chain already exists in CRM as a location group
+router.post('/check-chain', auth, async (req, res) => {
+  try {
+    const { chain_name } = req.body;
+    if (!chain_name) return res.json({ found: false });
+
+    const normChain = chain_name.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+    const result = await pool.query(
+      `SELECT name, city, state, location_group
+       FROM companies
+       WHERE status = 'active'
+         AND (
+           LOWER(REGEXP_REPLACE(location_group, '[^a-zA-Z0-9 ]', '', 'g')) ILIKE $1
+           OR LOWER(REGEXP_REPLACE(name, '[^a-zA-Z0-9 ]', '', 'g')) ILIKE $1
+         )
+       ORDER BY name`,
+      [`%${normChain}%`]
+    );
+
+    const locations = result.rows.map(r => ({ name: r.name, city: r.city, state: r.state }));
+    const locationGroup = result.rows.find(r => r.location_group)?.location_group || chain_name;
+
+    res.json({
+      found:            result.rows.length > 0,
+      location_group:   locationGroup,
+      location_count:   result.rows.length,
+      existing_locations: locations,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── POST /api/fleetfinder/search ─────────────────────────────────────────────
 router.post('/search', auth, async (req, res) => {
   const {
@@ -642,11 +676,16 @@ Required format per company:
   "local_office_address": string|null,
   "local_field_employees_found": number|null,
   "local_field_employee_titles": string[],
-  "fleet_probability": number (0-100),
-  "fleet_note": string,
-  "research_notes": string,
+  "fleet_probability": number (0-100, your overall confidence they run a local fleet),
+  "fleet_note": string (one sentence — the single strongest reason for your score),
+  "research_notes": string (what you found, where, and what you could NOT find),
   "fleet_signals": string[],
-  "score_factors": [{"factor": string, "impact": "+"|"-", "points": number}],
+  "score_factors": [
+    {"factor": "Local office confirmed at 123 Main St", "impact": "+", "points": 30},
+    {"factor": "8 field employees found on LinkedIn in Charlotte", "impact": "+", "points": 25},
+    {"factor": "Indeed posting says company vehicle provided", "impact": "+", "points": 15},
+    {"factor": "No FMCSA record found", "impact": "-", "points": 10}
+  ],
   "estimated_fleet_size": string|null,
   "vehicle_types_detected": string[],
   "vehicle_type_confidence": "confirmed"|"likely"|"unknown",
