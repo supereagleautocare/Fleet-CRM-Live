@@ -411,17 +411,25 @@ export default function FleetFinder() {
     const isMulti = decision === 'multi_location' || company.is_multi_location;
 
     const fleetResearch = {
-      fleet_note:            company.fleet_note         || null,
-      research_notes:        company.research_notes     || null,
-      fleet_probability:     company.fleet_probability  || null,
-      estimated_fleet_size:  company.estimated_fleet_size || null,
-      vehicle_types:         company.vehicle_types_detected || [],
-      vehicle_type_confidence: company.vehicle_type_confidence || null,
-      contact_name:          company.contact_name       || null,
-      contact_title:         company.contact_title      || null,
-      sources:               company.sources            || [],
-      distance_miles:        company.distance_miles     != null ? parseFloat(company.distance_miles.toFixed(1)) : null,
-      searched_at:           new Date().toISOString(),
+      fleet_note:                   company.fleet_note              || null,
+      research_notes:               company.research_notes          || null,
+      fleet_probability:            company.fleet_probability       || null,
+      fleet_signals:                company.fleet_signals           || [],
+      estimated_fleet_size:         company.estimated_fleet_size    || null,
+      vehicle_types:                company.vehicle_types_detected  || [],
+      vehicle_type_confidence:      company.vehicle_type_confidence || null,
+      industry_category:            company.industry_category       || null,
+      local_office_found:           company.local_office_found      || false,
+      local_office_address:         company.local_office_address    || null,
+      local_field_employees_found:  company.local_field_employees_found || null,
+      local_field_employee_titles:  company.local_field_employee_titles || [],
+      is_local_independent:         company.is_local_independent    ?? null,
+      is_national_chain:            company.is_national_chain       ?? null,
+      contact_name:                 company.contact_name            || null,
+      contact_title:                company.contact_title           || null,
+      sources:                      company.sources                 || [],
+      distance_miles:               company.distance_miles != null ? parseFloat(company.distance_miles.toFixed(1)) : null,
+      searched_at:                  new Date().toISOString(),
     };
 
     await api.createCompany({

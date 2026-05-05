@@ -499,51 +499,134 @@ router.post('/search', auth, async (req, res) => {
     // ── 6. Call Claude with web_search ────────────────────────────────────────
     const anthropic = new Anthropic({ apiKey: anthropicKey });
 
-    const systemPrompt = `You are a fleet business discovery agent for an auto repair shop. Your job is to find LOCAL businesses that operate fleets of vehicles — trucks, vans, cars — and need regular vehicle maintenance.
+    const systemPrompt = `You are a fleet business discovery agent for an auto repair shop. Find LOCAL businesses that operate vehicle fleets (trucks, vans, cars) and need regular maintenance.
 
-These businesses come in two types:
-1. CONSUMER-FACING — pest control, HVAC, plumbing, landscaping, fire protection, security. Show up on Google, Yelp, BBB, and Indeed.
-2. CONTRACT-DRIVEN — telecom subcontractors, utility contractors, cable companies, construction subs, government contractors. They have warehouses and fleets but NO consumer web presence. Find them through LinkedIn company search, FMCSA SAFER database (safer.fmcsa.dot.gov), SAM.gov, state contractor registries, and job boards.
+═══ STEP 1 — CLASSIFY EACH INDUSTRY ════════════════════════════════════════════
+You will receive a list of industries. Classify each one yourself:
 
-Fleet signals in job postings: look for "${customKeywords.join('", "')}" in job postings — NOT "CDL" or "semi" which are commercial truckers, not fleet customers. A company hiring 5 techs with company vehicles runs 5 trucks.
+CONSUMER-FACING: companies that market directly to homeowners or businesses and send
+technicians to customer sites. Send techs to the customer = dedicated vehicle per tech.
+Examples: pest control, HVAC, plumbing, landscaping, pool service, roofing, residential
+electrical, cleaning/janitorial, fire protection, alarm/security installation.
+Search: Google Maps, Google Business listings, Yelp, BBB, then Indeed for fleet signals.
 
-CRITICAL — Source citations required: For every company you return, you MUST include the exact URL where you found the data. Do not make up URLs. If you found the phone number on their website, include that URL. If you found them on Indeed, include the Indeed URL. If FMCSA, include the SAFER URL.
+CONTRACT-DRIVEN: companies with little or no consumer web presence that win government,
+utility, or corporate contracts. Workers operate from a yard or warehouse, not an office.
+Examples: telecom subcontractors, fiber/cable installers, utility line crews, construction
+subcontractors, government service contractors, meter reading services, underground crews.
+Search: LinkedIn company search, Google "site:safer.fmcsa.dot.gov [name or industry] [city]",
+SAM.gov contracts via Google search, state contractor license registries, Indeed job boards.
 
-Your final response must be ONLY a raw JSON array — no markdown, no explanation, no code fences, just [ ... ].`;
+BOTH: Apply both strategies.
+Examples: commercial HVAC, commercial electrical, commercial plumbing, security companies.
+
+═══ STEP 2 — LEADING SIGNALS (check these first, they carry the most weight) ════
+These are the strongest indicators a company has a real local fleet. Prioritize finding them.
+
+1. LOCAL EMPLOYEES ON LINKEDIN OR INDEED
+   Search: Google  →  site:linkedin.com/in "[company name]" "[city]"
+   Search: Google  →  "[company name]" employees "[city]" site:linkedin.com
+   Also check the company's LinkedIn page People tab if accessible.
+
+   For every employee found who lists the target city or nearby city as their location,
+   note their job title and classify it:
+
+   FIELD ROLES (each one = a vehicle): technician, installer, splicer, field tech,
+   service tech, route tech, foreman, crew lead, driver, operator, field supervisor,
+   cable tech, fiber tech, utility worker, groundsman, service rep (field)
+
+   OFFICE ROLES (no vehicle): HR, recruiter, admin, accountant, office manager,
+   inside sales, marketing, IT, dispatcher (office-based)
+
+   Count field-role employees found in the target area. That is your minimum local
+   vehicle count. Report: "Found X employees on LinkedIn in [city]. Y are field roles
+   ([titles listed]). Minimum Y vehicles estimated for this area."
+
+2. PHYSICAL OFFICE OR YARD IN THE TARGET AREA
+   Finding a local office, service center, warehouse, or operations yard confirms the
+   company is actively operating in the area — not just occasionally sending someone out.
+   A local address + local field employees together is strong confirmation of a local fleet.
+   Search the company's website "locations" or "service areas" page. Search Google Maps
+   for the company name in the target city. Note the exact address if found.
+
+═══ STEP 3 — SUPPORTING SIGNALS ════════════════════════════════════════════════
+Use these to raise or lower confidence after checking the leading signals above.
+
+STRONG:
+• Job posting says "company vehicle provided", "take-home vehicle", "stocked service van"
+• Employee review on Indeed or Glassdoor says "company truck" or "take home truck"
+• FMCSA DOT registration found — may show actual reported power unit count
+• Job posting for "fleet coordinator", "fleet manager", or "dispatch coordinator"
+  (companies hire these only when they have 15+ vehicles)
+• Industry where the work STRUCTURALLY requires a vehicle per worker
+  (telecom installer, cable tech, utility crew, pest control route tech, meter reader)
+• Job posting mentions "routes" or "route technician" (multiple trucks running simultaneously)
+• 24/7 emergency service + multiple technicians listed
+• Company established 10+ years and still independent (has had time to build a real fleet)
+• LinkedIn shows 50+ employees for a field service company
+
+WEAK — note these but do not use as primary evidence:
+• Large service area listed (solo operators do this too)
+• Multiple job postings for same role (may be one spot posted many times)
+• "Valid driver's license required" (universal requirement, not a fleet signal)
+
+═══ STEP 4 — HONESTY RULES ═════════════════════════════════════════════════════
+• Never invent an address, phone number, URL, or fleet size. Return null for unknowns.
+• research_notes MUST state: what you found, exactly where (source + URL), AND what
+  you tried to find but could not — and specifically why (e.g. "LinkedIn search returned
+  no Charlotte employees for this company", "FMCSA returned no carrier record",
+  "website has no locations page").
+• fleet_probability is your confidence 0-100 that this company runs a real vehicle fleet
+  in or near the target area, based only on evidence found. Explain your score.
+• estimated_fleet_size must always note it is estimated from signals, not confirmed.
+• Do not bias toward national chains or local independents — return what the search finds.
+
+Your final response must be ONLY a raw JSON array. No markdown, no code fences, just [ ... ].`;
 
     const userPrompt = `Find 8-15 businesses with vehicle fleets in ${locationDesc} (states: ${stateList}).
 
-Industries to search: ${industryList}
+Target city / area: ${locationStr}
+Industries to search (you classify each one): ${industryList}
 Vehicle types this shop services: ${vehicleDesc}
-Fleet size target: ${fleetSizeDesc}
-Location reference: ${locationStr}
+Fleet size preference: ${fleetSizeDesc}
+Fleet signal keywords to watch for in job postings: "${customKeywords.join('", "')}"
 
-Run 4-5 web searches across different sources. For consumer-facing industries (pest control, HVAC, plumbing): search Google, Yelp, and Indeed with keywords like "${customKeywords[0]}". For contract-driven industries (telecom, utilities, cable): search LinkedIn company pages, FMCSA SAFER, SAM.gov, and job boards. Do NOT repeat the same search twice or just search Google for everything.
+Run 5 searches. Cover at least 3 different source types (Google Maps, Yelp, BBB, LinkedIn,
+FMCSA via Google, Indeed, SAM.gov via Google). Do not run the same search twice.
+Do not search Google for everything — go where the companies actually are.
 
-Already in CRM — skip these: ${existingNames.slice(0, 30).join(', ')}
+For each company you find, check for local employees on LinkedIn and a local office address
+before moving on. These are your leading signals.
 
-Return ONLY this JSON array, use null for unknown fields:
+Already in CRM — do not return these: ${existingNames.slice(0, 30).join(', ')}
+
+Return ONLY this JSON array. Use null for any field you could not verify:
 [{
   "name": "...",
   "industry": "...",
+  "industry_category": "consumer_facing | contract_driven | both",
   "address": "...",
   "city": "...",
   "state": "...",
   "zip": "...",
   "main_phone": "...",
   "website": "...",
-  "contact_name": "...",
-  "contact_title": "...",
+  "contact_name": null,
+  "contact_title": null,
+  "local_office_found": true,
+  "local_office_address": "...",
+  "local_field_employees_found": 8,
+  "local_field_employee_titles": ["Fiber Technician x4", "Cable Splicer x2", "Field Supervisor x2"],
   "fleet_probability": 85,
-  "fleet_note": "One sentence: why this company has a fleet and what signal confirmed it.",
-  "research_notes": "2-3 sentences describing what was found, where, and what it means for fleet size.",
+  "fleet_note": "Strongest single signal found for why this company has a local fleet.",
+  "research_notes": "What was found and where. What could NOT be verified and why.",
+  "fleet_signals": ["local office confirmed", "8 field employees in Charlotte on LinkedIn", "company vehicle in job posting"],
+  "estimated_fleet_size": "8-12 estimated from 8 local field employees — not confirmed",
   "vehicle_types_detected": ["light_duty_gas"],
-  "vehicle_type_confidence": "likely",
-  "estimated_fleet_size": "5-10",
-  "is_multi_location": false,
-  "is_chain": false,
-  "sources": [{"label": "Indeed job posting", "url": "https://..."}, {"label": "Company website", "url": "https://..."}],
-  "distance_miles": null
+  "vehicle_type_confidence": "confirmed | likely | unknown",
+  "is_local_independent": true,
+  "is_national_chain": false,
+  "sources": [{"label": "LinkedIn employees search", "url": "https://..."}, {"label": "Google Maps listing", "url": "https://..."}]
 }]`;
 
     let fullText = '';

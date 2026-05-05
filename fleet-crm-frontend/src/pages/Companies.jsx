@@ -792,26 +792,76 @@ async function handleImport(e) {
                     try { fr = selected.fleet_research ? (typeof selected.fleet_research === 'string' ? JSON.parse(selected.fleet_research) : selected.fleet_research) : null; } catch(_) {}
                     if (!fr) return null;
                     const VLABELS = { passenger:'Passenger cars', light_duty_gas:'Light duty gas trucks', light_duty_diesel:'Light duty diesel trucks', cargo_van:'Cargo/Sprinter vans', medium_duty:'Medium duty gas', medium_duty_diesel:'Medium duty diesel', heavy_duty_diesel:'Heavy duty diesel' };
+                    const catLabel = { consumer_facing:'Consumer-facing', contract_driven:'Contract / B2B', both:'Consumer + B2B' };
+                    const probColor = (fr.fleet_probability||0) >= 80 ? '#15803d' : (fr.fleet_probability||0) >= 55 ? '#b45309' : '#991b1b';
+                    const probBg    = (fr.fleet_probability||0) >= 80 ? '#dcfce7' : (fr.fleet_probability||0) >= 55 ? '#fef3c7' : '#fee2e2';
                     return (
                       <div style={{ marginTop:12, padding:'12px 14px', background:'#f0f9ff', borderRadius:8, border:'1px solid #bae6fd', fontSize:12 }}>
-                        <div style={{ fontWeight:700, fontSize:12, color:'#0369a1', marginBottom:8, display:'flex', alignItems:'center', gap:6 }}>
-                          🔍 Fleet Intel
-                          {fr.fleet_probability && <span style={{ fontWeight:600, color:'#0284c7', background:'#e0f2fe', borderRadius:10, padding:'1px 7px', fontSize:11 }}>{fr.fleet_probability}% fleet likelihood</span>}
-                          {fr.searched_at && <span style={{ fontWeight:400, color:'#7dd3fc', marginLeft:'auto', fontSize:10 }}>Searched {new Date(fr.searched_at).toLocaleDateString()}</span>}
+                        {/* Header row */}
+                        <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap', marginBottom:8 }}>
+                          <span style={{ fontWeight:700, fontSize:12, color:'#0369a1' }}>🔍 Fleet Intel</span>
+                          {fr.fleet_probability != null && (
+                            <span style={{ fontWeight:700, color:probColor, background:probBg, borderRadius:10, padding:'1px 8px', fontSize:11 }}>
+                              {fr.fleet_probability}% fleet likelihood
+                            </span>
+                          )}
+                          {fr.industry_category && (
+                            <span style={{ color:'#64748b', background:'#f1f5f9', borderRadius:10, padding:'1px 8px', fontSize:11 }}>
+                              {catLabel[fr.industry_category] || fr.industry_category}
+                            </span>
+                          )}
+                          {fr.is_local_independent && <span style={{ color:'#0369a1', background:'#e0f2fe', borderRadius:10, padding:'1px 8px', fontSize:11 }}>Local independent</span>}
+                          {fr.is_national_chain    && <span style={{ color:'#6d28d9', background:'#ede9fe', borderRadius:10, padding:'1px 8px', fontSize:11 }}>National chain</span>}
+                          {fr.searched_at && <span style={{ color:'#94a3b8', marginLeft:'auto', fontSize:10 }}>Searched {new Date(fr.searched_at).toLocaleDateString()}</span>}
                         </div>
-                        {fr.fleet_note && <div style={{ color:'#0c4a6e', marginBottom:6, lineHeight:1.5 }}>{fr.fleet_note}</div>}
+
+                        {/* Leading signals — local office + employees */}
+                        {(fr.local_office_found || fr.local_field_employees_found > 0) && (
+                          <div style={{ marginBottom:8, padding:'8px 10px', background:'#ecfdf5', border:'1px solid #6ee7b7', borderRadius:6 }}>
+                            <div style={{ fontWeight:700, color:'#065f46', fontSize:11, marginBottom:4 }}>Leading Signals</div>
+                            {fr.local_office_found && (
+                              <div style={{ color:'#047857', marginBottom:2 }}>
+                                Office / yard confirmed in area{fr.local_office_address ? `: ${fr.local_office_address}` : ''}
+                              </div>
+                            )}
+                            {fr.local_field_employees_found > 0 && (
+                              <div style={{ color:'#047857' }}>
+                                {fr.local_field_employees_found} field employee{fr.local_field_employees_found !== 1 ? 's' : ''} found in area
+                                {fr.local_field_employee_titles?.length > 0 && (
+                                  <span style={{ color:'#065f46' }}> — {fr.local_field_employee_titles.join(', ')}</span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Fleet note + research notes */}
+                        {fr.fleet_note && <div style={{ color:'#0c4a6e', marginBottom:5, lineHeight:1.5, fontWeight:600 }}>{fr.fleet_note}</div>}
                         {fr.research_notes && <div style={{ color:'#075985', marginBottom:8, lineHeight:1.5 }}>{fr.research_notes}</div>}
-                        <div style={{ display:'flex', gap:12, flexWrap:'wrap', marginBottom: fr.sources?.length ? 8 : 0 }}>
-                          {fr.estimated_fleet_size && <span style={{ color:'#0369a1' }}>Est. fleet: <b>{fr.estimated_fleet_size} vehicles</b></span>}
-                          {fr.vehicle_types?.length > 0 && <span style={{ color:'#0369a1' }}>Types: <b>{fr.vehicle_types.map(v => VLABELS[v] || v).join(', ')}</b></span>}
-                          {fr.distance_miles != null && <span style={{ color:'#0369a1' }}><b>{fr.distance_miles} mi</b> from shop</span>}
-                          {fr.contact_name && <span style={{ color:'#0369a1' }}>Contact: <b>{fr.contact_name}{fr.contact_title ? ` — ${fr.contact_title}` : ''}</b></span>}
+
+                        {/* Signal tags */}
+                        {fr.fleet_signals?.length > 0 && (
+                          <div style={{ display:'flex', flexWrap:'wrap', gap:4, marginBottom:8 }}>
+                            {fr.fleet_signals.map((s, i) => (
+                              <span key={i} style={{ padding:'2px 8px', background:'#dbeafe', borderRadius:8, fontSize:10, color:'#1e40af', fontWeight:600 }}>{s}</span>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Stats row */}
+                        <div style={{ display:'flex', gap:14, flexWrap:'wrap', marginBottom: fr.sources?.length ? 8 : 0, fontSize:11, color:'#0369a1' }}>
+                          {fr.estimated_fleet_size && <span>Est. fleet: <b>{fr.estimated_fleet_size}</b></span>}
+                          {fr.vehicle_types?.length > 0 && <span>Types: <b>{fr.vehicle_types.map(v => VLABELS[v] || v).join(', ')}</b> ({fr.vehicle_type_confidence || 'likely'})</span>}
+                          {fr.distance_miles != null && <span><b>{fr.distance_miles} mi</b> from shop</span>}
+                          {fr.contact_name && <span>Contact: <b>{fr.contact_name}{fr.contact_title ? ` — ${fr.contact_title}` : ''}</b></span>}
                         </div>
+
+                        {/* Source links */}
                         {fr.sources?.length > 0 && (
-                          <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+                          <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
                             {fr.sources.map((s, i) => (
                               <a key={i} href={s.url} target="_blank" rel="noopener noreferrer"
-                                style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'3px 9px', background:'white', border:'1px solid #bae6fd', borderRadius:10, fontSize:11, color:'#0284c7', fontWeight:600, textDecoration:'none' }}>
+                                style={{ display:'inline-flex', alignItems:'center', gap:3, padding:'3px 9px', background:'white', border:'1px solid #bae6fd', borderRadius:10, fontSize:11, color:'#0284c7', fontWeight:600, textDecoration:'none' }}>
                                 ↗ {s.label || s.url}
                               </a>
                             ))}
