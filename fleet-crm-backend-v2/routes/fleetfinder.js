@@ -532,9 +532,11 @@ router.post('/search', auth, async (req, res) => {
 
     // ── 6. Two-phase Claude search ────────────────────────────────────────────
     const anthropic = new Anthropic({ apiKey: anthropicKey });
-    let inputTokens  = 0;
-    let outputTokens = 0;
-    let turnCount    = 0;
+    let inputTokens       = 0;
+    let outputTokens      = 0;
+    let cacheReadTokens   = 0;
+    let cacheWriteTokens  = 0;
+    let turnCount         = 0;
 
     // ── Phase 1: Research (web searches, no JSON pressure) ────────────────────
     const researchSystem = `You are a fleet vehicle research agent for an auto repair shop in ${locationStr}.
@@ -621,13 +623,15 @@ Begin searching now.`;
       const response = await anthropic.messages.create({
         model:      'claude-haiku-4-5-20251001',
         max_tokens: 3500,
-        system:     researchSystem,
+        system:     [{ type: 'text', text: researchSystem, cache_control: { type: 'ephemeral' } }],
         tools:      [{ type: 'web_search_20250305', name: 'web_search' }],
         messages:   researchMessages,
       });
 
-      inputTokens  += response.usage?.input_tokens  || 0;
-      outputTokens += response.usage?.output_tokens || 0;
+      inputTokens      += response.usage?.input_tokens             || 0;
+      outputTokens     += response.usage?.output_tokens            || 0;
+      cacheReadTokens  += response.usage?.cache_read_input_tokens  || 0;
+      cacheWriteTokens += response.usage?.cache_creation_input_tokens || 0;
 
       if (response.stop_reason === 'end_turn') {
         researchMessages.push({ role: 'assistant', content: response.content });
@@ -671,6 +675,13 @@ Output ONLY valid JSON. No explanation, no markdown, no text of any kind outside
 Include EVERY company mentioned, even national chains (estimate their LOCAL ${shopCity} fleet, not national).
 Use null for any field you could not verify. Do not skip companies due to missing data.
 
+IMPORTANT — keep all string fields SHORT to avoid truncation:
+- fleet_note: max 120 characters (one tight sentence)
+- research_notes: max 150 characters (key finding + one gap)
+- score_factors: max 4 factors, factor text max 60 characters each
+- fleet_signals: max 4 signals, each max 40 characters
+- local_field_employee_titles: list job titles only, no extra text
+
 For companies already in CRM set "already_in_crm": true so they can be shown differently in the UI.
 Already in CRM: ${existingNames.slice(0, 40).join(', ')}
 
@@ -691,16 +702,11 @@ Required format per company:
   "local_office_address": string|null,
   "local_field_employees_found": number|null,
   "local_field_employee_titles": string[],
-  "fleet_probability": number (0-100, your overall confidence they run a local fleet),
-  "fleet_note": string (one sentence — the single strongest reason for your score),
-  "research_notes": string (what you found, where, and what you could NOT find),
+  "fleet_probability": number (0-100),
+  "fleet_note": string (max 120 chars),
+  "research_notes": string (max 150 chars),
   "fleet_signals": string[],
-  "score_factors": [
-    {"factor": "Local office confirmed at 123 Main St", "impact": "+", "points": 30},
-    {"factor": "8 field employees found on LinkedIn in Charlotte", "impact": "+", "points": 25},
-    {"factor": "Indeed posting says company vehicle provided", "impact": "+", "points": 15},
-    {"factor": "No FMCSA record found", "impact": "-", "points": 10}
-  ],
+  "score_factors": [{"factor": string, "impact": "+"|"-", "points": number}],
   "estimated_fleet_size": string|null,
   "vehicle_types_detected": string[],
   "vehicle_type_confidence": "confirmed"|"likely"|"unknown",
@@ -717,7 +723,7 @@ Required format per company:
     const extractResponse = await anthropic.messages.create({
       model:      'claude-haiku-4-5-20251001',
       max_tokens: 8000,
-      system:     extractSystem,
+      system:     [{ type: 'text', text: extractSystem, cache_control: { type: 'ephemeral' } }],
       messages:   extractMessages,
     });
 
@@ -739,30 +745,32 @@ Required format per company:
       if (jsonMatch) {
         companies = JSON.parse(jsonMatch[0]);
       } else {
-        // Fallback: response may be truncated mid-array — try to close it and parse
-        const arrayStart = fullText.indexOf('[');
-        if (arrayStart !== -1) {
-          let partial = fullText.slice(arrayStart);
-          // Find last complete object (ends with })
-          const lastClose = partial.lastIndexOf('}');
-          if (lastClose !== -1) {
-            partial = partial.slice(0, lastClose + 1) + ']';
-            try {
-              companies = JSON.parse(partial);
-              parseError = 'Response was truncated — partial results recovered';
-            } catch (_) {
-              parseError = 'No valid JSON array found in AI response';
-            }
-          } else {
-            parseError = 'No JSON array found in AI response';
-          }
-        } else {
-          parseError = 'AI wrote text instead of JSON — prompt enforcement failed';
+        parseError = 'Response truncated — attempting partial recovery';
+      }
+    } catch (_) {
+      parseError = 'Response truncated — attempting partial recovery';
+    }
+
+    // Fallback: walk backwards through every "}" position until we get valid JSON
+    if (!companies.length && fullText.includes('[')) {
+      const partial = fullText.slice(fullText.indexOf('['));
+      let pos = partial.length - 1;
+      let recovered = false;
+      while (pos >= 0 && !recovered) {
+        pos = partial.lastIndexOf('}', pos);
+        if (pos === -1) break;
+        try {
+          const attempt = partial.slice(0, pos + 1) + ']';
+          companies = JSON.parse(attempt);
+          parseError = `Response truncated — recovered ${companies.length} of ~${Math.round(partial.length / 500)} companies`;
+          recovered = true;
+        } catch (_) {
+          pos--;
         }
       }
-    } catch (e) {
-      parseError = `JSON parse error: ${e.message}`;
-      console.error('[fleetfinder] JSON parse error:', e.message);
+      if (!recovered) {
+        parseError = 'JSON truncated beyond recovery — try a smaller search area';
+      }
     }
 
     // ── 8. Filter dismissed; flag CRM matches instead of dropping them ────────
