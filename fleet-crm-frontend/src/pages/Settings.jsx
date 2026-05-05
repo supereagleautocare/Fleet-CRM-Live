@@ -417,6 +417,9 @@ function FleetFinderSettings({ showToast }) {
   const [ffSettings, setFfSettings] = useState(null);
   const [dismissed,  setDismissed]  = useState([]);
   const [saving,     setSaving]     = useState(false);
+  const [testRunning, setTestRunning] = useState(false);
+  const [testLog,     setTestLog]     = useState(null);
+  const [testOutput,  setTestOutput]  = useState(null);
 
   useEffect(() => {
     async function load() {
@@ -439,6 +442,21 @@ function FleetFinderSettings({ showToast }) {
     finally { setSaving(false); }
   }
 
+  async function runTest() {
+    setTestRunning(true);
+    setTestLog(null);
+    setTestOutput(null);
+    try {
+      const r = await api.ffTestSearch();
+      setTestLog(r.log || []);
+      setTestOutput(r.final_output || '');
+    } catch (e) {
+      setTestLog([{ type: 'error', message: e.message }]);
+    } finally {
+      setTestRunning(false);
+    }
+  }
+
   async function undismiss(id) {
     try {
       await api.ffUndismiss(id);
@@ -456,7 +474,7 @@ function FleetFinderSettings({ showToast }) {
       <div className="table-card" style={{ padding: '18px 22px' }}>
         <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 16 }}>API Keys</div>
 
-        <div style={{ marginBottom: 18 }}>
+        <div>
           <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>Anthropic API Key</div>
           <div style={{ fontSize: 12, color: 'var(--gray-400)', marginBottom: 8 }}>
             Required to run searches. Get your key at console.anthropic.com → API Keys.
@@ -471,24 +489,6 @@ function FleetFinderSettings({ showToast }) {
           {ffSettings.ff_anthropic_key && (
             <div style={{ fontSize: 11, color: 'var(--green-600)', marginTop: 5 }}>✓ Key saved</div>
           )}
-        </div>
-
-        <div style={{ borderTop: '1px solid var(--gray-100)', paddingTop: 18 }}>
-          <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>Serper API Key</div>
-          <div style={{ fontSize: 12, color: 'var(--gray-400)', marginBottom: 8 }}>
-            Enables pre-searching Google, FMCSA, LinkedIn, and job boards before Claude runs — finds more companies for less cost. Get a free key at serper.dev.
-          </div>
-          <input
-            type="password"
-            defaultValue={ffSettings.ff_serper_key || ''}
-            placeholder="your-serper-key..."
-            onBlur={e => save({ ff_serper_key: e.target.value.trim() })}
-            style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--gray-200)', borderRadius: 7, fontSize: 13, fontFamily: 'var(--font-mono)' }}
-          />
-          {ffSettings.ff_serper_key
-            ? <div style={{ fontSize: 11, color: 'var(--green-600)', marginTop: 5 }}>✓ Key saved — pre-searches enabled</div>
-            : <div style={{ fontSize: 11, color: 'var(--gray-400)', marginTop: 5 }}>Optional but recommended — searches run Claude-only without it</div>
-          }
         </div>
       </div>
 
@@ -566,6 +566,91 @@ function FleetFinderSettings({ showToast }) {
                 }}>Restore</button>
               </div>
             ))}
+          </div>
+        )}
+      </div>
+
+      {/* Claude Web Search Test */}
+      <div className="table-card" style={{ padding: '18px 22px' }}>
+        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>Claude Web Search Test</div>
+        <div style={{ fontSize: 12, color: 'var(--gray-400)', marginBottom: 14 }}>
+          Runs a test search for <b>Prince Telecom in Charlotte, NC</b> — a real telecom subcontractor with ~100 trucks but no consumer web presence.
+          Use this to verify your Anthropic key is working and to see how Claude searches and what it costs.
+        </div>
+
+        <button
+          onClick={runTest}
+          disabled={testRunning || !ffSettings.ff_anthropic_key}
+          className="btn btn-primary"
+          style={{ marginBottom: 16 }}
+        >
+          {testRunning ? '⏳ Running test search…' : 'Run Test Search'}
+        </button>
+        {!ffSettings.ff_anthropic_key && (
+          <div style={{ fontSize: 11, color: '#dc2626', marginBottom: 12 }}>
+            Add your Anthropic API key above before running.
+          </div>
+        )}
+
+        {testLog && (
+          <div style={{
+            background: '#0f172a', borderRadius: 8, padding: '14px 16px',
+            fontFamily: 'var(--font-mono)', fontSize: 12, color: '#e2e8f0',
+            maxHeight: 420, overflowY: 'auto',
+          }}>
+            {testLog.map((entry, i) => {
+              if (entry.type === 'start') return (
+                <div key={i} style={{ color: '#94a3b8', marginBottom: 6 }}>
+                  {'>'} {entry.message}
+                </div>
+              );
+              if (entry.type === 'info') return (
+                <div key={i} style={{ color: '#64748b', marginBottom: 8 }}>
+                  {'>'} {entry.message}
+                </div>
+              );
+              if (entry.type === 'turn') return (
+                <div key={i} style={{ marginBottom: 10, borderLeft: '2px solid #334155', paddingLeft: 10 }}>
+                  <div style={{ color: '#f59e0b', fontWeight: 700 }}>
+                    Turn {entry.turn} — {entry.stop_reason}
+                    <span style={{ color: '#64748b', fontWeight: 400, marginLeft: 10 }}>
+                      {entry.input_tokens?.toLocaleString()} in / {entry.output_tokens?.toLocaleString()} out tokens
+                    </span>
+                  </div>
+                  {entry.searches?.map((q, j) => (
+                    <div key={j} style={{ color: '#38bdf8', marginTop: 3 }}>Searching: "{q}"</div>
+                  ))}
+                </div>
+              );
+              if (entry.type === 'result') return (
+                <div key={i} style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #1e293b', color: '#86efac' }}>
+                  <div>Total tokens: {entry.total_input_tokens?.toLocaleString()} in / {entry.total_output_tokens?.toLocaleString()} out</div>
+                  <div>Turns used: {entry.turns_used}</div>
+                  <div style={{ fontWeight: 700, fontSize: 13 }}>Estimated cost: ${entry.cost_usd}</div>
+                </div>
+              );
+              if (entry.type === 'error') return (
+                <div key={i} style={{ color: '#f87171', marginTop: 6 }}>
+                  ERROR: {entry.message}
+                </div>
+              );
+              return null;
+            })}
+          </div>
+        )}
+
+        {testOutput && (
+          <div style={{ marginTop: 14 }}>
+            <div style={{ fontWeight: 600, fontSize: 12, color: 'var(--gray-500)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.06em' }}>
+              Claude's Findings
+            </div>
+            <div style={{
+              background: 'var(--gray-50)', border: '1px solid var(--gray-200)', borderRadius: 8,
+              padding: '12px 14px', fontSize: 13, color: 'var(--gray-700)', lineHeight: 1.6,
+              maxHeight: 360, overflowY: 'auto', whiteSpace: 'pre-wrap',
+            }}>
+              {testOutput}
+            </div>
           </div>
         )}
       </div>

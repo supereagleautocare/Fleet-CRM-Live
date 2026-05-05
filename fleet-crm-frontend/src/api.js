@@ -187,6 +187,7 @@ export const api = {
   ffDismiss:         (data)        => req('POST', '/fleetfinder/dismiss', data),
   ffUndismiss:       (id)          => req('DELETE',`/fleetfinder/dismiss/${id}`),
   ffCheckDuplicate:  (data)        => req('POST', '/fleetfinder/check-duplicate', data),
+  ffTestSearch:      ()            => req('GET',  '/fleetfinder/test-search'),
 
   // ── Config ──────────────────────────────────────────
   rules:           ()              => req('GET',  '/config/rules'),

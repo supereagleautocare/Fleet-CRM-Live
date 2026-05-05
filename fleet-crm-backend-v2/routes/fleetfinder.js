@@ -13,26 +13,6 @@ const Anthropic = require('@anthropic-ai/sdk');
 const PRICE_INPUT_PER_M  = 0.80;   // $ per million input tokens
 const PRICE_OUTPUT_PER_M = 4.00;   // $ per million output tokens
 
-// ── Industry → Indeed job title mapping ──────────────────────────────────────
-const INDUSTRY_JOB_TITLES = {
-  'Pest Control':            'pest control technician',
-  'Telecom & Cable':         'cable technician',
-  'HVAC':                    'HVAC technician',
-  'Plumbing':                'plumber',
-  'Electrical Contractors':  'electrician',
-  'Landscaping & Lawn Care': 'lawn care technician',
-  'Delivery & Courier':      'delivery driver',
-  'Construction':            'construction foreman',
-  'Utilities':               'utility technician',
-  'Security & Alarm':        'alarm technician',
-  'Medical & Home Health':   'home health aide',
-  'Government & Municipal':  'public works technician',
-  'Vending & Distribution':  'route driver',
-};
-
-function getJobTitle(industry) {
-  return INDUSTRY_JOB_TITLES[industry] || `${industry.toLowerCase()} technician`;
-}
 
 // ── Address normalization for fuzzy duplicate detection ──────────────────────
 function normalizeAddress(addr) {
@@ -113,40 +93,6 @@ async function reverseGeocode(lat, lng) {
   } catch (_) {
     return '';
   }
-}
-
-// Run a batch of Google searches via Serper in parallel
-async function runSerperSearches(queries, serperKey) {
-  return Promise.all(queries.map(async query => {
-    try {
-      const resp = await fetch('https://google.serper.dev/search', {
-        method:  'POST',
-        headers: { 'X-API-KEY': serperKey, 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ q: query, num: 10, gl: 'us' }),
-      });
-      const data = await resp.json();
-      return { query, items: (data.organic || []).slice(0, 8) };
-    } catch (e) {
-      console.error('[serper] query failed:', query, e.message);
-      return { query, items: [] };
-    }
-  }));
-}
-
-// Format Serper results into a compact text block for Claude's context
-function formatSerperResults(searchResults) {
-  if (!searchResults.length) return '';
-  const lines = ['=== PRE-SEARCHED RESULTS (Google, FMCSA, LinkedIn, job boards) ===\n'];
-  for (const { query, items } of searchResults) {
-    lines.push(`[Search: "${query}"]`);
-    if (!items.length) { lines.push('  (no results)\n'); continue; }
-    for (const item of items) {
-      const snippet = (item.snippet || '').replace(/\n/g, ' ').slice(0, 180);
-      lines.push(`• ${item.title} | ${item.link} | ${snippet}`);
-    }
-    lines.push('');
-  }
-  return lines.join('\n');
 }
 
 // Determine which US states a lat/lng + radius circle touches
@@ -259,6 +205,104 @@ router.get('/cost-log', auth, async (req, res) => {
     res.json(result.rows);
   } catch (e) {
     res.status(500).json({ error: e.message });
+  }
+});
+
+// ── GET /api/fleetfinder/test-search ─────────────────────────────────────────
+// Runs a test search for Prince Telecom to verify Claude web search is working
+router.get('/test-search', auth, async (req, res) => {
+  const log = [];
+
+  let anthropicKey = process.env.ANTHROPIC_API_KEY;
+  if (!anthropicKey) {
+    const keyRow = await pool.query(`SELECT value FROM config_settings WHERE key = 'ff_anthropic_key'`);
+    anthropicKey = keyRow.rows[0]?.value?.trim() || '';
+  }
+  if (!anthropicKey) {
+    return res.status(400).json({ error: 'No Anthropic API key configured.' });
+  }
+
+  const anthropic = new Anthropic({ apiKey: anthropicKey });
+
+  log.push({ type: 'start', message: 'Starting test search for Prince Telecom in Charlotte NC' });
+  log.push({ type: 'info',  message: 'Model: claude-haiku-4-5-20251001 | Testing web_search tool without betas flag' });
+
+  const messages = [{ role: 'user', content: 'Find Prince Telecom\'s Charlotte NC operation. Search Google, FMCSA (site:safer.fmcsa.dot.gov), LinkedIn, and Indeed. They are a telecom subcontractor with ~100 trucks believed to operate in Charlotte but have limited consumer web presence. Tell me exactly what you find and where you found it.' }];
+
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let finalText = '';
+  let turnCount = 0;
+  let continueLoop = true;
+
+  try {
+    while (continueLoop && turnCount < 6) {
+      turnCount++;
+      const response = await anthropic.messages.create({
+        model:      'claude-haiku-4-5-20251001',
+        max_tokens: 2000,
+        system:     'You are a fleet business discovery agent. Find businesses that operate vehicle fleets. Search multiple sources and report exactly what you find and where.',
+        tools:      [{ type: 'web_search_20250305', name: 'web_search' }],
+        messages,
+      });
+
+      inputTokens  += response.usage?.input_tokens  || 0;
+      outputTokens += response.usage?.output_tokens || 0;
+
+      const turnEntry = {
+        type:        'turn',
+        turn:        turnCount,
+        stop_reason: response.stop_reason,
+        input_tokens:  response.usage?.input_tokens  || 0,
+        output_tokens: response.usage?.output_tokens || 0,
+        searches: [],
+      };
+
+      if (response.stop_reason === 'end_turn') {
+        for (const block of response.content) {
+          if (block.type === 'text') finalText += block.text;
+        }
+        log.push(turnEntry);
+        continueLoop = false;
+      } else if (response.stop_reason === 'tool_use') {
+        for (const block of response.content) {
+          if (block.type === 'tool_use') {
+            turnEntry.searches.push(block.input?.query || JSON.stringify(block.input));
+          }
+        }
+        log.push(turnEntry);
+        messages.push({ role: 'assistant', content: response.content });
+        const toolResults = response.content
+          .filter(b => b.type === 'tool_use')
+          .map(b => ({ type: 'tool_result', tool_use_id: b.id, content: '' }));
+        if (toolResults.length) {
+          messages.push({ role: 'user', content: toolResults });
+        } else {
+          continueLoop = false;
+        }
+      } else {
+        log.push(turnEntry);
+        continueLoop = false;
+      }
+    }
+
+    const costUsd = parseFloat(
+      ((inputTokens / 1_000_000) * PRICE_INPUT_PER_M +
+       (outputTokens / 1_000_000) * PRICE_OUTPUT_PER_M).toFixed(5)
+    );
+
+    log.push({
+      type:          'result',
+      total_input_tokens:  inputTokens,
+      total_output_tokens: outputTokens,
+      cost_usd:      costUsd,
+      turns_used:    turnCount,
+    });
+
+    res.json({ log, final_output: finalText, error: null });
+  } catch (e) {
+    log.push({ type: 'error', message: e.message, detail: e.error || null });
+    res.json({ log, final_output: '', error: e.message });
   }
 });
 
@@ -521,7 +565,6 @@ Return this JSON only — use null for unknown fields:
         max_tokens: 3000,
         system:     systemPrompt,
         tools:      [{ type: 'web_search_20250305', name: 'web_search' }],
-        betas:      ['web-search-2025-03-05'],
         messages,
       });
 

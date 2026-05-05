@@ -1,0 +1,7 @@
+node_modules/
+.env
+*.env.local
+fleet-crm-backend-v2/public/
+dist/
+.DS_Store
+Thumbs.db
