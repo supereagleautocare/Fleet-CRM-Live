@@ -145,7 +145,7 @@ function getStatesInRadius(lat, lng, radiusMiles) {
 router.get('/settings', auth, async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT key, value FROM config_settings WHERE key LIKE 'ff_%'`
+      `SELECT key, value FROM config_settings WHERE key LIKE 'ff_%' OR key IN ('shop_lat','shop_lng')`
     );
     const settings = {};
     for (const row of result.rows) {

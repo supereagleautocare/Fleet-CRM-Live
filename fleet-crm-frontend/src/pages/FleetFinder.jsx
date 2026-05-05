@@ -15,7 +15,7 @@ const VEHICLE_LABELS = {
 const FLEET_SIZE_OPTIONS = [
   { value: 'any',   label: 'Any size' },
   { value: 'xs',    label: '1–5' },
-  { value: 'small', label: '5–20' },
+  { value: 'small', label: '6–20' },
   { value: 'mid',   label: '21–100' },
   { value: 'large', label: '100+' },
 ];
@@ -419,15 +419,13 @@ export default function FleetFinder() {
   useEffect(() => {
     async function load() {
       try {
-        const [s, b, cl, cfg] = await Promise.all([api.ffSettings(), api.ffBudget(), api.ffCostLog(), api.settings()]);
+        const [s, b, cl] = await Promise.all([api.ffSettings(), api.ffBudget(), api.ffCostLog()]);
         setSettings(s); setBudget(b); setCostLog(cl);
         const ind = [...(s.ff_industries || []), ...(s.ff_custom_industries || [])];
         setAllIndustries(ind); setIndustries(ind);
         setRadius(parseFloat(s.ff_default_radius) || 25);
-        const latR = cfg.find(r => r.key === 'shop_lat');
-        const lngR = cfg.find(r => r.key === 'shop_lng');
-        if (latR) setShopLat(parseFloat(latR.value));
-        if (lngR) setShopLng(parseFloat(lngR.value));
+        if (s.shop_lat) setShopLat(parseFloat(s.shop_lat));
+        if (s.shop_lng) setShopLng(parseFloat(s.shop_lng));
       } catch (e) { showToast('Failed to load settings', 'error'); }
     }
     load();
