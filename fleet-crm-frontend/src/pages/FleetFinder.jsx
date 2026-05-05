@@ -604,6 +604,7 @@ export default function FleetFinder() {
       <div style={{
         background: 'white', borderBottom: '1px solid #e5e7eb', padding: '10px 20px',
         display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, flexWrap: 'wrap',
+        position: 'relative', zIndex: 500,
       }}>
 
         {/* Search Zone pill */}
