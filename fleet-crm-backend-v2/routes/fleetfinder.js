@@ -496,176 +496,82 @@ router.post('/search', auth, async (req, res) => {
     const customKeywords = (kwRow.rows[0]?.value || 'company vehicle')
       .split(',').map(k => k.trim()).filter(Boolean);
 
-    // ── 6. Call Claude with web_search ────────────────────────────────────────
+    // ── 6. Two-phase Claude search ────────────────────────────────────────────
     const anthropic = new Anthropic({ apiKey: anthropicKey });
-
-    const systemPrompt = `You are a fleet business discovery agent for an auto repair shop. Find LOCAL businesses that operate vehicle fleets (trucks, vans, cars) and need regular maintenance.
-
-═══ STEP 1 — CLASSIFY EACH INDUSTRY ════════════════════════════════════════════
-You will receive a list of industries. Classify each one yourself:
-
-CONSUMER-FACING: companies that market directly to homeowners or businesses and send
-technicians to customer sites. Send techs to the customer = dedicated vehicle per tech.
-Examples: pest control, HVAC, plumbing, landscaping, pool service, roofing, residential
-electrical, cleaning/janitorial, fire protection, alarm/security installation.
-Search: Google Maps, Google Business listings, Yelp, BBB, then Indeed for fleet signals.
-
-CONTRACT-DRIVEN: companies with little or no consumer web presence that win government,
-utility, or corporate contracts. Workers operate from a yard or warehouse, not an office.
-Examples: telecom subcontractors, fiber/cable installers, utility line crews, construction
-subcontractors, government service contractors, meter reading services, underground crews.
-Search: LinkedIn company search, Google "site:safer.fmcsa.dot.gov [name or industry] [city]",
-SAM.gov contracts via Google search, state contractor license registries, Indeed job boards.
-
-BOTH: Apply both strategies.
-Examples: commercial HVAC, commercial electrical, commercial plumbing, security companies.
-
-═══ STEP 2 — LEADING SIGNALS (check these first, they carry the most weight) ════
-These are the strongest indicators a company has a real local fleet. Prioritize finding them.
-
-1. LOCAL EMPLOYEES ON LINKEDIN OR INDEED
-   Search: Google  →  site:linkedin.com/in "[company name]" "[city]"
-   Search: Google  →  "[company name]" employees "[city]" site:linkedin.com
-   Also check the company's LinkedIn page People tab if accessible.
-
-   For every employee found who lists the target city or nearby city as their location,
-   note their job title and classify it:
-
-   FIELD ROLES (each one = a vehicle): technician, installer, splicer, field tech,
-   service tech, route tech, foreman, crew lead, driver, operator, field supervisor,
-   cable tech, fiber tech, utility worker, groundsman, service rep (field)
-
-   OFFICE ROLES (no vehicle): HR, recruiter, admin, accountant, office manager,
-   inside sales, marketing, IT, dispatcher (office-based)
-
-   Count field-role employees found in the target area. That is your minimum local
-   vehicle count. Report: "Found X employees on LinkedIn in [city]. Y are field roles
-   ([titles listed]). Minimum Y vehicles estimated for this area."
-
-2. PHYSICAL OFFICE OR YARD IN THE TARGET AREA
-   Finding a local office, service center, warehouse, or operations yard confirms the
-   company is actively operating in the area — not just occasionally sending someone out.
-   A local address + local field employees together is strong confirmation of a local fleet.
-   Search the company's website "locations" or "service areas" page. Search Google Maps
-   for the company name in the target city. Note the exact address if found.
-
-═══ STEP 3 — SUPPORTING SIGNALS ════════════════════════════════════════════════
-Use these to raise or lower confidence after checking the leading signals above.
-
-STRONG:
-• Job posting says "company vehicle provided", "take-home vehicle", "stocked service van"
-• Employee review on Indeed or Glassdoor says "company truck" or "take home truck"
-• FMCSA DOT registration found — may show actual reported power unit count
-• Job posting for "fleet coordinator", "fleet manager", or "dispatch coordinator"
-  (companies hire these only when they have 15+ vehicles)
-• Industry where the work STRUCTURALLY requires a vehicle per worker
-  (telecom installer, cable tech, utility crew, pest control route tech, meter reader)
-• Job posting mentions "routes" or "route technician" (multiple trucks running simultaneously)
-• 24/7 emergency service + multiple technicians listed
-• Company established 10+ years and still independent (has had time to build a real fleet)
-• LinkedIn shows 50+ employees for a field service company
-
-WEAK — note these but do not use as primary evidence:
-• Large service area listed (solo operators do this too)
-• Multiple job postings for same role (may be one spot posted many times)
-• "Valid driver's license required" (universal requirement, not a fleet signal)
-
-═══ STEP 4 — HONESTY RULES ═════════════════════════════════════════════════════
-• Never invent an address, phone number, URL, or fleet size. Return null for unknowns.
-• research_notes MUST state: what you found, exactly where (source + URL), AND what
-  you tried to find but could not — and specifically why (e.g. "LinkedIn search returned
-  no Charlotte employees for this company", "FMCSA returned no carrier record",
-  "website has no locations page").
-• fleet_probability is your confidence 0-100 that this company runs a real vehicle fleet
-  in or near the target area, based only on evidence found. Explain your score.
-• estimated_fleet_size must always note it is estimated from signals, not confirmed.
-• Do not bias toward national chains or local independents — return what the search finds.
-
-Your final response must be ONLY a raw JSON array. No markdown, no code fences, just [ ... ].`;
-
-    const userPrompt = `Find 8-15 businesses with vehicle fleets in ${locationDesc} (states: ${stateList}).
-
-Target city / area: ${locationStr}
-Industries to search (you classify each one): ${industryList}
-Vehicle types this shop services: ${vehicleDesc}
-Fleet size preference: ${fleetSizeDesc}
-Fleet signal keywords to watch for in job postings: "${customKeywords.join('", "')}"
-
-Run 5 searches. Cover at least 3 different source types (Google Maps, Yelp, BBB, LinkedIn,
-FMCSA via Google, Indeed, SAM.gov via Google). Do not run the same search twice.
-Do not search Google for everything — go where the companies actually are.
-
-For each company you find, check for local employees on LinkedIn and a local office address
-before moving on. These are your leading signals.
-
-Already in CRM — do not return these: ${existingNames.slice(0, 30).join(', ')}
-
-Return ONLY this JSON array. Use null for any field you could not verify:
-[{
-  "name": "...",
-  "industry": "...",
-  "industry_category": "consumer_facing | contract_driven | both",
-  "address": "...",
-  "city": "...",
-  "state": "...",
-  "zip": "...",
-  "main_phone": "...",
-  "website": "...",
-  "contact_name": null,
-  "contact_title": null,
-  "local_office_found": true,
-  "local_office_address": "...",
-  "local_field_employees_found": 8,
-  "local_field_employee_titles": ["Fiber Technician x4", "Cable Splicer x2", "Field Supervisor x2"],
-  "fleet_probability": 85,
-  "fleet_note": "Strongest single signal found for why this company has a local fleet.",
-  "research_notes": "What was found and where. What could NOT be verified and why.",
-  "fleet_signals": ["local office confirmed", "8 field employees in Charlotte on LinkedIn", "company vehicle in job posting"],
-  "estimated_fleet_size": "8-12 estimated from 8 local field employees — not confirmed",
-  "vehicle_types_detected": ["light_duty_gas"],
-  "vehicle_type_confidence": "confirmed | likely | unknown",
-  "is_local_independent": true,
-  "is_national_chain": false,
-  "sources": [{"label": "LinkedIn employees search", "url": "https://..."}, {"label": "Google Maps listing", "url": "https://..."}]
-}]`;
-
-    let fullText = '';
     let inputTokens  = 0;
     let outputTokens = 0;
+    let turnCount    = 0;
 
-    // Handle multi-turn if Claude needs to use web_search tool
-    const messages = [{ role: 'user', content: userPrompt }];
+    // ── Phase 1: Research (web searches, no JSON pressure) ────────────────────
+    const researchSystem = `You are a fleet vehicle research agent for an auto repair shop in ${locationStr}.
+Your only job right now is to SEARCH and GATHER information. Do not output JSON yet.
+
+HOW TO CLASSIFY INDUSTRIES (decide for each one):
+• CONSUMER-FACING (techs drive to customers — high fleet likelihood): pest control, HVAC, plumbing, landscaping, pool service, roofing, electrical, cleaning, alarm install, fire protection.
+  → Search: Google Maps, Yelp, BBB, then Indeed for job postings.
+• CONTRACT-DRIVEN (win contracts, operate from yards — need deeper digging): telecom subs, fiber crews, utility contractors, construction subs, government service.
+  → Search: LinkedIn people search filtered to ${shopCity}, FMCSA (site:safer.fmcsa.dot.gov), SAM.gov via Google, state contractor registries.
+• When in doubt about which type — use BOTH strategies.
+
+LEADING SIGNALS to look for (strongest evidence of a real local fleet):
+1. LinkedIn employees in ${shopCity} with FIELD titles (technician, installer, driver, route tech, crew lead, foreman, field supervisor). Each field employee = one vehicle minimum. Search LinkedIn People filtered by company AND city.
+2. A physical office, warehouse, or service yard confirmed in the local area.
+
+SUPPORTING SIGNALS: job postings mentioning "company vehicle provided" or "take-home truck" · FMCSA DOT record · "fleet manager" job posting · "route technician" · 24/7 service with multiple techs listed.
+
+IMPORTANT RESEARCH RULES:
+• National chains are valid targets — research their LOCAL ${shopCity} branch specifically (local address, local employees, estimated local fleet — NOT their national fleet).
+• Do NOT use FMCSA for purely local consumer-facing industries (pest control, landscaping, HVAC) — they don't register interstate. Save those search credits for contract-driven or heavy equipment industries.
+• Search LinkedIn People with company name + city filter to find local field employees — don't just look at the company overview page.
+• Include any company that likely operates 2+ vehicles locally, even if you can't confirm exact count.`;
+
+    const researchPrompt = `Research fleet businesses in ${locationDesc} (states: ${stateList}).
+
+Target area: ${locationStr}
+Industries to research: ${industryList}
+Vehicle types this shop services: ${vehicleDesc}
+Fleet size preference (not a hard cutoff): ${fleetSizeDesc}
+Fleet signal keywords: "${customKeywords.join('", "')}"
+
+Run at least 4 web searches covering different sources and companies.
+For each company you find, note:
+- Name, industry, local address if found
+- Any LinkedIn field employees in ${shopCity}
+- Any job postings mentioning company vehicles
+- Whether it's a national chain or local independent
+- Your confidence that they run a local fleet here
+
+Already in CRM (still research these if found — just note "already in CRM"):
+${existingNames.slice(0, 40).join(', ')}
+
+Search now. Summarize what you found for each company.`;
+
+    const researchMessages = [{ role: 'user', content: researchPrompt }];
     let continueLoop = true;
-    let turnCount = 0;
 
-    while (continueLoop && turnCount < 5) {
+    while (continueLoop && turnCount < 6) {
       turnCount++;
       const response = await anthropic.messages.create({
         model:      'claude-haiku-4-5-20251001',
-        max_tokens: 8000,
-        system:     systemPrompt,
+        max_tokens: 1500,
+        system:     researchSystem,
         tools:      [{ type: 'web_search_20250305', name: 'web_search' }],
-        messages,
+        messages:   researchMessages,
       });
 
       inputTokens  += response.usage?.input_tokens  || 0;
       outputTokens += response.usage?.output_tokens || 0;
 
       if (response.stop_reason === 'end_turn') {
-        // Extract text from the final response
-        for (const block of response.content) {
-          if (block.type === 'text') fullText += block.text;
-        }
+        researchMessages.push({ role: 'assistant', content: response.content });
         continueLoop = false;
       } else if (response.stop_reason === 'tool_use') {
-        // Add assistant turn and continue loop (web_search is server-side, API handles it)
-        messages.push({ role: 'assistant', content: response.content });
-        // Add empty tool results for any tool_use blocks (web_search handles itself)
+        researchMessages.push({ role: 'assistant', content: response.content });
         const toolResults = response.content
           .filter(b => b.type === 'tool_use')
           .map(b => ({ type: 'tool_result', tool_use_id: b.id, content: '' }));
         if (toolResults.length > 0) {
-          messages.push({ role: 'user', content: toolResults });
+          researchMessages.push({ role: 'user', content: toolResults });
         } else {
           continueLoop = false;
         }
@@ -674,42 +580,136 @@ Return ONLY this JSON array. Use null for any field you could not verify:
       }
     }
 
+    // ── Phase 2: JSON extraction with assistant prefill ───────────────────────
+    // Prefilling the assistant turn with "[" forces the model to continue the
+    // JSON array — it physically cannot write explanatory text before the data.
+    const extractSystem = `You are a JSON formatter. Convert research findings into a structured JSON array.
+Output ONLY valid JSON. No explanation, no markdown, no text of any kind outside the array.`;
+
+    const extractMessages = [
+      ...researchMessages,
+      {
+        role: 'user',
+        content: `Convert all companies from your research above into this JSON array.
+Include EVERY company mentioned, even national chains (estimate their LOCAL ${shopCity} fleet, not national).
+Use null for any field you could not verify. Do not skip companies due to missing data.
+
+For companies already in CRM set "already_in_crm": true so they can be shown differently in the UI.
+Already in CRM: ${existingNames.slice(0, 40).join(', ')}
+
+Required format per company:
+{
+  "name": string,
+  "industry": string,
+  "industry_category": "consumer_facing"|"contract_driven"|"both",
+  "address": string|null,
+  "city": string|null,
+  "state": string|null,
+  "zip": string|null,
+  "main_phone": string|null,
+  "website": string|null,
+  "contact_name": null,
+  "contact_title": null,
+  "local_office_found": boolean,
+  "local_office_address": string|null,
+  "local_field_employees_found": number|null,
+  "local_field_employee_titles": string[],
+  "fleet_probability": number (0-100),
+  "fleet_note": string,
+  "research_notes": string,
+  "fleet_signals": string[],
+  "score_factors": [{"factor": string, "impact": "+"|"-", "points": number}],
+  "estimated_fleet_size": string|null,
+  "vehicle_types_detected": string[],
+  "vehicle_type_confidence": "confirmed"|"likely"|"unknown",
+  "is_local_independent": boolean|null,
+  "is_national_chain": boolean,
+  "chain_name": string|null,
+  "already_in_crm": boolean,
+  "sources": [{"label": string, "url": string}]
+}`,
+      },
+      { role: 'assistant', content: '[' }, // ← prefill forces JSON array start
+    ];
+
+    const extractResponse = await anthropic.messages.create({
+      model:      'claude-haiku-4-5-20251001',
+      max_tokens: 8000,
+      system:     extractSystem,
+      messages:   extractMessages,
+    });
+
+    inputTokens  += extractResponse.usage?.input_tokens  || 0;
+    outputTokens += extractResponse.usage?.output_tokens || 0;
+    turnCount++;
+
+    // Prepend the prefill "[" back since the response starts after it
+    const extractedText = '[' + (extractResponse.content.find(b => b.type === 'text')?.text || '');
+    const fullText = extractedText;
+
     // ── 7. Parse JSON from Claude response ────────────────────────────────────
     let companies = [];
     let parseError = null;
     let rawAiOutput = fullText;
     try {
+      // Try full array first
       const jsonMatch = fullText.match(/\[[\s\S]*\]/);
       if (jsonMatch) {
         companies = JSON.parse(jsonMatch[0]);
       } else {
-        parseError = 'No JSON array found in AI response';
+        // Fallback: response may be truncated mid-array — try to close it and parse
+        const arrayStart = fullText.indexOf('[');
+        if (arrayStart !== -1) {
+          let partial = fullText.slice(arrayStart);
+          // Find last complete object (ends with })
+          const lastClose = partial.lastIndexOf('}');
+          if (lastClose !== -1) {
+            partial = partial.slice(0, lastClose + 1) + ']';
+            try {
+              companies = JSON.parse(partial);
+              parseError = 'Response was truncated — partial results recovered';
+            } catch (_) {
+              parseError = 'No valid JSON array found in AI response';
+            }
+          } else {
+            parseError = 'No JSON array found in AI response';
+          }
+        } else {
+          parseError = 'AI wrote text instead of JSON — prompt enforcement failed';
+        }
       }
     } catch (e) {
       parseError = `JSON parse error: ${e.message}`;
       console.error('[fleetfinder] JSON parse error:', e.message);
     }
 
-    // ── 8. Filter dismissed + already seen ────────────────────────────────────
+    // ── 8. Filter dismissed; flag CRM matches instead of dropping them ────────
     const now90 = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
     const filtered = [];
     for (const co of companies) {
       if (!co || !co.name) continue;
       const key = `${normalizeName(co.name)}|${normalizeAddress(co.address || '')}`;
+
+      // Hard skip dismissed companies
       if (dismissedKeys.has(key)) continue;
 
-      // Check against CRM existing (fuzzy)
+      // Fuzzy-match against CRM — mark but still include
       const normN = normalizeName(co.name);
-      const isDupe = existingNames.some(en => stringSimilarity(normN, en) >= 0.85);
-      if (isDupe) continue;
-
-      // Mark as seen (expires in 90 days)
-      await pool.query(
-        `INSERT INTO fleet_finder_seen (name, address, city, state, expires_at)
-         VALUES ($1, $2, $3, $4, $5)
-         ON CONFLICT DO NOTHING`,
-        [co.name, co.address || null, co.city || null, co.state || null, now90]
-      ).catch(() => {});
+      const crmMatch = existing.rows.find(r => stringSimilarity(normN, normalizeName(r.name)) >= 0.85);
+      if (crmMatch) {
+        co.already_in_crm  = true;
+        co.crm_match_name  = crmMatch.name;
+        co.crm_match_city  = crmMatch.city;
+      } else {
+        co.already_in_crm  = co.already_in_crm || false;
+        // Only log as "seen" for new companies (not CRM dupes)
+        await pool.query(
+          `INSERT INTO fleet_finder_seen (name, address, city, state, expires_at)
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT DO NOTHING`,
+          [co.name, co.address || null, co.city || null, co.state || null, now90]
+        ).catch(() => {});
+      }
 
       filtered.push(co);
     }

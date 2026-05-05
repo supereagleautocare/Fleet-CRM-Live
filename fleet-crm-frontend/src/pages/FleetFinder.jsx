@@ -214,49 +214,105 @@ function DuplicateModal({ company, matches, onDecision, onCancel }) {
   );
 }
 
+// ── Score factors tooltip ──────────────────────────────────────────────────────
+function ScoreTooltip({ factors, colors }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    const h = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, []);
+  if (!factors?.length) return null;
+  return (
+    <div ref={ref} style={{ position: 'relative', display: 'inline-block' }}>
+      <button onClick={e => { e.stopPropagation(); setOpen(o => !o); }} style={{
+        width: 16, height: 16, borderRadius: '50%', border: `1px solid ${colors.bar}`,
+        background: colors.bg, color: colors.text, fontSize: 9, fontWeight: 800,
+        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1,
+      }}>?</button>
+      {open && (
+        <div style={{
+          position: 'absolute', bottom: 'calc(100% + 6px)', left: '50%', transform: 'translateX(-50%)',
+          background: 'white', border: '1px solid #e5e7eb', borderRadius: 10,
+          boxShadow: '0 8px 24px rgba(0,0,0,.14)', padding: '10px 12px', zIndex: 500,
+          minWidth: 220, maxWidth: 280,
+        }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: '#6b7280', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '.04em' }}>Score Breakdown</div>
+          {factors.map((f, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
+              <span style={{
+                fontSize: 10, fontWeight: 800, minWidth: 32, textAlign: 'right',
+                color: f.impact === '+' ? '#15803d' : '#b91c1c',
+              }}>{f.impact}{f.points}</span>
+              <span style={{ fontSize: 11, color: '#374151', flex: 1 }}>{f.factor}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Result card ────────────────────────────────────────────────────────────────
 function ResultCard({ company, onImport, onDismiss, importing }) {
   const [expanded, setExpanded] = useState(false);
-  const prob   = company.fleet_probability || 0;
-  const colors = PROB_COLOR(prob);
+  const prob      = company.fleet_probability || 0;
+  const colors    = PROB_COLOR(prob);
+  const inCrm     = company.already_in_crm;
 
   return (
     <div style={{
-      background: 'white', borderRadius: 14, marginBottom: 10,
-      border: '1px solid #e5e7eb',
+      background: inCrm ? '#f9fafb' : 'white',
+      borderRadius: 14, marginBottom: 10,
+      border: `1px solid ${inCrm ? '#d1d5db' : '#e5e7eb'}`,
       boxShadow: '0 1px 4px rgba(0,0,0,.06)',
       overflow: 'hidden',
+      opacity: inCrm ? 0.75 : 1,
     }}>
-      {/* Top colored stripe based on probability */}
-      <div style={{ height: 3, background: colors.bar }} />
+      {/* Top stripe */}
+      <div style={{ height: 3, background: inCrm ? '#d1d5db' : colors.bar }} />
+
+      {/* Already in CRM banner */}
+      {inCrm && (
+        <div style={{ padding: '5px 16px', background: '#f3f4f6', borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 600 }}>Already in CRM</span>
+          {company.crm_match_name && (
+            <span style={{ fontSize: 11, color: '#9ca3af' }}>→ matched to <b style={{ color: '#374151' }}>{company.crm_match_name}</b>{company.crm_match_city ? ` (${company.crm_match_city})` : ''}</span>
+          )}
+        </div>
+      )}
 
       <div style={{ padding: '14px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 13 }}>
 
-          {/* Probability badge */}
-          <div style={{
-            width: 56, height: 56, borderRadius: 12, background: colors.bg, flexShrink: 0,
-            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <div style={{ fontSize: 18, fontWeight: 900, color: colors.text, lineHeight: 1 }}>{prob}%</div>
-            <div style={{ fontSize: 9, color: colors.text, opacity: .65, marginTop: 2, fontWeight: 700, letterSpacing: '.04em' }}>FLEET</div>
+          {/* Probability badge + score tooltip */}
+          <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+            <div style={{
+              width: 56, height: 56, borderRadius: 12, background: inCrm ? '#f3f4f6' : colors.bg,
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <div style={{ fontSize: 18, fontWeight: 900, color: inCrm ? '#9ca3af' : colors.text, lineHeight: 1 }}>{prob}%</div>
+              <div style={{ fontSize: 9, color: inCrm ? '#9ca3af' : colors.text, opacity: .65, marginTop: 2, fontWeight: 700, letterSpacing: '.04em' }}>FLEET</div>
+            </div>
+            <ScoreTooltip factors={company.score_factors} colors={inCrm ? { bg: '#f3f4f6', bar: '#9ca3af', text: '#6b7280' } : colors} />
           </div>
 
           {/* Info */}
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{
-              fontWeight: 700, fontSize: 14, color: '#111827', marginBottom: 3,
+              fontWeight: 700, fontSize: 14, color: inCrm ? '#6b7280' : '#111827', marginBottom: 3,
               display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap',
             }}>
               {company.name}
-              {company.is_national_chain   && <Tag bg="#ede9fe" c="#6d28d9">Chain</Tag>}
+              {company.is_national_chain    && <Tag bg="#ede9fe" c="#6d28d9">Chain</Tag>}
               {company.is_local_independent && <Tag bg="#dcfce7" c="#15803d">Local</Tag>}
               {company.industry_category === 'contract_driven' && <Tag bg="#fef3c7" c="#92400e">B2B</Tag>}
             </div>
             <div style={{ fontSize: 12, color: '#6b7280', marginBottom: company.local_office_found || company.local_field_employees_found > 0 ? 7 : 0 }}>
               {[company.industry, company.city && `${company.city}, ${company.state}`, company.distance_miles != null && `${company.distance_miles.toFixed(1)} mi away`].filter(Boolean).join(' · ')}
             </div>
-            {(company.local_office_found || company.local_field_employees_found > 0) && (
+            {!inCrm && (company.local_office_found || company.local_field_employees_found > 0) && (
               <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
                 {company.local_office_found && <Signal bg="#dcfce7" c="#15803d">✓ Local office</Signal>}
                 {company.local_field_employees_found > 0 && <Signal bg="#dbeafe" c="#1e40af">{company.local_field_employees_found} field employees</Signal>}
@@ -266,15 +322,21 @@ function ResultCard({ company, onImport, onDismiss, importing }) {
 
           {/* Action buttons */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
-            <button
-              onClick={e => { e.stopPropagation(); onImport(); }}
-              disabled={importing}
-              style={{
-                padding: '8px 18px', borderRadius: 8, border: 'none', cursor: 'pointer', whiteSpace: 'nowrap',
-                background: importing ? '#9ca3af' : '#1a3358', color: 'white', fontWeight: 700, fontSize: 12,
-              }}>
-              {importing ? '…' : 'Import'}
-            </button>
+            {inCrm ? (
+              <div style={{ padding: '8px 14px', borderRadius: 8, background: '#f3f4f6', border: '1px solid #e5e7eb', fontSize: 11, color: '#9ca3af', fontWeight: 600, textAlign: 'center', whiteSpace: 'nowrap' }}>
+                In CRM
+              </div>
+            ) : (
+              <button
+                onClick={e => { e.stopPropagation(); onImport(); }}
+                disabled={importing}
+                style={{
+                  padding: '8px 18px', borderRadius: 8, border: 'none', cursor: 'pointer', whiteSpace: 'nowrap',
+                  background: importing ? '#9ca3af' : '#1a3358', color: 'white', fontWeight: 700, fontSize: 12,
+                }}>
+                {importing ? '…' : 'Import'}
+              </button>
+            )}
             <button
               onClick={e => { e.stopPropagation(); onDismiss(); }}
               style={{
