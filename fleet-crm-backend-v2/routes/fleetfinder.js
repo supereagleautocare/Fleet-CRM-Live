@@ -594,7 +594,7 @@ Vehicle types this shop services: ${vehicleDesc}
 Fleet size preference (soft preference only — include companies close to this range): ${fleetSizeDesc}
 Fleet signal keywords to watch for: "${customKeywords.join('", "')}"
 
-Run 5 searches. Choose your sources freely — use the source menu in your instructions to decide what makes sense for each industry. Follow the evidence: if a Google Maps result looks promising, go to their website next. If a company has a job posting mentioning "company vehicle", search LinkedIn for their local employees next.
+Run 8–10 searches and aim to find at least 12 distinct companies. Choose your sources freely — use the source menu in your instructions to decide what makes sense for each industry. Follow the evidence: if a Google Maps result looks promising, go to their website next. If a company has a job posting mentioning "company vehicle", search LinkedIn for their local employees next. If one industry search returns few results, try a second industry from the list.
 
 For each company found, report:
 • Name, industry, local address (or "not found")
@@ -611,11 +611,11 @@ Begin searching now.`;
     const researchMessages = [{ role: 'user', content: researchPrompt }];
     let continueLoop = true;
 
-    while (continueLoop && turnCount < 6) {
+    while (continueLoop && turnCount < 10) {
       turnCount++;
       const response = await anthropic.messages.create({
         model:      'claude-haiku-4-5-20251001',
-        max_tokens: 1500,
+        max_tokens: 3500,
         system:     researchSystem,
         tools:      [{ type: 'web_search_20250305', name: 'web_search' }],
         messages:   researchMessages,
