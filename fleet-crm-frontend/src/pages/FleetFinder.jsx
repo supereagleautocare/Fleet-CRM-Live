@@ -20,7 +20,7 @@ const FLEET_SIZE_OPTIONS = [
   { value: 'large', label: '100+' },
 ];
 
-const RADIUS_OPTIONS  = [5, 10, 25, 50, 75, 100];
+const RADIUS_OPTIONS  = [1, 5, 10, 25, 50, 75, 100];
 const DRIVE_OPTIONS   = [10, 15, 20, 30, 45, 60];
 
 const PROB_COLOR = (p) => {
@@ -402,7 +402,7 @@ export default function FleetFinder() {
   const [industries,   setIndustries]    = useState([]);
   const [indSearch,    setIndSearch]     = useState('');
   const [vehicleTypes, setVehicleTypes]  = useState(Object.keys(VEHICLE_LABELS));
-  const [fleetSize,    setFleetSize]     = useState('any');
+  const [fleetSizes,   setFleetSizes]    = useState(['any']);
 
   const [estimate,     setEstimate]      = useState(null);
   const [searching,    setSearching]     = useState(false);
@@ -490,7 +490,7 @@ export default function FleetFinder() {
         lat: shopLat, lng: shopLng,
         radius_miles:   effectiveRadius,
         polygon_coords: polygonCoords,
-        industries, vehicle_types: vehicleTypes, fleet_size: fleetSize,
+        industries, vehicle_types: vehicleTypes, fleet_size: fleetSizes,
       });
       setResults(data.results || []);
       setSearchMeta(data);
@@ -718,7 +718,27 @@ export default function FleetFinder() {
         {/* Fleet Size — inline fixed buttons */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', whiteSpace: 'nowrap' }}>Fleet size</span>
-          <SegBtns options={FLEET_SIZE_OPTIONS} selected={fleetSize} onSelect={setFleetSize} />
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {FLEET_SIZE_OPTIONS.map(opt => {
+              const active = fleetSizes.includes(opt.value);
+              return (
+                <button key={opt.value} onClick={() => {
+                  if (opt.value === 'any') { setFleetSizes(['any']); return; }
+                  setFleetSizes(prev => {
+                    const without = prev.filter(v => v !== 'any' && v !== opt.value);
+                    const next = prev.includes(opt.value) ? without : [...without, opt.value];
+                    return next.length === 0 ? ['any'] : next;
+                  });
+                }} style={{
+                  padding: '7px 14px', borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                  border: active ? '2px solid #1a3358' : '1.5px solid #d1d5db',
+                  background: active ? '#1a3358' : 'white',
+                  color: active ? 'white' : '#374151',
+                  transition: 'all .12s',
+                }}>{opt.label}</button>
+              );
+            })}
+          </div>
         </div>
 
         <div style={{ flex: 1 }} />
