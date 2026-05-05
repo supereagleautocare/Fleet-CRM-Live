@@ -786,6 +786,41 @@ async function handleImport(e) {
                     </div>
                   )}
 
+                  {/* Fleet Intel — AI research saved at import time */}
+                  {(() => {
+                    let fr = null;
+                    try { fr = selected.fleet_research ? (typeof selected.fleet_research === 'string' ? JSON.parse(selected.fleet_research) : selected.fleet_research) : null; } catch(_) {}
+                    if (!fr) return null;
+                    const VLABELS = { passenger:'Passenger cars', light_duty_gas:'Light duty gas trucks', light_duty_diesel:'Light duty diesel trucks', cargo_van:'Cargo/Sprinter vans', medium_duty:'Medium duty gas', medium_duty_diesel:'Medium duty diesel', heavy_duty_diesel:'Heavy duty diesel' };
+                    return (
+                      <div style={{ marginTop:12, padding:'12px 14px', background:'#f0f9ff', borderRadius:8, border:'1px solid #bae6fd', fontSize:12 }}>
+                        <div style={{ fontWeight:700, fontSize:12, color:'#0369a1', marginBottom:8, display:'flex', alignItems:'center', gap:6 }}>
+                          🔍 Fleet Intel
+                          {fr.fleet_probability && <span style={{ fontWeight:600, color:'#0284c7', background:'#e0f2fe', borderRadius:10, padding:'1px 7px', fontSize:11 }}>{fr.fleet_probability}% fleet likelihood</span>}
+                          {fr.searched_at && <span style={{ fontWeight:400, color:'#7dd3fc', marginLeft:'auto', fontSize:10 }}>Searched {new Date(fr.searched_at).toLocaleDateString()}</span>}
+                        </div>
+                        {fr.fleet_note && <div style={{ color:'#0c4a6e', marginBottom:6, lineHeight:1.5 }}>{fr.fleet_note}</div>}
+                        {fr.research_notes && <div style={{ color:'#075985', marginBottom:8, lineHeight:1.5 }}>{fr.research_notes}</div>}
+                        <div style={{ display:'flex', gap:12, flexWrap:'wrap', marginBottom: fr.sources?.length ? 8 : 0 }}>
+                          {fr.estimated_fleet_size && <span style={{ color:'#0369a1' }}>Est. fleet: <b>{fr.estimated_fleet_size} vehicles</b></span>}
+                          {fr.vehicle_types?.length > 0 && <span style={{ color:'#0369a1' }}>Types: <b>{fr.vehicle_types.map(v => VLABELS[v] || v).join(', ')}</b></span>}
+                          {fr.distance_miles != null && <span style={{ color:'#0369a1' }}><b>{fr.distance_miles} mi</b> from shop</span>}
+                          {fr.contact_name && <span style={{ color:'#0369a1' }}>Contact: <b>{fr.contact_name}{fr.contact_title ? ` — ${fr.contact_title}` : ''}</b></span>}
+                        </div>
+                        {fr.sources?.length > 0 && (
+                          <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+                            {fr.sources.map((s, i) => (
+                              <a key={i} href={s.url} target="_blank" rel="noopener noreferrer"
+                                style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'3px 9px', background:'white', border:'1px solid #bae6fd', borderRadius:10, fontSize:11, color:'#0284c7', fontWeight:600, textDecoration:'none' }}>
+                                ↗ {s.label || s.url}
+                              </a>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
                   {/* Follow-up scheduler */}
                   <div style={{ marginTop:14, padding:'14px 16px', background:'#fffbeb', borderRadius:8, border:'1px solid #fde68a' }}>
                     <div style={{ fontSize:12, fontWeight:700, color:'#92400e', marginBottom:10 }}>📅 Schedule Follow-Up</div>

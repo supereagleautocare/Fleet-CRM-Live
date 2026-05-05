@@ -447,14 +447,7 @@ router.post('/search', auth, async (req, res) => {
     // ── 2. Determine search states ─────────────────────────────────────────────
     const searchStates = getStatesInRadius(lat, lng, radius_miles);
 
-    // ── 2b. Resolve Serper key ────────────────────────────────────────────────
-    let serperKey = process.env.SERPER_API_KEY;
-    if (!serperKey) {
-      const serperRow = await pool.query(`SELECT value FROM config_settings WHERE key = 'ff_serper_key'`);
-      serperKey = serperRow.rows[0]?.value?.trim() || '';
-    }
-
-    // ── 2c. Reverse geocode shop location → nearest city name ─────────────────
+    // ── 2b. Reverse geocode shop location → nearest city name ────────────────
     const shopCity = await reverseGeocode(lat, lng);
 
     // ── 3. Pull existing companies for dedup ──────────────────────────────────
@@ -497,27 +490,11 @@ router.post('/search', auth, async (req, res) => {
 
     const industryList = industries.length ? industries.join(', ') : 'all industries';
 
-    // ── 5b. Run Serper pre-searches (2 fixed searches) ───────────────────────
-    const locationStr = shopCity ? `${shopCity} ${stateList}` : stateList;
-
-    // Load custom fleet signal keywords (default "company vehicle")
+    // ── 5b. Load custom fleet signal keywords ────────────────────────────────
+    const locationStr = shopCity ? `${shopCity}, ${stateList}` : stateList;
     const kwRow = await pool.query(`SELECT value FROM config_settings WHERE key = 'ff_search_keywords'`);
     const customKeywords = (kwRow.rows[0]?.value || 'company vehicle')
       .split(',').map(k => k.trim()).filter(Boolean);
-    const keywordFilter = customKeywords.map(k => `"${k}"`).join(' OR ');
-
-    const allIndustries = industries.length ? industries.join(' ') : industryList;
-
-    // 1 — straight Google search for the industry + location
-    // 2 — same search on Indeed with fleet keyword signal
-    const serperQueries = serperKey ? [
-      `${allIndustries} ${locationStr}`,
-      `${allIndustries} ${locationStr} ${keywordFilter} site:indeed.com`,
-    ] : [];
-
-    const serperResults = serperKey ? await runSerperSearches(serperQueries, serperKey) : [];
-    const serperContext = formatSerperResults(serperResults);
-    const serperCost    = serperResults.length * 0.001;
 
     // ── 6. Call Claude with web_search ────────────────────────────────────────
     const anthropic = new Anthropic({ apiKey: anthropicKey });
@@ -525,29 +502,49 @@ router.post('/search', auth, async (req, res) => {
     const systemPrompt = `You are a fleet business discovery agent for an auto repair shop. Your job is to find LOCAL businesses that operate fleets of vehicles — trucks, vans, cars — and need regular vehicle maintenance.
 
 These businesses come in two types:
-1. CONSUMER-FACING — pest control, HVAC, plumbing, landscaping companies. They show up on Google, Yelp, and BBB. Find them through local directories and job boards.
-2. CONTRACT-DRIVEN — telecom subcontractors, utility contractors, electrical contractors, construction subs. They have warehouses and fleets but ZERO consumer web presence. They won't be on Yelp. Find them through LinkedIn, FMCSA (site:safer.fmcsa.dot.gov), SAM.gov (government contracts), and state contractor license registries.
+1. CONSUMER-FACING — pest control, HVAC, plumbing, landscaping, fire protection, security. Show up on Google, Yelp, BBB, and Indeed.
+2. CONTRACT-DRIVEN — telecom subcontractors, utility contractors, cable companies, construction subs, government contractors. They have warehouses and fleets but NO consumer web presence. Find them through LinkedIn company search, FMCSA SAFER database (safer.fmcsa.dot.gov), SAM.gov, state contractor registries, and job boards.
 
-Fleet signals in job postings: "company vehicle", "company truck", "take home vehicle", "service van provided" — a company hiring 5 technicians almost certainly runs 5 trucks. Most fleet vehicles are light duty (F-150s, vans) — not semis or CDL vehicles.
+Fleet signals in job postings: look for "${customKeywords.join('", "')}" in job postings — NOT "CDL" or "semi" which are commercial truckers, not fleet customers. A company hiring 5 techs with company vehicles runs 5 trucks.
 
-Your final response must be ONLY a raw JSON array — no markdown, no explanation, just [ ... ].`;
+CRITICAL — Source citations required: For every company you return, you MUST include the exact URL where you found the data. Do not make up URLs. If you found the phone number on their website, include that URL. If you found them on Indeed, include the Indeed URL. If FMCSA, include the SAFER URL.
+
+Your final response must be ONLY a raw JSON array — no markdown, no explanation, no code fences, just [ ... ].`;
 
     const userPrompt = `Find 8-15 businesses with vehicle fleets in ${locationDesc} (states: ${stateList}).
 
-Industries selected: ${industryList}
-Vehicle types the shop services: ${vehicleDesc}
+Industries to search: ${industryList}
+Vehicle types this shop services: ${vehicleDesc}
 Fleet size target: ${fleetSizeDesc}
+Location reference: ${locationStr}
 
-${serperContext ? `${serperContext}
-These 2 queries were already searched — do NOT repeat them:
-${serperQueries.map(q => `  • ${q}`).join('\n')}
+Run 4-5 web searches across different sources. For consumer-facing industries (pest control, HVAC, plumbing): search Google, Yelp, and Indeed with keywords like "${customKeywords[0]}". For contract-driven industries (telecom, utilities, cable): search LinkedIn company pages, FMCSA SAFER, SAM.gov, and job boards. Do NOT repeat the same search twice or just search Google for everything.
 
-` : ''}Use your web_search tool to run 4-5 searches across sources that will surface both consumer-facing AND contract-driven fleet businesses. Think about which industries above are likely contract-driven with no consumer presence and search the right sources for those. Good sources to consider: LinkedIn, FMCSA, SAM.gov, Yelp, BBB, state contractor license registries, local business directories, and any industry-specific databases you know about. Do not just search Google repeatedly — go where the hidden companies are.
+Already in CRM — skip these: ${existingNames.slice(0, 30).join(', ')}
 
-Skip these (already in CRM): ${existingNames.slice(0, 30).join(', ')}
-
-Return this JSON only — use null for unknown fields:
-[{"name":"...","industry":"...","address":"...","city":"...","state":"...","zip":"...","main_phone":"...","website":"...","contact_name":"...","contact_title":"...","fleet_probability":85,"fleet_note":"...","vehicle_types_detected":["light_duty_gas"],"vehicle_type_confidence":"likely","estimated_fleet_size":"5-10","is_multi_location":false,"is_chain":false,"sources_found":["Google"],"distance_miles":null}]`;
+Return ONLY this JSON array, use null for unknown fields:
+[{
+  "name": "...",
+  "industry": "...",
+  "address": "...",
+  "city": "...",
+  "state": "...",
+  "zip": "...",
+  "main_phone": "...",
+  "website": "...",
+  "contact_name": "...",
+  "contact_title": "...",
+  "fleet_probability": 85,
+  "fleet_note": "One sentence: why this company has a fleet and what signal confirmed it.",
+  "research_notes": "2-3 sentences describing what was found, where, and what it means for fleet size.",
+  "vehicle_types_detected": ["light_duty_gas"],
+  "vehicle_type_confidence": "likely",
+  "estimated_fleet_size": "5-10",
+  "is_multi_location": false,
+  "is_chain": false,
+  "sources": [{"label": "Indeed job posting", "url": "https://..."}, {"label": "Company website", "url": "https://..."}],
+  "distance_miles": null
+}]`;
 
     let fullText = '';
     let inputTokens  = 0;
@@ -642,8 +639,7 @@ Return this JSON only — use null for unknown fields:
     // ── 11. Log cost ──────────────────────────────────────────────────────────
     const costUsd = parseFloat(
       ((inputTokens / 1_000_000) * PRICE_INPUT_PER_M +
-       (outputTokens / 1_000_000) * PRICE_OUTPUT_PER_M +
-       serperCost).toFixed(5)
+       (outputTokens / 1_000_000) * PRICE_OUTPUT_PER_M).toFixed(5)
     );
     await pool.query(
       `INSERT INTO fleet_finder_cost_log
@@ -667,7 +663,6 @@ Return this JSON only — use null for unknown fields:
       input_tokens:    inputTokens,
       output_tokens:   outputTokens,
       states_searched: searchStates,
-      serper_searches: serperResults.length,
     });
 
   } catch (e) {

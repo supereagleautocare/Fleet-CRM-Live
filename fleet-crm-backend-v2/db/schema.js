@@ -395,6 +395,9 @@ async function initDb() {
       ON CONFLICT (email) DO NOTHING;
     `, [hash]);
 
+    // ─── Column migrations (safe to run repeatedly) ─────────────────────────
+    await client.query(`ALTER TABLE companies ADD COLUMN IF NOT EXISTS fleet_research TEXT`);
+
     console.log('✅ PostgreSQL database ready');
   } catch (err) {
     console.error('❌ Database init error:', err.message);

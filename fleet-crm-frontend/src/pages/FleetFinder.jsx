@@ -409,17 +409,26 @@ export default function FleetFinder() {
 
   async function doImport(company, decision, matches, index) {
     const isMulti = decision === 'multi_location' || company.is_multi_location;
-    const noteLines = [];
-    if (company.fleet_note) noteLines.push(company.fleet_note);
-    if (company.vehicle_types_detected?.length) noteLines.push(`Vehicle types: ${company.vehicle_types_detected.map(v => VEHICLE_LABELS[v] || v).join(', ')} (${company.vehicle_type_confidence || 'likely'})`);
-    if (company.estimated_fleet_size) noteLines.push(`Est. fleet size: ${company.estimated_fleet_size} vehicles`);
-    if (company.contact_title) noteLines.push(`Contact: ${company.contact_name || ''} — ${company.contact_title}`);
-    if (company.sources_found?.length) noteLines.push(`Sources: ${company.sources_found.join(', ')}`);
-    if (company.distance_miles != null) noteLines.push(`Distance from shop: ${company.distance_miles.toFixed(1)} mi`);
+
+    const fleetResearch = {
+      fleet_note:            company.fleet_note         || null,
+      research_notes:        company.research_notes     || null,
+      fleet_probability:     company.fleet_probability  || null,
+      estimated_fleet_size:  company.estimated_fleet_size || null,
+      vehicle_types:         company.vehicle_types_detected || [],
+      vehicle_type_confidence: company.vehicle_type_confidence || null,
+      contact_name:          company.contact_name       || null,
+      contact_title:         company.contact_title      || null,
+      sources:               company.sources            || [],
+      distance_miles:        company.distance_miles     != null ? parseFloat(company.distance_miles.toFixed(1)) : null,
+      searched_at:           new Date().toISOString(),
+    };
+
     await api.createCompany({
       name: company.name, main_phone: company.main_phone || null, industry: company.industry || null,
       address: company.address || null, city: company.city || null, state: company.state || null,
-      zip: company.zip || null, website: company.website || null, notes: noteLines.join('\n') || null,
+      zip: company.zip || null, website: company.website || null,
+      fleet_research: fleetResearch,
       is_multi_location: isMulti ? 1 : 0,
       location_name: isMulti ? (company.city || null) : null,
       location_group: isMulti && matches?.length ? (matches[0].location_group || matches[0].name) : (company.is_chain ? company.name : null),
