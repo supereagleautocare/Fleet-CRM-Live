@@ -558,6 +558,29 @@ export default function FleetFinder() {
 
   const effectiveRadius = mode === 'drivetime' ? driveTimeToMiles(driveMinutes) : radius;
 
+  // Restore results from sessionStorage on mount (survives page navigation)
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem('ff_search_state');
+      if (saved) {
+        const { results: r, searchMeta: m, searchSummary: s, lastDebug: d } = JSON.parse(saved);
+        if (r?.length) setResults(r);
+        if (m) setSearchMeta(m);
+        if (s) setSearchSummary(s);
+        if (d) setLastDebug(d);
+      }
+    } catch (_) {}
+  }, []);
+
+  // Persist results to sessionStorage whenever they change
+  useEffect(() => {
+    if (results.length > 0 || searchMeta) {
+      try {
+        sessionStorage.setItem('ff_search_state', JSON.stringify({ results, searchMeta, searchSummary, lastDebug }));
+      } catch (_) {}
+    }
+  }, [results, searchMeta, searchSummary, lastDebug]);
+
   useEffect(() => {
     async function load() {
       try {
@@ -625,6 +648,7 @@ export default function FleetFinder() {
     if (searching) return;
     if (budget.spent >= budget.budget) { showToast(`Monthly budget of $${budget.budget} reached`, 'error'); return; }
     setSearching(true); setResults([]); setSearchMeta(null); setSearchSummary(null); setActivePanel('results');
+    try { sessionStorage.removeItem('ff_search_state'); } catch (_) {}
     try {
       const data = await api.ffSearch({
         lat: shopLat, lng: shopLng,
