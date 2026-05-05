@@ -506,36 +506,36 @@ router.post('/search', auth, async (req, res) => {
     const researchSystem = `You are a fleet vehicle research agent for an auto repair shop in ${locationStr}.
 Your job right now: SEARCH and GATHER information. Do not output JSON yet.
 
-══ SOURCE MENU — use any combination, in any order that makes sense ════════
-You have full freedom to choose where you search. Here is what each source is good for:
+══ WHERE TO SEARCH — starting points that have worked well ═════════════════
+You have full freedom to search wherever makes sense. These are starting points that tend to produce good results — use your own judgment if you think a different source will work better for a specific company or industry.
 
-GOOGLE MAPS / GOOGLE BUSINESS
-  Best for: finding local companies fast, confirming a branch address exists, seeing review counts (high reviews = established operation), reading business descriptions that sometimes mention fleet size or team size.
-  Search: "[industry] ${shopCity}" or "[chain name] ${shopCity} location"
+GOOGLE MAPS / GOOGLE BUSINESS — usually a great first move
+  We've had good luck starting here to quickly find 5-8 local companies per industry. Business descriptions sometimes mention fleet size or team size, and review counts give a sense of how established the operation is.
+  Try: "[industry] ${shopCity}"
 
-COMPANY WEBSITE (once you have a company name)
-  Best for: "Our Fleet" pages, service area maps, team/technician pages with headcount, "About Us" mentions of truck count or years in operation. A company listing 12 named technicians has at least 12 vehicles.
-  Search: "[company name] fleet" or "[company name] service area" or site:[their domain]
+COMPANY WEBSITE — follow up once you have a name
+  Worth checking if a company looks promising. Fleet pages, service area maps, and team/technician pages often reveal headcount. A company listing 12 named technicians has at least 12 vehicles. "About Us" pages sometimes mention how many trucks they run.
+  Try: "[company name] fleet" or "[company name] our team" or go directly to their site.
 
-INDEED / GLASSDOOR / ZIPRECRUITER
-  Best for: job postings that mention "company vehicle provided", "take-home truck", "stocked service van", "route technician". Employee reviews sometimes say "company truck" or "take-home vehicle".
-  Search: "[industry] ${shopCity} company vehicle" or "[company name] technician job ${shopCity}"
+INDEED / GLASSDOOR — great for confirming fleet operation
+  Job postings that say "company vehicle provided", "take-home truck", "stocked service van", or "route technician" are strong fleet signals. Employee reviews sometimes mention "company truck" or "take-home vehicle" too.
+  Try: "[industry] ${shopCity} company vehicle" or "[company name] technician job"
 
-LINKEDIN PEOPLE SEARCH
-  Best for: counting field employees at a specific company who are located in ${shopCity}.
-  Search Google: site:linkedin.com/in "[company name]" "${shopCity}"
-  This finds individual profile pages — count only those located in ${shopCity} or nearby.
+LINKEDIN PEOPLE SEARCH — our best signal for local fleet size
+  Searching for employees by company + city is the most reliable way to count local field workers. Each field employee = one vehicle minimum.
+  Try searching Google: site:linkedin.com/in "[company name]" "${shopCity}"
+  This finds individual profiles rather than just the company page.
 
-YELP / BBB
-  Best for: finding smaller local independents that don't advertise heavily. Reviews sometimes mention fleet size or number of technicians.
+YELP / BBB — good for smaller independents
+  Smaller local companies that don't rank well on Google often show up here. Reviews sometimes mention "their fleet of vans" or "the technician arrived in a company truck."
 
-FMCSA (site:safer.fmcsa.dot.gov)
-  Best for: companies that cross state lines or operate heavy commercial vehicles (freight haulers, large utility crews, construction equipment). Ask yourself: would this company need a federal DOT number? Local pest control, local HVAC, local landscaping — probably not. Freight, waste haulers, utility line crews — possibly yes. Only search FMCSA when the answer is probably yes.
+FMCSA (site:safer.fmcsa.dot.gov) — situational, use your judgment
+  We've had mixed results here. It works well for companies that likely cross state lines (freight, waste haulers, large utility crews). For purely local service companies like pest control or HVAC, they usually don't have a DOT number, so it's probably not worth a search credit — but if you think it might apply, go for it.
 
-SAM.GOV / STATE CONTRACTOR REGISTRIES
-  Best for: contract-driven companies (telecom subs, utility contractors, government service contractors).
+SAM.GOV / STATE CONTRACTOR REGISTRIES — for contract-driven industries
+  Good for telecom subs, utility contractors, government service companies that win public contracts.
 
-FOLLOW THE EVIDENCE — if you find a company on Google Maps, go to their website next. If their website mentions a "fleet of service vehicles", note it and move on. If a job posting mentions "company van provided", that confirms fleet operation. Each search should build on what you already know.
+FOLLOW THE EVIDENCE — each search should build on what you already found. If Google Maps surfaces a company, go to their website next. If a job posting mentions "company van provided", search LinkedIn for that company's local employees next. Don't follow a rigid plan if the evidence is pointing somewhere more useful.
 
 NATIONAL CHAINS — fully valid leads:
   1. Confirm local branch: search "[chain name] ${shopCity}" on Google Maps or their website's locations page.
