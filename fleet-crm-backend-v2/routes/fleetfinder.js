@@ -411,12 +411,14 @@ router.post('/check-duplicate', auth, async (req, res) => {
 router.post('/search', auth, async (req, res) => {
   const {
     lat, lng,
-    radius_miles  = 25,
+    radius_miles   = 25,
     polygon_coords = null,
-    industries    = [],
-    vehicle_types = [],
-    fleet_size    = 'any',
+    industries     = [],
+    vehicle_types  = [],
+    fleet_size: fleetSizeRaw = 'any',
   } = req.body;
+  // fleet_size may now be an array (multi-select) or legacy string
+  const fleetSizeArr = Array.isArray(fleetSizeRaw) ? fleetSizeRaw : [fleetSizeRaw];
 
     // Resolve API key — env var takes priority, then CRM settings
     let anthropicKey = process.env.ANTHROPIC_API_KEY;
@@ -481,12 +483,10 @@ router.post('/search', auth, async (req, res) => {
         }[v] || v)).join('; ')
       : 'any vehicle type';
 
-    const fleetSizeDesc = {
-      any:   'any fleet size',
-      small: '2-5 vehicles',
-      mid:   '6-15 vehicles',
-      large: '16+ vehicles',
-    }[fleet_size] || 'any fleet size';
+    const SIZE_LABELS = { any: 'any fleet size', xs: '1-5 vehicles', small: '6-20 vehicles', mid: '21-100 vehicles', large: '100+ vehicles' };
+    const fleetSizeDesc = fleetSizeArr.includes('any') || fleetSizeArr.length === 0
+      ? 'any fleet size'
+      : fleetSizeArr.map(s => SIZE_LABELS[s] || s).join(' or ');
 
     const industryList = industries.length ? industries.join(', ') : 'all industries';
 
@@ -642,7 +642,7 @@ Return ONLY this JSON array. Use null for any field you could not verify:
       turnCount++;
       const response = await anthropic.messages.create({
         model:      'claude-haiku-4-5-20251001',
-        max_tokens: 3000,
+        max_tokens: 8000,
         system:     systemPrompt,
         tools:      [{ type: 'web_search_20250305', name: 'web_search' }],
         messages,
@@ -676,12 +676,17 @@ Return ONLY this JSON array. Use null for any field you could not verify:
 
     // ── 7. Parse JSON from Claude response ────────────────────────────────────
     let companies = [];
+    let parseError = null;
+    let rawAiOutput = fullText;
     try {
       const jsonMatch = fullText.match(/\[[\s\S]*\]/);
       if (jsonMatch) {
         companies = JSON.parse(jsonMatch[0]);
+      } else {
+        parseError = 'No JSON array found in AI response';
       }
     } catch (e) {
+      parseError = `JSON parse error: ${e.message}`;
       console.error('[fleetfinder] JSON parse error:', e.message);
     }
 
@@ -746,6 +751,13 @@ Return ONLY this JSON array. Use null for any field you could not verify:
       input_tokens:    inputTokens,
       output_tokens:   outputTokens,
       states_searched: searchStates,
+      debug: {
+        turns:         turnCount,
+        parse_error:   parseError,
+        raw_companies: companies.length,
+        filtered_out:  companies.length - filtered.length,
+        raw_preview:   rawAiOutput.slice(0, 2000),
+      },
     });
 
   } catch (e) {

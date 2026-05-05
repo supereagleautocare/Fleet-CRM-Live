@@ -406,6 +406,7 @@ export default function FleetFinder() {
 
   const [estimate,     setEstimate]      = useState(null);
   const [searching,    setSearching]     = useState(false);
+  const [lastDebug,    setLastDebug]     = useState(null);
   const [results,      setResults]       = useState([]);
   const [searchMeta,   setSearchMeta]    = useState(null);
   const [importing,    setImporting]     = useState({});
@@ -492,6 +493,7 @@ export default function FleetFinder() {
       });
       setResults(data.results || []);
       setSearchMeta(data);
+      if (data.debug) setLastDebug(data.debug);
       const [b, cl] = await Promise.all([api.ffBudget(), api.ffCostLog()]);
       setBudget(b); setCostLog(cl);
     } catch (e) { showToast(e.message || 'Search failed', 'error'); }
@@ -865,6 +867,31 @@ export default function FleetFinder() {
                       </tr>
                     </tfoot>
                   </table>
+                )}
+
+                {/* Last search debug panel */}
+                {lastDebug && (
+                  <div style={{ marginTop: 20, borderRadius: 12, border: '1px solid #e5e7eb', overflow: 'hidden' }}>
+                    <div style={{ padding: '10px 14px', background: lastDebug.parse_error ? '#fef2f2' : '#f0fdf4', borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: lastDebug.parse_error ? '#b91c1c' : '#15803d' }}>
+                        {lastDebug.parse_error ? '⚠ Last Search Debug' : '✓ Last Search Debug'}
+                      </span>
+                      <span style={{ fontSize: 11, color: '#6b7280', marginLeft: 'auto' }}>
+                        {lastDebug.turns} AI turn{lastDebug.turns !== 1 ? 's' : ''} · {lastDebug.raw_companies} companies found · {lastDebug.filtered_out} filtered out
+                      </span>
+                    </div>
+                    {lastDebug.parse_error && (
+                      <div style={{ padding: '10px 14px', background: '#fef2f2', fontSize: 12, color: '#b91c1c', fontWeight: 600 }}>
+                        Parse error: {lastDebug.parse_error}
+                      </div>
+                    )}
+                    <div style={{ padding: '10px 14px', background: '#f9fafb' }}>
+                      <div style={{ fontSize: 10, color: '#9ca3af', fontWeight: 700, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.04em' }}>Raw AI output preview</div>
+                      <pre style={{ fontSize: 10, color: '#374151', whiteSpace: 'pre-wrap', wordBreak: 'break-all', margin: 0, maxHeight: 220, overflowY: 'auto', lineHeight: 1.5 }}>
+                        {lastDebug.raw_preview || '(empty)'}
+                      </pre>
+                    </div>
+                  </div>
                 )}
               </>
             )}
