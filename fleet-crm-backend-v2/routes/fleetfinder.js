@@ -606,6 +606,11 @@ For each company found, report:
 Already in CRM (research anyway — just note "already in CRM"):
 ${existingNames.slice(0, 40).join(', ')}
 
+After your searches, end your response with a short COVERAGE NOTE section (label it exactly "COVERAGE NOTE:") that answers in 2-3 sentences:
+1. Which sources you searched (Google Maps, LinkedIn, Indeed, FMCSA, etc.)
+2. How many distinct companies you found total
+3. What would likely yield more results if the user expanded (e.g., "Searching FMCSA for freight companies or LinkedIn for a second industry would likely surface more leads")
+
 Begin searching now.`;
 
     const researchMessages = [{ role: 'user', content: researchPrompt }];
@@ -641,6 +646,16 @@ Begin searching now.`;
         continueLoop = false;
       }
     }
+
+    // Extract coverage note from Phase 1 final text
+    const phase1FinalText = researchMessages
+      .filter(m => m.role === 'assistant')
+      .flatMap(m => Array.isArray(m.content) ? m.content : [{ type: 'text', text: m.content }])
+      .filter(b => b.type === 'text')
+      .map(b => b.text)
+      .join(' ');
+    const coverageMatch = phase1FinalText.match(/COVERAGE NOTE:\s*([\s\S]*?)(?:\n\n|$)/i);
+    const searchSummary = coverageMatch ? coverageMatch[1].trim() : null;
 
     // ── Phase 2: JSON extraction with assistant prefill ───────────────────────
     // Prefilling the assistant turn with "[" forces the model to continue the
@@ -818,6 +833,7 @@ Required format per company:
       input_tokens:    inputTokens,
       output_tokens:   outputTokens,
       states_searched: searchStates,
+      search_summary:  searchSummary,
       debug: {
         turns:         turnCount,
         parse_error:   parseError,

@@ -547,6 +547,7 @@ export default function FleetFinder() {
   const [lastDebug,    setLastDebug]     = useState(null);
   const [results,      setResults]       = useState([]);
   const [searchMeta,   setSearchMeta]    = useState(null);
+  const [searchSummary,setSearchSummary] = useState(null);
   const [importing,      setImporting]      = useState({});
   const [dupModal,       setDupModal]       = useState(null);
   const [chainModal,     setChainModal]     = useState(null);  // { company, chainInfo, index }
@@ -623,7 +624,7 @@ export default function FleetFinder() {
   async function runSearch() {
     if (searching) return;
     if (budget.spent >= budget.budget) { showToast(`Monthly budget of $${budget.budget} reached`, 'error'); return; }
-    setSearching(true); setResults([]); setSearchMeta(null); setActivePanel('results');
+    setSearching(true); setResults([]); setSearchMeta(null); setSearchSummary(null); setActivePanel('results');
     try {
       const data = await api.ffSearch({
         lat: shopLat, lng: shopLng,
@@ -633,6 +634,7 @@ export default function FleetFinder() {
       });
       setResults(data.results || []);
       setSearchMeta(data);
+      if (data.search_summary) setSearchSummary(data.search_summary);
       if (data.debug) setLastDebug(data.debug);
       const [b, cl] = await Promise.all([api.ffBudget(), api.ffCostLog()]);
       setBudget(b); setCostLog(cl);
@@ -1043,6 +1045,17 @@ export default function FleetFinder() {
                     onDismiss={() => handleDismiss(co, i)}
                     importing={!!importing[i]} />
                 ))}
+
+                {searchSummary && !searching && (
+                  <div style={{
+                    marginTop: 8, padding: '12px 14px', borderRadius: 10,
+                    background: '#f0f9ff', border: '1px solid #bae6fd',
+                    fontSize: 12, color: '#0369a1', lineHeight: 1.6,
+                  }}>
+                    <span style={{ fontWeight: 700, display: 'block', marginBottom: 4, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.04em', color: '#0284c7' }}>Search Coverage</span>
+                    {searchSummary}
+                  </div>
+                )}
               </>
             )}
 
