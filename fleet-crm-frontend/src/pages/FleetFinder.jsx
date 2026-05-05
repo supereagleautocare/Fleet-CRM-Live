@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from 'react';
 import { api } from '../api.js';
 import { useApp } from '../App.jsx';
 
-// ── Vehicle types ─────────────────────────────────────────────────────────────
 const VEHICLE_LABELS = {
   passenger:          'Passenger / Sedan',
   light_duty_gas:     'Light Duty Gas (F-150 thru F-350)',
@@ -13,56 +12,72 @@ const VEHICLE_LABELS = {
   heavy_duty_diesel:  'Heavy Duty Diesel (F-750+, Class 7-8)',
 };
 
-const TOOLTIPS = {
-  searchZone:   'Defines the geographic area the AI searches. Circle and Drive Time use your shop as the center. Draw lets you outline a custom area on the map.',
-  driveTime:    'Converts drive minutes to an approximate search radius from your shop. Useful for finding companies within your realistic service reach.',
-  industries:   'Tells the AI which business types to focus on. It searches Google, FMCSA, LinkedIn, job boards, and registries specifically for these industries.',
-  vehicleTypes: 'The AI uses this to filter which companies are relevant — it looks for FMCSA vehicle class registrations, job postings requiring specific license types, and company descriptions that match your selected classes.',
-  fleetSize:    'Type any size or range (e.g. "5", "5-10", "10+"). The AI uses this to prioritize companies based on FMCSA registered vehicle counts, employee count, and service area coverage signals.',
-  probability:  'How likely the AI thinks this company operates a fleet, based on FMCSA registrations, job postings, service area size, employee count, and other signals. 75%+ means strong evidence.',
-};
+const FLEET_SIZE_OPTIONS = [
+  { value: 'any',   label: 'Any size' },
+  { value: 'xs',    label: '1–5' },
+  { value: 'small', label: '5–20' },
+  { value: 'mid',   label: '21–100' },
+  { value: 'large', label: '100+' },
+];
 
-const FLEET_SIZE_EXAMPLES = ['5', '5-10', '10+', '20+', '2-5'];
+const RADIUS_OPTIONS  = [5, 10, 25, 50, 75, 100];
+const DRIVE_OPTIONS   = [10, 15, 20, 30, 45, 60];
 
 const PROB_COLOR = (p) => {
   if (p >= 75) return { bar: '#16a34a', bg: '#f0fdf4', text: '#15803d' };
   if (p >= 50) return { bar: '#d97706', bg: '#fffbeb', text: '#92400e' };
-  return         { bar: '#ef4444', bg: '#fef2f2', text: '#b91c1c' };
+  return               { bar: '#ef4444', bg: '#fef2f2', text: '#b91c1c' };
 };
 
-// Approximate drive time → miles (suburban/mixed area)
-function driveTimeToMiles(minutes) {
-  return Math.max(3, Math.round(minutes * 0.55));
-}
+function driveTimeToMiles(m) { return Math.max(3, Math.round(m * 0.55)); }
 
-// ── Tooltip component ─────────────────────────────────────────────────────────
-function Tip({ text }) {
+// ── Reusable pill dropdown ─────────────────────────────────────────────────────
+function Pill({ label, active, children, width = 300 }) {
   const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    const h = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, []);
   return (
-    <span style={{ position: 'relative', display: 'inline-flex', marginLeft: 4 }}>
-      <span
-        onMouseEnter={() => setOpen(true)}
-        onMouseLeave={() => setOpen(false)}
+    <div ref={ref} style={{ position: 'relative', flexShrink: 0 }}>
+      <button
         onClick={() => setOpen(o => !o)}
         style={{
-          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-          width: 14, height: 14, borderRadius: '50%', background: 'var(--gray-300)',
-          color: 'var(--gray-600)', fontSize: 9, fontWeight: 800, cursor: 'pointer', flexShrink: 0,
+          display: 'flex', alignItems: 'center', gap: 6,
+          padding: '0 14px', height: 38, borderRadius: 24, fontSize: 13, fontWeight: 600,
+          cursor: 'pointer', whiteSpace: 'nowrap',
+          border: active || open ? '2px solid #1a3358' : '1.5px solid #d1d5db',
+          background: active ? '#1a3358' : 'white',
+          color: active ? 'white' : '#374151',
+          boxShadow: '0 1px 3px rgba(0,0,0,.07)',
+          transition: 'all .15s',
         }}
-      >?</span>
+      >
+        {label}
+        <svg width="10" height="6" viewBox="0 0 10 6" fill="none" style={{ opacity: .55, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}>
+          <path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
       {open && (
         <div style={{
-          position: 'absolute', left: 18, top: -4, zIndex: 1000, width: 220,
-          background: 'var(--gray-800)', color: 'white', fontSize: 11, lineHeight: 1.5,
-          padding: '8px 10px', borderRadius: 7, boxShadow: '0 4px 16px rgba(0,0,0,.3)',
-          pointerEvents: 'none',
-        }}>{text}</div>
+          position: 'absolute', top: 'calc(100% + 8px)', left: 0, zIndex: 400,
+          background: 'white', borderRadius: 14, border: '1px solid #e5e7eb',
+          boxShadow: '0 12px 40px rgba(0,0,0,.14)', width, padding: 18,
+        }}>
+          {children}
+          <button onClick={() => setOpen(false)} style={{
+            width: '100%', marginTop: 14, padding: '9px', borderRadius: 8,
+            border: 'none', background: '#1a3358', color: 'white', fontWeight: 700, fontSize: 12, cursor: 'pointer',
+          }}>Done</button>
+        </div>
       )}
-    </span>
+    </div>
   );
 }
 
-// ── Leaflet map ───────────────────────────────────────────────────────────────
+// ── Map ────────────────────────────────────────────────────────────────────────
 function FleetFinderMap({ shopLat, shopLng, radiusMiles, mode, onPolygonChange, results }) {
   const mapRef         = useRef(null);
   const leafletRef     = useRef(null);
@@ -85,8 +100,8 @@ function FleetFinderMap({ shopLat, shopLng, radiusMiles, mode, onPolygonChange, 
         attribution: '© OpenStreetMap', maxZoom: 18,
       }).addTo(map);
       const shopIcon = L.divIcon({
-        html: '<div style="background:#1a3358;color:#fbbf24;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:14px;border:2px solid #fbbf24;box-shadow:0 2px 6px rgba(0,0,0,.4)">🔧</div>',
-        className: '', iconSize: [28, 28], iconAnchor: [14, 14],
+        html: '<div style="background:#1a3358;color:#fbbf24;border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-size:15px;border:2px solid #fbbf24;box-shadow:0 2px 8px rgba(0,0,0,.35)">🔧</div>',
+        className: '', iconSize: [30, 30], iconAnchor: [15, 15],
       });
       L.marker([shopLat, shopLng], { icon: shopIcon }).addTo(map).bindPopup('Your Shop');
       circleRef.current = L.circle([shopLat, shopLng], {
@@ -119,195 +134,295 @@ function FleetFinderMap({ shopLat, shopLng, radiusMiles, mode, onPolygonChange, 
     if (!leafletRef.current || !window.L || mode !== 'polygon') return;
     function activate() {
       const L = window.L;
-      if (drawnLayersRef.current) drawnLayersRef.current.clearLayers();
-      const draw = new L.Draw.Polygon(leafletRef.current, {
-        shapeOptions: { color: '#f59e0b', fillColor: '#f59e0b', fillOpacity: 0.12, weight: 2 },
-      });
-      draw.enable();
-      leafletRef.current.once(L.Draw.Event.CREATED, (e) => {
-        drawnLayersRef.current.addLayer(e.layer);
-        onPolygonChange?.(e.layer.getLatLngs()[0].map(ll => [ll.lat, ll.lng]));
+      if (!L.Draw) return;
+      const map = leafletRef.current;
+      const drawn = drawnLayersRef.current;
+      drawn.clearLayers();
+      const handler = new L.Draw.Polygon(map, { shapeOptions: { color: '#2d5690', fillOpacity: 0.08 } });
+      handler.enable();
+      map.once(L.Draw.Event.CREATED, (e) => {
+        drawn.addLayer(e.layer);
+        onPolygonChange(e.layer.getLatLngs()[0].map(ll => [ll.lat, ll.lng]));
       });
     }
     if (!window.L.Draw) {
-      if (!document.getElementById('ld-css')) {
-        const lc = document.createElement('link');
-        lc.id = 'ld-css'; lc.rel = 'stylesheet';
-        lc.href = 'https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css';
-        document.head.appendChild(lc);
-      }
       const s = document.createElement('script');
       s.src = 'https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js';
       s.onload = activate;
       document.head.appendChild(s);
-    } else { activate(); }
+      const css = document.createElement('link');
+      css.rel = 'stylesheet';
+      css.href = 'https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css';
+      document.head.appendChild(css);
+    } else {
+      activate();
+    }
   }, [mode]);
 
   useEffect(() => {
-    if (mode !== 'polygon') return;
-    drawnLayersRef.current?.clearLayers();
-    onPolygonChange?.(null);
-  }, [mode === 'circle' || mode === 'drivetime']);
-
-  useEffect(() => {
-    const L = window.L; const map = leafletRef.current;
-    if (!L || !map) return;
+    if (!leafletRef.current || !window.L) return;
+    const L = window.L;
+    const map = leafletRef.current;
     markersRef.current.forEach(m => map.removeLayer(m));
     markersRef.current = [];
     results.forEach(co => {
-      if (!co._lat || !co._lng) return;
-      const p = co.fleet_probability || 0;
-      const c = p >= 75 ? '#16a34a' : p >= 50 ? '#d97706' : '#ef4444';
-      const icon = L.divIcon({
-        html: `<div style="background:${c};color:white;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,.3)">${p}</div>`,
-        className: '', iconSize: [20, 20], iconAnchor: [10, 10],
+      if (!co.lat || !co.lng) return;
+      const prob  = co.fleet_probability || 0;
+      const color = prob >= 75 ? '#16a34a' : prob >= 50 ? '#d97706' : '#ef4444';
+      const icon  = L.divIcon({
+        html: `<div style="background:${color};color:white;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,.3)">${prob}%</div>`,
+        className: '', iconSize: [26, 26], iconAnchor: [13, 13],
       });
-      markersRef.current.push(
-        L.marker([co._lat, co._lng], { icon }).addTo(map)
-          .bindPopup(`<b>${co.name}</b><br>${co.city}, ${co.state}<br>${p}% fleet probability`)
-      );
+      const m = L.marker([co.lat, co.lng], { icon }).addTo(map).bindPopup(`<b>${co.name}</b><br>${co.industry || ''}`);
+      markersRef.current.push(m);
     });
   }, [results]);
 
-  return <div ref={mapRef} style={{ width: '100%', height: '100%', borderRadius: 6 }} />;
+  return <div ref={mapRef} style={{ width: '100%', height: '100%' }} />;
 }
 
-// ── Duplicate check modal ─────────────────────────────────────────────────────
+// ── Duplicate modal ────────────────────────────────────────────────────────────
 function DuplicateModal({ company, matches, onDecision, onCancel }) {
+  const opts = [
+    { d: 'duplicate',      label: 'Skip — already in CRM',                        border:'#e5e7eb', bg:'#f9fafb' },
+    { d: 'new',            label: 'Import as a new separate company',              border:'#1a3358', bg:'#eef2ff' },
+    { d: 'multi_location', label: 'Import as a new location of the matched chain', border:'#0369a1', bg:'#f0f9ff' },
+  ];
   return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.55)', zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
-      <div style={{ background:'white', borderRadius:10, padding:24, maxWidth:520, width:'100%', boxShadow:'0 20px 60px rgba(0,0,0,.3)' }}>
-        <div style={{ fontWeight:700, fontSize:15, marginBottom:6 }}>Possible Match Found</div>
-        <div style={{ fontSize:12, color:'var(--gray-500)', marginBottom:16 }}>We found a similar company already in your CRM. How should we handle this?</div>
-        <div style={{ background:'var(--blue-50)', border:'1px solid var(--blue-100)', borderRadius:7, padding:12, marginBottom:16 }}>
-          <div style={{ fontSize:11, color:'var(--gray-500)', marginBottom:2 }}>Importing</div>
-          <div style={{ fontWeight:700, fontSize:13 }}>{company.name}</div>
-          <div style={{ fontSize:11, color:'var(--gray-500)' }}>{company.address}, {company.city}, {company.state}</div>
-        </div>
-        {matches.map(m => (
-          <div key={m.id} style={{ background:'var(--yellow-50)', border:'1px solid var(--yellow-100)', borderRadius:7, padding:12, marginBottom:12 }}>
-            <div style={{ fontSize:11, color:'var(--gray-500)', marginBottom:2 }}>Existing record — {m.match_score}% match</div>
-            <div style={{ fontWeight:700, fontSize:13 }}>{m.name}</div>
-            <div style={{ fontSize:11, color:'var(--gray-500)' }}>{m.address}, {m.city}, {m.state}</div>
-          </div>
-        ))}
-        <div style={{ display:'flex', flexDirection:'column', gap:8, marginTop:4 }}>
-          {[
-            { d:'duplicate',      label:'✕  Same company, same location — skip import',               bg:'var(--gray-50)',   border:'var(--gray-200)' },
-            { d:'multi_location', label:'⊕  Different location of same chain — group as multi-location', bg:'var(--blue-50)', border:'var(--blue-100)' },
-            { d:'new',            label:'+  Different company entirely — import as new',               bg:'var(--green-50)', border:'var(--green-100)' },
-          ].map(({ d, label, bg, border }) => (
-            <button key={d} onClick={() => onDecision(d)} style={{ padding:'10px 16px', borderRadius:7, border:`1px solid ${border}`, background:bg, fontSize:13, fontWeight:600, cursor:'pointer', textAlign:'left' }}>{label}</button>
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.5)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
+      <div style={{ background:'white', borderRadius:16, padding:28, maxWidth:460, width:'100%', boxShadow:'0 24px 64px rgba(0,0,0,.22)' }}>
+        <div style={{ fontWeight:800, fontSize:17, marginBottom:6, color:'#111827' }}>Possible Duplicate</div>
+        <div style={{ fontSize:13, color:'#6b7280', marginBottom:16 }}>
+          <b>{company.name}</b> may already be in your CRM:
+          {matches.map(m => (
+            <div key={m.id} style={{ marginTop:8, padding:'10px 14px', background:'#f9fafb', borderRadius:10, border:'1px solid #e5e7eb', fontSize:12 }}>
+              <b>{m.name}</b> — {m.city}, {m.state} <span style={{ color:'#9ca3af' }}>({m.match_score}% match)</span>
+            </div>
           ))}
         </div>
-        <button onClick={onCancel} style={{ marginTop:12, width:'100%', padding:'8px', borderRadius:7, border:'1px solid var(--gray-200)', background:'white', fontSize:12, color:'var(--gray-500)', cursor:'pointer' }}>Cancel</button>
+        <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+          {opts.map(({ d, label, border, bg }) => (
+            <button key={d} onClick={() => onDecision(d)} style={{
+              padding:'11px 18px', borderRadius:10, border:`2px solid ${border}`,
+              background:bg, fontSize:13, fontWeight:600, cursor:'pointer', textAlign:'left', color:'#111827',
+            }}>{label}</button>
+          ))}
+        </div>
+        <button onClick={onCancel} style={{ marginTop:14, width:'100%', padding:'9px', borderRadius:8, border:'1px solid #e5e7eb', background:'white', fontSize:12, color:'#9ca3af', cursor:'pointer' }}>Cancel</button>
       </div>
     </div>
   );
 }
 
-// ── Result card ───────────────────────────────────────────────────────────────
-function ResultCard({ company, expanded, onToggle, onImport, onDismiss, importing }) {
+// ── Result card ────────────────────────────────────────────────────────────────
+function ResultCard({ company, onImport, onDismiss, importing }) {
+  const [expanded, setExpanded] = useState(false);
   const prob   = company.fleet_probability || 0;
   const colors = PROB_COLOR(prob);
-  const vtypes = (company.vehicle_types_detected || []).map(v => VEHICLE_LABELS[v] || v).join(', ') || null;
+
   return (
-    <div style={{ background:'white', borderRadius:8, border:'1px solid var(--gray-200)', marginBottom:8, overflow:'hidden' }}>
-      <div onClick={onToggle} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', cursor:'pointer', userSelect:'none' }}>
-        <div style={{ minWidth:42, height:42, borderRadius:8, background:colors.bg, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center' }}>
-          <div style={{ fontSize:14, fontWeight:800, color:colors.text }}>{prob}%</div>
-          <div style={{ width:30, height:3, borderRadius:2, background:'var(--gray-200)', marginTop:2 }}>
-            <div style={{ width:`${prob}%`, height:'100%', borderRadius:2, background:colors.bar }} />
+    <div style={{
+      background: 'white', borderRadius: 14, marginBottom: 10,
+      border: '1px solid #e5e7eb',
+      boxShadow: '0 1px 4px rgba(0,0,0,.06)',
+      overflow: 'hidden',
+    }}>
+      {/* Top colored stripe based on probability */}
+      <div style={{ height: 3, background: colors.bar }} />
+
+      <div style={{ padding: '14px 16px' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 13 }}>
+
+          {/* Probability badge */}
+          <div style={{
+            width: 56, height: 56, borderRadius: 12, background: colors.bg, flexShrink: 0,
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <div style={{ fontSize: 18, fontWeight: 900, color: colors.text, lineHeight: 1 }}>{prob}%</div>
+            <div style={{ fontSize: 9, color: colors.text, opacity: .65, marginTop: 2, fontWeight: 700, letterSpacing: '.04em' }}>FLEET</div>
+          </div>
+
+          {/* Info */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{
+              fontWeight: 700, fontSize: 14, color: '#111827', marginBottom: 3,
+              display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap',
+            }}>
+              {company.name}
+              {company.is_national_chain   && <Tag bg="#ede9fe" c="#6d28d9">Chain</Tag>}
+              {company.is_local_independent && <Tag bg="#dcfce7" c="#15803d">Local</Tag>}
+              {company.industry_category === 'contract_driven' && <Tag bg="#fef3c7" c="#92400e">B2B</Tag>}
+            </div>
+            <div style={{ fontSize: 12, color: '#6b7280', marginBottom: company.local_office_found || company.local_field_employees_found > 0 ? 7 : 0 }}>
+              {[company.industry, company.city && `${company.city}, ${company.state}`, company.distance_miles != null && `${company.distance_miles.toFixed(1)} mi away`].filter(Boolean).join(' · ')}
+            </div>
+            {(company.local_office_found || company.local_field_employees_found > 0) && (
+              <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                {company.local_office_found && <Signal bg="#dcfce7" c="#15803d">✓ Local office</Signal>}
+                {company.local_field_employees_found > 0 && <Signal bg="#dbeafe" c="#1e40af">{company.local_field_employees_found} field employees</Signal>}
+              </div>
+            )}
+          </div>
+
+          {/* Action buttons */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
+            <button
+              onClick={e => { e.stopPropagation(); onImport(); }}
+              disabled={importing}
+              style={{
+                padding: '8px 18px', borderRadius: 8, border: 'none', cursor: 'pointer', whiteSpace: 'nowrap',
+                background: importing ? '#9ca3af' : '#1a3358', color: 'white', fontWeight: 700, fontSize: 12,
+              }}>
+              {importing ? '…' : 'Import'}
+            </button>
+            <button
+              onClick={e => { e.stopPropagation(); onDismiss(); }}
+              style={{
+                padding: '6px 18px', borderRadius: 8, border: '1px solid #e5e7eb',
+                background: 'white', color: '#9ca3af', fontSize: 11, cursor: 'pointer',
+              }}>
+              Skip
+            </button>
           </div>
         </div>
-        <div style={{ flex:1, minWidth:0 }}>
-          <div style={{ fontWeight:700, fontSize:13, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
-            {company.name}
-            {company.is_chain && <span style={{ marginLeft:6, fontSize:10, background:'#e0e7ff', color:'#3730a3', borderRadius:4, padding:'1px 5px', fontWeight:600 }}>CHAIN</span>}
-          </div>
-          <div style={{ fontSize:11, color:'var(--gray-500)', marginTop:1 }}>
-            {company.industry}{company.distance_miles != null && ` · ${company.distance_miles.toFixed(1)} mi`}{company.city && ` · ${company.city}, ${company.state}`}
-          </div>
-          {vtypes && <div style={{ fontSize:10, color:'var(--gray-400)', marginTop:1 }}>{vtypes}{company.vehicle_type_confidence && company.vehicle_type_confidence !== 'unknown' && <span style={{ marginLeft:4, color: company.vehicle_type_confidence === 'confirmed' ? 'var(--green-600)' : 'var(--yellow-500)' }}>({company.vehicle_type_confidence})</span>}</div>}
-        </div>
-        <div style={{ display:'flex', gap:6, alignItems:'center', flexShrink:0 }}>
-          <button onClick={e => { e.stopPropagation(); onImport(); }} disabled={importing}
-            style={{ padding:'5px 12px', borderRadius:6, fontSize:11, fontWeight:700, border:'none', background:'var(--navy-700)', color:'white', cursor:'pointer' }}>
-            {importing ? '...' : 'Import'}
-          </button>
-          <button onClick={e => { e.stopPropagation(); onDismiss(); }} title="Never show again"
-            style={{ padding:'5px 8px', borderRadius:6, fontSize:11, border:'1px solid var(--gray-200)', background:'var(--gray-50)', color:'var(--gray-500)', cursor:'pointer' }}>✕</button>
-          <span style={{ fontSize:11, color:'var(--gray-400)' }}>{expanded ? '▲' : '▼'}</span>
-        </div>
+
+        {/* Expand toggle */}
+        <button
+          onClick={() => setExpanded(e => !e)}
+          style={{ marginTop: 10, width: '100%', textAlign: 'center', fontSize: 11, color: '#9ca3af', background: 'none', border: 'none', cursor: 'pointer' }}>
+          {expanded ? '▲ Less' : '▼ More details'}
+        </button>
       </div>
+
+      {/* Expanded details */}
       {expanded && (
-        <div style={{ borderTop:'1px solid var(--gray-100)', padding:'12px 14px', background:'var(--gray-50)', fontSize:12 }}>
+        <div style={{ borderTop: '1px solid #f3f4f6', padding: '14px 16px', background: '#f9fafb', fontSize: 12 }}>
           {company.fleet_note && (
-            <div style={{ background:colors.bg, border:`1px solid ${colors.bar}30`, borderRadius:6, padding:'8px 10px', marginBottom:10, color:colors.text, fontSize:11 }}>
+            <div style={{ background: colors.bg, borderLeft: `3px solid ${colors.bar}`, padding: '8px 12px', borderRadius: 6, marginBottom: 10, color: colors.text, fontWeight: 500, lineHeight: 1.5 }}>
               {company.fleet_note}
             </div>
           )}
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px 16px' }}>
-            {company.address && <div><span style={{ color:'var(--gray-400)' }}>Address</span><br />{company.address}<br />{company.city}, {company.state} {company.zip}</div>}
-            {company.main_phone && <div><span style={{ color:'var(--gray-400)' }}>Phone</span><br />{company.main_phone}</div>}
-            {company.website && <div><span style={{ color:'var(--gray-400)' }}>Website</span><br /><a href={company.website} target="_blank" rel="noreferrer" style={{ color:'var(--blue-500)' }}>{company.website.replace(/^https?:\/\/(www\.)?/,'')}</a></div>}
-            {company.contact_name && <div><span style={{ color:'var(--gray-400)' }}>Contact</span><br />{company.contact_name}{company.contact_title && <span style={{ color:'var(--gray-500)' }}> · {company.contact_title}</span>}</div>}
-            {company.estimated_fleet_size && <div><span style={{ color:'var(--gray-400)' }}>Est. Fleet</span><br />{company.estimated_fleet_size} vehicles</div>}
-            {company.sources_found?.length > 0 && <div><span style={{ color:'var(--gray-400)' }}>Sources</span><br />{company.sources_found.join(', ')}</div>}
+          {company.research_notes && (
+            <div style={{ color: '#4b5563', marginBottom: 10, lineHeight: 1.6 }}>{company.research_notes}</div>
+          )}
+          {company.fleet_signals?.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 10 }}>
+              {company.fleet_signals.map((s, i) => (
+                <span key={i} style={{ padding: '2px 8px', background: '#dbeafe', borderRadius: 8, fontSize: 10, color: '#1e40af', fontWeight: 600 }}>{s}</span>
+              ))}
+            </div>
+          )}
+          {company.local_field_employee_titles?.length > 0 && (
+            <div style={{ marginBottom: 10, padding: '8px 10px', background: '#f0fdf4', borderRadius: 7, border: '1px solid #bbf7d0' }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#15803d', marginBottom: 4 }}>Local Field Employees Found</div>
+              <div style={{ fontSize: 11, color: '#166534' }}>{company.local_field_employee_titles.join(' · ')}</div>
+            </div>
+          )}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 16px', color: '#4b5563', marginBottom: 10 }}>
+            {company.address && <InfoRow label="Address">{company.address}<br />{company.city}, {company.state} {company.zip}</InfoRow>}
+            {company.main_phone && <InfoRow label="Phone">{company.main_phone}</InfoRow>}
+            {company.website && (
+              <InfoRow label="Website">
+                <a href={company.website} target="_blank" rel="noreferrer" style={{ color: '#2563eb' }}>
+                  {company.website.replace(/^https?:\/\/(www\.)?/, '')}
+                </a>
+              </InfoRow>
+            )}
+            {company.estimated_fleet_size && <InfoRow label="Est. Fleet">{company.estimated_fleet_size}</InfoRow>}
+            {company.contact_name && <InfoRow label="Contact">{company.contact_name}{company.contact_title && <span style={{ color: '#9ca3af' }}> · {company.contact_title}</span>}</InfoRow>}
+            {company.local_office_address && <InfoRow label="Local Office">{company.local_office_address}</InfoRow>}
           </div>
+          {company.sources?.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+              {company.sources.map((s, i) => (
+                <a key={i} href={s.url} target="_blank" rel="noopener noreferrer"
+                  style={{ padding: '3px 10px', background: 'white', border: '1px solid #bae6fd', borderRadius: 10, fontSize: 10, color: '#0284c7', fontWeight: 600, textDecoration: 'none' }}>
+                  ↗ {s.label || s.url}
+                </a>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-// ── Main page ─────────────────────────────────────────────────────────────────
+function Tag({ bg, c, children }) {
+  return <span style={{ fontSize: 10, background: bg, color: c, borderRadius: 4, padding: '2px 7px', fontWeight: 600 }}>{children}</span>;
+}
+function Signal({ bg, c, children }) {
+  return <span style={{ fontSize: 10, background: bg, color: c, borderRadius: 6, padding: '2px 8px', fontWeight: 700 }}>{children}</span>;
+}
+function InfoRow({ label, children }) {
+  return (
+    <div>
+      <div style={{ fontSize: 10, color: '#9ca3af', fontWeight: 700, marginBottom: 2, textTransform: 'uppercase', letterSpacing: '.04em' }}>{label}</div>
+      <div>{children}</div>
+    </div>
+  );
+}
+
+// ── Segment buttons (shared style for radius / drive / fleet size) ─────────────
+function SegBtns({ options, selected, onSelect, format = v => v }) {
+  return (
+    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+      {options.map(opt => {
+        const val   = typeof opt === 'object' ? opt.value : opt;
+        const label = typeof opt === 'object' ? opt.label : format(opt);
+        const active = selected === val;
+        return (
+          <button key={val} onClick={() => onSelect(val)} style={{
+            padding: '7px 14px', borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+            border: active ? '2px solid #1a3358' : '1.5px solid #d1d5db',
+            background: active ? '#1a3358' : 'white',
+            color: active ? 'white' : '#374151',
+            transition: 'all .12s',
+          }}>{label}</button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Main page ──────────────────────────────────────────────────────────────────
 export default function FleetFinder() {
   const { showToast } = useApp();
 
-  // Settings + budget
-  const [settings,      setSettings]      = useState(null);
-  const [budget,        setBudget]         = useState({ budget:50, spent:0, remaining:50 });
-  const [costLog,       setCostLog]        = useState([]);
-  const [activePanel,   setActivePanel]    = useState('results'); // 'results' | 'history'
+  const [settings,     setSettings]     = useState(null);
+  const [budget,       setBudget]        = useState({ budget: 50, spent: 0, remaining: 50 });
+  const [costLog,      setCostLog]       = useState([]);
+  const [activePanel,  setActivePanel]   = useState('results');
 
-  // Filters
-  const [mode,          setMode]           = useState('circle');
-  const [radius,        setRadius]         = useState(25);
-  const [driveMinutes,  setDriveMinutes]   = useState(20);
-  const [polygonCoords, setPolygonCoords]  = useState(null);
-  const [allIndustries, setAllIndustries]  = useState([]);
-  const [industries,    setIndustries]     = useState([]);
-  const [indSearch,     setIndSearch]      = useState('');
-  const [vehicleTypes,  setVehicleTypes]   = useState(Object.keys(VEHICLE_LABELS));
-  const [fleetSize,     setFleetSize]      = useState('');
+  const [mode,         setMode]          = useState('circle');
+  const [radius,       setRadius]        = useState(25);
+  const [driveMinutes, setDriveMinutes]  = useState(20);
+  const [polygonCoords,setPolygonCoords] = useState(null);
+  const [allIndustries,setAllIndustries] = useState([]);
+  const [industries,   setIndustries]    = useState([]);
+  const [indSearch,    setIndSearch]     = useState('');
+  const [vehicleTypes, setVehicleTypes]  = useState(Object.keys(VEHICLE_LABELS));
+  const [fleetSize,    setFleetSize]     = useState('any');
 
-  // Search state
-  const [estimate,      setEstimate]       = useState(null);
-  const [searching,     setSearching]      = useState(false);
-  const [results,       setResults]        = useState([]);
-  const [searchMeta,    setSearchMeta]     = useState(null);
-  const [expanded,      setExpanded]       = useState({});
-  const [importing,     setImporting]      = useState({});
-  const [dupModal,      setDupModal]       = useState(null);
+  const [estimate,     setEstimate]      = useState(null);
+  const [searching,    setSearching]     = useState(false);
+  const [results,      setResults]       = useState([]);
+  const [searchMeta,   setSearchMeta]    = useState(null);
+  const [importing,    setImporting]     = useState({});
+  const [dupModal,     setDupModal]      = useState(null);
 
-  // Shop coords
   const [shopLat, setShopLat] = useState(35.1965);
   const [shopLng, setShopLng] = useState(-80.7812);
 
-  // Effective radius (circle/drivetime)
   const effectiveRadius = mode === 'drivetime' ? driveTimeToMiles(driveMinutes) : radius;
 
   useEffect(() => {
     async function load() {
       try {
         const [s, b, cl, cfg] = await Promise.all([api.ffSettings(), api.ffBudget(), api.ffCostLog(), api.settings()]);
-        setSettings(s);
-        setBudget(b);
-        setCostLog(cl);
+        setSettings(s); setBudget(b); setCostLog(cl);
         const ind = [...(s.ff_industries || []), ...(s.ff_custom_industries || [])];
-        setAllIndustries(ind);
-        setIndustries(ind);
+        setAllIndustries(ind); setIndustries(ind);
         setRadius(parseFloat(s.ff_default_radius) || 25);
         const latR = cfg.find(r => r.key === 'shop_lat');
         const lngR = cfg.find(r => r.key === 'shop_lng');
@@ -326,7 +441,6 @@ export default function FleetFinder() {
   const toggleIndustry = ind => setIndustries(p => p.includes(ind) ? p.filter(i => i !== ind) : [...p, ind]);
   const toggleVehicle  = vt  => setVehicleTypes(p => p.includes(vt)  ? p.filter(v => v !== vt)  : [...p, vt]);
 
-  // Add industry one-time (just for this search)
   function addOneTime() {
     const name = indSearch.trim();
     if (!name) return;
@@ -335,7 +449,6 @@ export default function FleetFinder() {
     setIndSearch('');
   }
 
-  // Save industry permanently
   async function saveIndustry() {
     const name = indSearch.trim();
     if (!name) return;
@@ -352,7 +465,6 @@ export default function FleetFinder() {
     } catch (e) { showToast(e.message, 'error'); }
   }
 
-  // Remove industry from list (and saved settings if custom)
   async function removeIndustry(ind) {
     setAllIndustries(p => p.filter(i => i !== ind));
     setIndustries(p => p.filter(i => i !== ind));
@@ -409,34 +521,24 @@ export default function FleetFinder() {
 
   async function doImport(company, decision, matches, index) {
     const isMulti = decision === 'multi_location' || company.is_multi_location;
-
-    const fleetResearch = {
-      fleet_note:                   company.fleet_note              || null,
-      research_notes:               company.research_notes          || null,
-      fleet_probability:            company.fleet_probability       || null,
-      fleet_signals:                company.fleet_signals           || [],
-      estimated_fleet_size:         company.estimated_fleet_size    || null,
-      vehicle_types:                company.vehicle_types_detected  || [],
-      vehicle_type_confidence:      company.vehicle_type_confidence || null,
-      industry_category:            company.industry_category       || null,
-      local_office_found:           company.local_office_found      || false,
-      local_office_address:         company.local_office_address    || null,
-      local_field_employees_found:  company.local_field_employees_found || null,
-      local_field_employee_titles:  company.local_field_employee_titles || [],
-      is_local_independent:         company.is_local_independent    ?? null,
-      is_national_chain:            company.is_national_chain       ?? null,
-      contact_name:                 company.contact_name            || null,
-      contact_title:                company.contact_title           || null,
-      sources:                      company.sources                 || [],
-      distance_miles:               company.distance_miles != null ? parseFloat(company.distance_miles.toFixed(1)) : null,
-      searched_at:                  new Date().toISOString(),
-    };
-
     await api.createCompany({
       name: company.name, main_phone: company.main_phone || null, industry: company.industry || null,
       address: company.address || null, city: company.city || null, state: company.state || null,
       zip: company.zip || null, website: company.website || null,
-      fleet_research: fleetResearch,
+      fleet_research: {
+        fleet_note: company.fleet_note || null, research_notes: company.research_notes || null,
+        fleet_probability: company.fleet_probability || null, fleet_signals: company.fleet_signals || [],
+        estimated_fleet_size: company.estimated_fleet_size || null, vehicle_types: company.vehicle_types_detected || [],
+        vehicle_type_confidence: company.vehicle_type_confidence || null, industry_category: company.industry_category || null,
+        local_office_found: company.local_office_found || false, local_office_address: company.local_office_address || null,
+        local_field_employees_found: company.local_field_employees_found || null,
+        local_field_employee_titles: company.local_field_employee_titles || [],
+        is_local_independent: company.is_local_independent ?? null, is_national_chain: company.is_national_chain ?? null,
+        contact_name: company.contact_name || null, contact_title: company.contact_title || null,
+        sources: company.sources || [],
+        distance_miles: company.distance_miles != null ? parseFloat(company.distance_miles.toFixed(1)) : null,
+        searched_at: new Date().toISOString(),
+      },
       is_multi_location: isMulti ? 1 : 0,
       location_name: isMulti ? (company.city || null) : null,
       location_group: isMulti && matches?.length ? (matches[0].location_group || matches[0].name) : (company.is_chain ? company.name : null),
@@ -458,244 +560,254 @@ export default function FleetFinder() {
   const budgetPct   = budget.budget > 0 ? Math.min(100, Math.round((budget.spent / budget.budget) * 100)) : 0;
   const budgetColor = budgetPct >= 90 ? '#ef4444' : budgetPct >= 70 ? '#d97706' : '#16a34a';
 
-  return (
-    <div style={{ display:'flex', flexDirection:'column', height:'100%', overflow:'hidden', background:'#edf0f5' }}>
+  const industryLabel = industries.length === 0 ? 'No Industries'
+    : industries.length === allIndustries.length ? 'All Industries'
+    : `${industries.length} ${industries.length === 1 ? 'Industry' : 'Industries'}`;
 
-      {/* ── Header ── */}
-      <div style={{ background:'white', borderBottom:'1px solid var(--gray-200)', padding:'10px 20px', display:'flex', alignItems:'center', gap:16, flexShrink:0, flexWrap:'wrap' }}>
+  const vehicleLabel = vehicleTypes.length === Object.keys(VEHICLE_LABELS).length ? 'All Vehicles'
+    : `${vehicleTypes.length} Vehicle${vehicleTypes.length !== 1 ? 's' : ''}`;
+
+  const zoneModeLabel = mode === 'circle' ? `${radius} mi radius`
+    : mode === 'drivetime' ? `${driveMinutes} min drive`
+    : 'Custom area';
+
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', background: '#f3f4f6' }}>
+
+      {/* ── Header ───────────────────────────────────────────────────────────── */}
+      <div style={{
+        background: 'white', borderBottom: '1px solid #e5e7eb', padding: '0 24px',
+        height: 58, display: 'flex', alignItems: 'center', gap: 20, flexShrink: 0,
+        boxShadow: '0 1px 3px rgba(0,0,0,.06)',
+      }}>
         <div>
-          <div style={{ fontWeight:800, fontSize:16, color:'var(--navy-900)' }}>Find Companies</div>
-          <div style={{ fontSize:11, color:'var(--gray-500)' }}>AI-powered fleet business discovery</div>
+          <div style={{ fontWeight: 800, fontSize: 16, color: '#111827', letterSpacing: '-.01em' }}>Find Companies</div>
+          <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 1 }}>AI-powered fleet lead discovery</div>
         </div>
-        <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:10, background:'var(--gray-50)', border:'1px solid var(--gray-200)', borderRadius:8, padding:'7px 14px' }}>
-          <div>
-            <div style={{ fontSize:10, color:'var(--gray-400)', marginBottom:3 }}>Monthly Budget</div>
-            <div style={{ width:120, height:5, background:'var(--gray-200)', borderRadius:3 }}>
-              <div style={{ width:`${budgetPct}%`, height:'100%', borderRadius:3, background:budgetColor, transition:'width .4s' }} />
+
+        {/* Budget meter */}
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: 11, color: '#6b7280', fontWeight: 600, marginBottom: 3 }}>Monthly Budget</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: budgetColor }}>
+              ${budget.spent.toFixed(2)} <span style={{ color: '#9ca3af', fontWeight: 400 }}>/ ${budget.budget}</span>
             </div>
           </div>
-          <div style={{ fontSize:12, fontWeight:700, color:budgetColor }}>${budget.spent.toFixed(2)} / ${budget.budget}</div>
+          <div style={{ width: 100, height: 6, background: '#e5e7eb', borderRadius: 4, overflow: 'hidden' }}>
+            <div style={{ width: `${budgetPct}%`, height: '100%', background: budgetColor, borderRadius: 4, transition: 'width .4s' }} />
+          </div>
         </div>
       </div>
 
-      {/* ── Body ── */}
-      <div style={{ display:'flex', flex:1, overflow:'hidden' }}>
+      {/* ── Filter bar ───────────────────────────────────────────────────────── */}
+      <div style={{
+        background: 'white', borderBottom: '1px solid #e5e7eb', padding: '10px 20px',
+        display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, flexWrap: 'wrap',
+      }}>
 
-        {/* ── Filters sidebar ── */}
-        <div style={{ width:236, background:'white', borderRight:'1px solid var(--gray-200)', display:'flex', flexDirection:'column', overflow:'hidden', flexShrink:0 }}>
-          <div style={{ flex:1, overflowY:'auto', padding:'12px 12px 0' }}>
+        {/* Search Zone pill */}
+        <Pill label={`📍 ${zoneModeLabel}`} active={mode !== 'circle' || radius !== 25} width={300}>
+          <div style={{ fontWeight: 700, fontSize: 13, color: '#111827', marginBottom: 14 }}>Search Zone</div>
 
-            {/* Search Zone */}
-            <div style={{ marginBottom:14 }}>
-              <div style={{ display:'flex', alignItems:'center', fontSize:10, fontWeight:700, color:'var(--gray-400)', letterSpacing:'.08em', textTransform:'uppercase', marginBottom:6 }}>
-                Search Zone <Tip text={TOOLTIPS.searchZone} />
-              </div>
-              <div style={{ display:'flex', gap:4, marginBottom:8 }}>
-                {[['circle','⬤ Radius'],['drivetime','⏱ Drive'],['polygon','⬡ Draw']].map(([m, label]) => (
-                  <button key={m} onClick={() => setMode(m)} style={{
-                    flex:1, padding:'6px 0', borderRadius:6, fontSize:10, fontWeight:700, cursor:'pointer',
-                    border: mode===m ? '2px solid var(--navy-700)' : '1px solid var(--gray-200)',
-                    background: mode===m ? 'var(--navy-700)' : 'var(--gray-50)',
-                    color: mode===m ? 'white' : 'var(--gray-600)',
-                  }}>{label}</button>
-                ))}
-              </div>
+          {/* Mode tabs */}
+          <div style={{ display: 'flex', background: '#f3f4f6', borderRadius: 10, padding: 3, marginBottom: 16, gap: 2 }}>
+            {[['circle', '⬤ Radius'], ['drivetime', '⏱ Drive Time'], ['polygon', '⬡ Draw Area']].map(([m, lbl]) => (
+              <button key={m} onClick={() => setMode(m)} style={{
+                flex: 1, padding: '6px 4px', borderRadius: 8, fontSize: 11, fontWeight: 600, cursor: 'pointer', border: 'none',
+                background: mode === m ? 'white' : 'transparent',
+                color: mode === m ? '#1a3358' : '#6b7280',
+                boxShadow: mode === m ? '0 1px 4px rgba(0,0,0,.1)' : 'none',
+              }}>{lbl}</button>
+            ))}
+          </div>
 
-              {mode === 'circle' && (
-                <div>
-                  <div style={{ display:'flex', justifyContent:'space-between', fontSize:11, marginBottom:4 }}>
-                    <span style={{ color:'var(--gray-500)' }}>Radius</span>
-                    <span style={{ fontWeight:700 }}>{radius} mi</span>
-                  </div>
-                  <input type="range" min={5} max={100} value={radius} onChange={e => setRadius(parseInt(e.target.value))}
-                    style={{ width:'100%', accentColor:'var(--navy-700)' }} />
-                </div>
-              )}
-
-              {mode === 'drivetime' && (
-                <div>
-                  <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:6 }}>
-                    <input type="number" min={5} max={90} value={driveMinutes}
-                      onChange={e => setDriveMinutes(parseInt(e.target.value) || 20)}
-                      style={{ width:60, padding:'5px 8px', border:'1px solid var(--gray-200)', borderRadius:6, fontSize:13, fontWeight:700, textAlign:'center' }} />
-                    <span style={{ fontSize:12, color:'var(--gray-500)' }}>min drive ≈ {driveTimeToMiles(driveMinutes)} mi</span>
-                    <Tip text={TOOLTIPS.driveTime} />
-                  </div>
-                  <input type="range" min={5} max={90} value={driveMinutes} onChange={e => setDriveMinutes(parseInt(e.target.value))}
-                    style={{ width:'100%', accentColor:'var(--navy-700)' }} />
-                </div>
-              )}
-
-              {mode === 'polygon' && (
-                <div style={{ fontSize:11, color:'var(--gray-500)', background:'var(--yellow-50)', borderRadius:5, padding:'6px 8px' }}>
-                  Click points on the map to draw. Double-click to close the shape.
-                </div>
-              )}
-            </div>
-
-            {/* Industries */}
-            <div style={{ marginBottom:14 }}>
-              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:6 }}>
-                <div style={{ display:'flex', alignItems:'center', fontSize:10, fontWeight:700, color:'var(--gray-400)', letterSpacing:'.08em', textTransform:'uppercase' }}>
-                  Industries <Tip text={TOOLTIPS.industries} />
-                </div>
-                <div style={{ display:'flex', gap:6 }}>
-                  <button onClick={() => setIndustries([...allIndustries])} style={{ fontSize:9, color:'var(--blue-500)', background:'none', border:'none', cursor:'pointer', fontWeight:700 }}>All</button>
-                  <button onClick={() => setIndustries([])} style={{ fontSize:9, color:'var(--gray-400)', background:'none', border:'none', cursor:'pointer' }}>None</button>
-                </div>
-              </div>
-
-              {/* Industry search/add input */}
-              <div style={{ marginBottom:6 }}>
-                <input
-                  type="text" placeholder="Search or add industry..."
-                  value={indSearch} onChange={e => setIndSearch(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && addOneTime()}
-                  style={{ width:'100%', padding:'5px 8px', border:'1px solid var(--gray-200)', borderRadius:6, fontSize:11 }}
-                />
-                {indSearchIsNew && (
-                  <div style={{ display:'flex', gap:4, marginTop:4 }}>
-                    <button onClick={addOneTime} style={{ flex:1, padding:'4px 0', borderRadius:5, fontSize:10, fontWeight:700, border:'1px solid var(--gold-500)', background:'var(--yellow-50)', color:'#92400e', cursor:'pointer' }}>
-                      + This search only
-                    </button>
-                    <button onClick={saveIndustry} style={{ flex:1, padding:'4px 0', borderRadius:5, fontSize:10, fontWeight:700, border:'1px solid var(--navy-700)', background:'var(--navy-700)', color:'white', cursor:'pointer' }}>
-                      + Save permanently
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              <div style={{ display:'flex', flexDirection:'column', gap:2, maxHeight:200, overflowY:'auto' }}>
-                {filteredIndustries.map(ind => (
-                  <div key={ind} style={{ display:'flex', alignItems:'center', gap:4 }}>
-                    <label style={{ display:'flex', alignItems:'center', gap:6, cursor:'pointer', fontSize:11, flex:1, minWidth:0 }}>
-                      <input type="checkbox" checked={industries.includes(ind)} onChange={() => toggleIndustry(ind)}
-                        style={{ accentColor:'var(--navy-700)', cursor:'pointer', flexShrink:0 }} />
-                      <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ind}</span>
-                    </label>
-                    <button onClick={() => removeIndustry(ind)} title="Remove from list"
-                      style={{ background:'none', border:'none', color:'var(--gray-300)', cursor:'pointer', fontSize:10, padding:'0 2px', flexShrink:0, lineHeight:1 }}>✕</button>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Vehicle types */}
-            <div style={{ marginBottom:14 }}>
-              <div style={{ display:'flex', alignItems:'center', fontSize:10, fontWeight:700, color:'var(--gray-400)', letterSpacing:'.08em', textTransform:'uppercase', marginBottom:6 }}>
-                Vehicle Types <Tip text={TOOLTIPS.vehicleTypes} />
-              </div>
-              <div style={{ display:'flex', flexDirection:'column', gap:3 }}>
-                {Object.entries(VEHICLE_LABELS).map(([key, label]) => (
-                  <label key={key} style={{ display:'flex', alignItems:'center', gap:7, cursor:'pointer', fontSize:11 }}>
-                    <input type="checkbox" checked={vehicleTypes.includes(key)} onChange={() => toggleVehicle(key)}
-                      style={{ accentColor:'var(--navy-700)', cursor:'pointer' }} />
-                    {label}
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            {/* Fleet size */}
-            <div style={{ marginBottom:14 }}>
-              <div style={{ display:'flex', alignItems:'center', fontSize:10, fontWeight:700, color:'var(--gray-400)', letterSpacing:'.08em', textTransform:'uppercase', marginBottom:6 }}>
-                Fleet Size <Tip text={TOOLTIPS.fleetSize} />
-              </div>
-              <input
-                type="text"
-                placeholder='e.g. "5-10" or "10+"'
-                value={fleetSize}
-                onChange={e => setFleetSize(e.target.value)}
-                style={{ width:'100%', padding:'6px 8px', border:'1px solid var(--gray-200)', borderRadius:6, fontSize:12 }}
+          {mode === 'circle' && (
+            <>
+              <div style={{ fontSize: 11, color: '#6b7280', fontWeight: 600, marginBottom: 10 }}>Select radius</div>
+              <SegBtns
+                options={RADIUS_OPTIONS}
+                selected={radius}
+                onSelect={setRadius}
+                format={v => `${v} mi`}
               />
-              <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginTop:5 }}>
-                {FLEET_SIZE_EXAMPLES.map(ex => (
-                  <button key={ex} onClick={() => setFleetSize(ex)} style={{
-                    padding:'2px 7px', borderRadius:10, fontSize:10, cursor:'pointer', fontWeight:600,
-                    border: fleetSize===ex ? '1px solid var(--navy-700)' : '1px solid var(--gray-200)',
-                    background: fleetSize===ex ? 'var(--navy-700)' : 'var(--gray-50)',
-                    color: fleetSize===ex ? 'white' : 'var(--gray-500)',
-                  }}>{ex}</button>
-                ))}
+            </>
+          )}
+          {mode === 'drivetime' && (
+            <>
+              <div style={{ fontSize: 11, color: '#6b7280', fontWeight: 600, marginBottom: 10 }}>
+                Select drive time <span style={{ color: '#9ca3af', fontWeight: 400 }}>(≈ {driveTimeToMiles(driveMinutes)} mi)</span>
               </div>
+              <SegBtns
+                options={DRIVE_OPTIONS}
+                selected={driveMinutes}
+                onSelect={setDriveMinutes}
+                format={v => `${v} min`}
+              />
+            </>
+          )}
+          {mode === 'polygon' && (
+            <div style={{ fontSize: 11, color: '#6b7280', background: '#fefce8', borderRadius: 8, padding: '10px 12px', lineHeight: 1.6 }}>
+              Click points on the map to draw your search area. Double-click to finish the shape.
+            </div>
+          )}
+        </Pill>
+
+        {/* Divider */}
+        <div style={{ width: 1, height: 28, background: '#e5e7eb', flexShrink: 0 }} />
+
+        {/* Industries */}
+        <Pill label={`🏭 ${industryLabel}`} active={industries.length > 0 && industries.length !== allIndustries.length} width={330}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <div style={{ fontWeight: 700, fontSize: 13, color: '#111827' }}>Industries</div>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button onClick={() => setIndustries([...allIndustries])} style={{ fontSize: 11, color: '#2563eb', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>All</button>
+              <button onClick={() => setIndustries([])} style={{ fontSize: 11, color: '#9ca3af', background: 'none', border: 'none', cursor: 'pointer' }}>None</button>
             </div>
           </div>
-
-          {/* Search button */}
-          <div style={{ padding:12, borderTop:'1px solid var(--gray-100)', flexShrink:0 }}>
-            {estimate != null && (
-              <div style={{ fontSize:11, color:'var(--gray-500)', marginBottom:6, textAlign:'center' }}>
-                Est. cost: <strong>${estimate.toFixed(3)}</strong>
-                {budget.remaining < estimate && <div style={{ color:'var(--red-500)', fontSize:10 }}>Exceeds remaining budget</div>}
-              </div>
-            )}
-            <button onClick={runSearch} disabled={searching || industries.length === 0 || budget.spent >= budget.budget} style={{
-              width:'100%', padding:'10px 0', borderRadius:7, border:'none',
-              background: searching ? 'var(--gray-300)' : 'var(--navy-700)',
-              color:'white', fontWeight:700, fontSize:13, cursor: searching ? 'not-allowed' : 'pointer',
-            }}>
-              {searching ? 'Searching...' : '🔍 Run Search'}
-            </button>
+          <input
+            type="text" placeholder="Search or add industry…"
+            value={indSearch} onChange={e => setIndSearch(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && addOneTime()}
+            style={{ width: '100%', padding: '8px 12px', border: '1.5px solid #e5e7eb', borderRadius: 8, fontSize: 12, marginBottom: 8, boxSizing: 'border-box', outline: 'none' }}
+          />
+          {indSearchIsNew && (
+            <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+              <button onClick={addOneTime} style={{ flex: 1, padding: '6px', borderRadius: 7, fontSize: 11, fontWeight: 700, border: '1px solid #fbbf24', background: '#fefce8', color: '#92400e', cursor: 'pointer' }}>
+                + This search only
+              </button>
+              <button onClick={saveIndustry} style={{ flex: 1, padding: '6px', borderRadius: 7, fontSize: 11, fontWeight: 700, border: 'none', background: '#1a3358', color: 'white', cursor: 'pointer' }}>
+                + Save permanently
+              </button>
+            </div>
+          )}
+          <div style={{ maxHeight: 200, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {filteredIndustries.map(ind => (
+              <label key={ind} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', padding: '5px 8px', borderRadius: 8, background: industries.includes(ind) ? '#eef2ff' : 'transparent' }}>
+                <input type="checkbox" checked={industries.includes(ind)} onChange={() => toggleIndustry(ind)} style={{ accentColor: '#1a3358', cursor: 'pointer', flexShrink: 0 }} />
+                <span style={{ fontSize: 12, flex: 1, color: '#374151' }}>{ind}</span>
+                <button onClick={e => { e.preventDefault(); removeIndustry(ind); }} style={{ background: 'none', border: 'none', color: '#d1d5db', cursor: 'pointer', fontSize: 12, padding: '0 2px' }}>✕</button>
+              </label>
+            ))}
           </div>
+        </Pill>
+
+        {/* Vehicles */}
+        <Pill label={`🚛 ${vehicleLabel}`} active={vehicleTypes.length !== Object.keys(VEHICLE_LABELS).length} width={300}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+            <div style={{ fontWeight: 700, fontSize: 13, color: '#111827' }}>Vehicle Types</div>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button onClick={() => setVehicleTypes(Object.keys(VEHICLE_LABELS))} style={{ fontSize: 11, color: '#2563eb', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>All</button>
+              <button onClick={() => setVehicleTypes([])} style={{ fontSize: 11, color: '#9ca3af', background: 'none', border: 'none', cursor: 'pointer' }}>None</button>
+            </div>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+            {Object.entries(VEHICLE_LABELS).map(([key, label]) => (
+              <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer' }}>
+                <input type="checkbox" checked={vehicleTypes.includes(key)} onChange={() => toggleVehicle(key)} style={{ accentColor: '#1a3358', cursor: 'pointer' }} />
+                <span style={{ fontSize: 12, color: '#374151' }}>{label}</span>
+              </label>
+            ))}
+          </div>
+        </Pill>
+
+        {/* Divider */}
+        <div style={{ width: 1, height: 28, background: '#e5e7eb', flexShrink: 0 }} />
+
+        {/* Fleet Size — inline fixed buttons */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', whiteSpace: 'nowrap' }}>Fleet size</span>
+          <SegBtns options={FLEET_SIZE_OPTIONS} selected={fleetSize} onSelect={setFleetSize} />
         </div>
 
-        {/* ── Map + Results/History ── */}
-        <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
+        <div style={{ flex: 1 }} />
 
-          {/* Map */}
-          <div style={{ height:260, flexShrink:0, padding:'10px 10px 0' }}>
-            <FleetFinderMap shopLat={shopLat} shopLng={shopLng} radiusMiles={effectiveRadius}
-              mode={mode} onPolygonChange={setPolygonCoords} results={results} />
-          </div>
+        {/* Cost estimate + Search button */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {estimate != null && (
+            <div style={{ fontSize: 11, color: '#9ca3af' }}>
+              Est. <strong style={{ color: '#374151' }}>${estimate.toFixed(3)}</strong>
+            </div>
+          )}
+          <button
+            onClick={runSearch}
+            disabled={searching || industries.length === 0 || budget.spent >= budget.budget}
+            style={{
+              height: 40, padding: '0 24px', borderRadius: 24, border: 'none', fontWeight: 700, fontSize: 13,
+              cursor: searching || industries.length === 0 ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap',
+              background: searching || industries.length === 0 ? '#9ca3af' : '#1a3358',
+              color: 'white', boxShadow: searching ? 'none' : '0 2px 10px rgba(26,51,88,.3)',
+              transition: 'all .15s',
+            }}>
+            {searching ? '⏳ Searching…' : 'Search'}
+          </button>
+        </div>
+      </div>
 
-          {/* Panel tabs */}
-          <div style={{ display:'flex', gap:4, padding:'8px 10px 0', flexShrink:0 }}>
+      {/* ── Body ─────────────────────────────────────────────────────────────── */}
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+
+        {/* Map */}
+        <div style={{ flex: '0 0 56%', padding: 10, overflow: 'hidden' }}>
+          <FleetFinderMap
+            shopLat={shopLat} shopLng={shopLng} radiusMiles={effectiveRadius}
+            mode={mode} onPolygonChange={setPolygonCoords} results={results}
+          />
+        </div>
+
+        {/* Results panel */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderLeft: '1px solid #e5e7eb', background: '#f9fafb', overflow: 'hidden', minWidth: 0 }}>
+
+          {/* Tabs */}
+          <div style={{ padding: '0 16px', borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, background: 'white' }}>
             {[
-              { id:'results', label: results.length > 0 ? `Results (${results.length})` : 'Results' },
-              { id:'history', label:`Search History${costLog.length > 0 ? ` (${costLog.length})` : ''}` },
+              { id: 'results', label: results.length > 0 ? `Results (${results.length})` : 'Results' },
+              { id: 'history', label: costLog.length > 0 ? `History (${costLog.length})` : 'History' },
             ].map(t => (
               <button key={t.id} onClick={() => setActivePanel(t.id)} style={{
-                padding:'5px 14px', borderRadius:'6px 6px 0 0', fontSize:12, fontWeight:600, cursor:'pointer',
-                border: activePanel===t.id ? '1px solid var(--gray-200)' : '1px solid transparent',
-                borderBottom: activePanel===t.id ? '1px solid white' : '1px solid var(--gray-200)',
-                background: activePanel===t.id ? 'white' : 'transparent',
-                color: activePanel===t.id ? 'var(--navy-900)' : 'var(--gray-500)',
+                padding: '12px 16px', border: 'none', background: 'transparent', cursor: 'pointer',
+                fontSize: 13, fontWeight: 600,
+                color: activePanel === t.id ? '#111827' : '#9ca3af',
+                borderBottom: activePanel === t.id ? '2px solid #1a3358' : '2px solid transparent',
               }}>{t.label}</button>
             ))}
-            <div style={{ flex:1, borderBottom:'1px solid var(--gray-200)' }} />
             {searchMeta && (
-              <div style={{ fontSize:10, color:'var(--gray-400)', alignSelf:'flex-end', marginBottom:2, marginRight:4 }}>
-                Last search: ${searchMeta.cost_usd?.toFixed(4)} · States: {searchMeta.states_searched?.join(', ')}
+              <div style={{ marginLeft: 'auto', fontSize: 10, color: '#9ca3af', paddingBottom: 2 }}>
+                Last: ${searchMeta.cost_usd?.toFixed(4)} · {searchMeta.states_searched?.join(', ')}
               </div>
             )}
           </div>
 
           {/* Panel content */}
-          <div style={{ flex:1, overflowY:'auto', background:'white', padding:10, borderTop:'none' }}>
+          <div style={{ flex: 1, overflowY: 'auto', padding: 12 }}>
 
-            {/* Results panel */}
             {activePanel === 'results' && (
               <>
                 {searching && (
-                  <div style={{ textAlign:'center', padding:40, color:'var(--gray-400)' }}>
-                    <div style={{ fontSize:28, marginBottom:10 }}>🔍</div>
-                    <div style={{ fontWeight:700, marginBottom:4 }}>Searching across multiple sources...</div>
-                    <div style={{ fontSize:11 }}>Google · FMCSA · LinkedIn · Job boards · State registries</div>
-                    <div style={{ fontSize:11, marginTop:4, color:'var(--gray-300)' }}>This takes 30–90 seconds</div>
+                  <div style={{ textAlign: 'center', padding: '60px 24px' }}>
+                    <div style={{ fontSize: 40, marginBottom: 16 }}>🔍</div>
+                    <div style={{ fontWeight: 700, fontSize: 15, color: '#111827', marginBottom: 8 }}>Searching across multiple sources…</div>
+                    <div style={{ fontSize: 12, color: '#9ca3af', lineHeight: 1.7 }}>Google · LinkedIn · FMCSA · Indeed · State registries</div>
+                    <div style={{ fontSize: 11, color: '#d1d5db', marginTop: 6 }}>This takes 30–90 seconds</div>
                   </div>
                 )}
                 {!searching && results.length === 0 && searchMeta && (
-                  <div style={{ textAlign:'center', padding:40, color:'var(--gray-400)', fontSize:12 }}>No new companies found matching your filters.</div>
+                  <div style={{ textAlign: 'center', padding: '60px 24px', color: '#9ca3af' }}>
+                    <div style={{ fontSize: 28, marginBottom: 10 }}>🏙️</div>
+                    <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6, color: '#374151' }}>No new companies found</div>
+                    <div style={{ fontSize: 12 }}>Try adjusting your filters or expanding your search zone.</div>
+                  </div>
                 )}
                 {!searching && results.length === 0 && !searchMeta && (
-                  <div style={{ textAlign:'center', padding:40, color:'var(--gray-400)' }}>
-                    <div style={{ fontSize:13, marginBottom:4 }}>Set your filters and hit Run Search</div>
-                    <div style={{ fontSize:11 }}>Results sorted by fleet probability — highest first</div>
+                  <div style={{ textAlign: 'center', padding: '60px 24px' }}>
+                    <div style={{ fontSize: 40, marginBottom: 16 }}>🏢</div>
+                    <div style={{ fontWeight: 700, fontSize: 15, color: '#374151', marginBottom: 6 }}>Ready to find leads</div>
+                    <div style={{ fontSize: 12, color: '#9ca3af' }}>Set your filters above and hit Search</div>
+                    <div style={{ fontSize: 11, color: '#d1d5db', marginTop: 4 }}>Results sorted by fleet probability — highest first</div>
                   </div>
                 )}
                 {results.map((co, i) => (
-                  <ResultCard key={`${co.name}-${i}`} company={co} expanded={!!expanded[i]}
-                    onToggle={() => setExpanded(p => ({ ...p, [i]: !p[i] }))}
+                  <ResultCard key={`${co.name}-${i}`} company={co}
                     onImport={() => handleImport(co, i)}
                     onDismiss={() => handleDismiss(co, i)}
                     importing={!!importing[i]} />
@@ -703,42 +815,39 @@ export default function FleetFinder() {
               </>
             )}
 
-            {/* History panel */}
             {activePanel === 'history' && (
-              <div>
+              <>
                 {costLog.length === 0 ? (
-                  <div style={{ textAlign:'center', padding:40, color:'var(--gray-400)', fontSize:12 }}>No searches run yet.</div>
+                  <div style={{ textAlign: 'center', padding: '60px 24px', color: '#9ca3af', fontSize: 13 }}>No searches run yet.</div>
                 ) : (
-                  <table style={{ width:'100%', fontSize:12, borderCollapse:'collapse' }}>
+                  <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
                     <thead>
-                      <tr style={{ color:'var(--gray-400)', fontSize:11 }}>
-                        <th style={{ textAlign:'left', padding:'4px 8px 8px 0', borderBottom:'1px solid var(--gray-200)' }}>Date</th>
-                        <th style={{ textAlign:'left', padding:'4px 8px 8px', borderBottom:'1px solid var(--gray-200)' }}>Industries</th>
-                        <th style={{ textAlign:'right', padding:'4px 8px 8px', borderBottom:'1px solid var(--gray-200)' }}>Radius</th>
-                        <th style={{ textAlign:'right', padding:'4px 8px 8px', borderBottom:'1px solid var(--gray-200)' }}>Results</th>
-                        <th style={{ textAlign:'right', padding:'4px 0 8px 8px', borderBottom:'1px solid var(--gray-200)' }}>Cost</th>
+                      <tr style={{ color: '#9ca3af', fontSize: 11 }}>
+                        {['Date', 'Industries', 'Radius', 'Results', 'Cost'].map((h, i) => (
+                          <th key={h} style={{ textAlign: i > 1 ? 'right' : 'left', padding: '4px 8px 12px', borderBottom: '1px solid #e5e7eb', fontWeight: 700 }}>{h}</th>
+                        ))}
                       </tr>
                     </thead>
                     <tbody>
                       {costLog.map(r => (
-                        <tr key={r.id} style={{ borderBottom:'1px solid var(--gray-100)' }}>
-                          <td style={{ padding:'8px 8px 8px 0', color:'var(--gray-500)', whiteSpace:'nowrap' }}>{new Date(r.ran_at).toLocaleDateString()}</td>
-                          <td style={{ padding:'8px', color:'var(--gray-700)', maxWidth:260, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.search_label || '—'}</td>
-                          <td style={{ padding:'8px', textAlign:'right', color:'var(--gray-500)' }}>{r.radius_miles}mi</td>
-                          <td style={{ padding:'8px', textAlign:'right' }}>{r.result_count}</td>
-                          <td style={{ padding:'8px 0 8px 8px', textAlign:'right', fontWeight:700, color:'var(--gray-700)' }}>${r.cost_usd?.toFixed(4)}</td>
+                        <tr key={r.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                          <td style={{ padding: '9px 8px', color: '#6b7280', whiteSpace: 'nowrap' }}>{new Date(r.ran_at).toLocaleDateString()}</td>
+                          <td style={{ padding: '9px 8px', color: '#374151', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.search_label || '—'}</td>
+                          <td style={{ padding: '9px 8px', textAlign: 'right', color: '#6b7280' }}>{r.radius_miles}mi</td>
+                          <td style={{ padding: '9px 8px', textAlign: 'right' }}>{r.result_count}</td>
+                          <td style={{ padding: '9px 8px', textAlign: 'right', fontWeight: 700, color: '#374151' }}>${r.cost_usd?.toFixed(4)}</td>
                         </tr>
                       ))}
                     </tbody>
                     <tfoot>
                       <tr>
-                        <td colSpan={4} style={{ padding:'8px 0', fontSize:11, color:'var(--gray-400)', fontWeight:600 }}>Total spent this month</td>
-                        <td style={{ padding:'8px 0', textAlign:'right', fontWeight:800, color:'var(--navy-900)' }}>${budget.spent.toFixed(4)}</td>
+                        <td colSpan={4} style={{ padding: '12px 8px 4px', fontSize: 11, color: '#9ca3af', fontWeight: 600 }}>Total spent this month</td>
+                        <td style={{ padding: '12px 8px 4px', textAlign: 'right', fontWeight: 800, color: '#111827' }}>${budget.spent.toFixed(4)}</td>
                       </tr>
                     </tfoot>
                   </table>
                 )}
-              </div>
+              </>
             )}
           </div>
         </div>

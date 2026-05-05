@@ -347,7 +347,7 @@ router.delete('/dismiss/:id', auth, async (req, res) => {
 router.post('/estimate', auth, async (req, res) => {
   try {
     const { industries = [], radius_miles = 25 } = req.body;
-    // Estimate: 2 Serper searches ($0.002) + Haiku with 4-5 Claude follow-ups (~$0.35)
+    // Estimate: Haiku with web_search, ~5 turns, varies by industry count + radius
     const base        = 0.35;
     const industryAdd = Math.min(industries.length, 15) * 0.002;
     const radiusAdd   = Math.max(0, radius_miles - 15) / 10 * 0.003;
