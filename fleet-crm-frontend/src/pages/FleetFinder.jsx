@@ -333,21 +333,22 @@ function ScoreTooltip({ factors, colors }) {
 // ── Result card ────────────────────────────────────────────────────────────────
 function ResultCard({ company, onImport, onDismiss, importing }) {
   const [expanded, setExpanded] = useState(false);
-  const prob      = company.fleet_probability || 0;
-  const colors    = PROB_COLOR(prob);
-  const inCrm     = company.already_in_crm;
+  const prob         = company.fleet_probability || 0;
+  const colors       = PROB_COLOR(prob);
+  const inCrm        = company.already_in_crm;
+  const newLocation  = company.new_chain_location;
 
   return (
     <div style={{
       background: inCrm ? '#f9fafb' : 'white',
       borderRadius: 14, marginBottom: 10,
-      border: `1px solid ${inCrm ? '#d1d5db' : '#e5e7eb'}`,
+      border: `1px solid ${inCrm ? '#d1d5db' : newLocation ? '#bae6fd' : '#e5e7eb'}`,
       boxShadow: '0 1px 4px rgba(0,0,0,.06)',
       overflow: 'hidden',
       opacity: inCrm ? 0.75 : 1,
     }}>
       {/* Top stripe */}
-      <div style={{ height: 3, background: inCrm ? '#d1d5db' : colors.bar }} />
+      <div style={{ height: 3, background: inCrm ? '#d1d5db' : newLocation ? '#0284c7' : colors.bar }} />
 
       {/* Already in CRM banner */}
       {inCrm && (
@@ -355,6 +356,16 @@ function ResultCard({ company, onImport, onDismiss, importing }) {
           <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 600 }}>Already in CRM</span>
           {company.crm_match_name && (
             <span style={{ fontSize: 11, color: '#9ca3af' }}>→ matched to <b style={{ color: '#374151' }}>{company.crm_match_name}</b>{company.crm_match_city ? ` (${company.crm_match_city})` : ''}</span>
+          )}
+        </div>
+      )}
+
+      {/* New location of existing chain banner */}
+      {newLocation && (
+        <div style={{ padding: '5px 16px', background: '#f0f9ff', borderBottom: '1px solid #bae6fd', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 11, color: '#0369a1', fontWeight: 700 }}>📍 New location</span>
+          {company.crm_match_name && (
+            <span style={{ fontSize: 11, color: '#0284c7' }}>you already have <b>{company.crm_match_name}</b>{company.crm_match_city ? ` (${company.crm_match_city})` : ''} — this is a different office</span>
           )}
         </div>
       )}
@@ -408,9 +419,10 @@ function ResultCard({ company, onImport, onDismiss, importing }) {
                 disabled={importing}
                 style={{
                   padding: '8px 18px', borderRadius: 8, border: 'none', cursor: 'pointer', whiteSpace: 'nowrap',
-                  background: importing ? '#9ca3af' : '#1a3358', color: 'white', fontWeight: 700, fontSize: 12,
+                  background: importing ? '#9ca3af' : newLocation ? '#0369a1' : '#1a3358',
+                  color: 'white', fontWeight: 700, fontSize: 12,
                 }}>
-                {importing ? '…' : 'Import'}
+                {importing ? '…' : newLocation ? '+ Add Location' : 'Import'}
               </button>
             )}
             <button

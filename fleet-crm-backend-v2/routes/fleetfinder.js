@@ -777,7 +777,7 @@ Required format per company:
       }
     }
 
-    // ── 8. Filter dismissed; flag CRM matches instead of dropping them ────────
+    // ── 8. Filter dismissed; smart CRM matching ──────────────────────────────
     const now90 = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
     const filtered = [];
     for (const co of companies) {
@@ -787,16 +787,32 @@ Required format per company:
       // Hard skip dismissed companies
       if (dismissedKeys.has(key)) continue;
 
-      // Fuzzy-match against CRM — mark but still include
+      // Fuzzy-match against CRM by name
       const normN = normalizeName(co.name);
       const crmMatch = existing.rows.find(r => stringSimilarity(normN, normalizeName(r.name)) >= 0.85);
+
       if (crmMatch) {
-        co.already_in_crm  = true;
-        co.crm_match_name  = crmMatch.name;
-        co.crm_match_city  = crmMatch.city;
+        const coAddr  = normalizeAddress(co.address   || '');
+        const crmAddr = normalizeAddress(crmMatch.address || '');
+        const bothHaveAddress = coAddr && crmAddr;
+        const sameAddress = bothHaveAddress && stringSimilarity(coAddr, crmAddr) >= 0.85;
+
+        if (sameAddress) {
+          // Same name + same address = true duplicate, skip entirely
+          continue;
+        } else {
+          // Same chain name but different address (different office) — show as new importable location
+          co.already_in_crm    = false;
+          co.new_chain_location = true;
+          co.crm_match_name    = crmMatch.name;
+          co.crm_match_city    = crmMatch.city;
+        }
       } else {
-        co.already_in_crm  = co.already_in_crm || false;
-        // Only log as "seen" for new companies (not CRM dupes)
+        co.already_in_crm = false;
+      }
+
+      // Log as "seen" only for genuinely new companies
+      if (!co.already_in_crm && !co.new_chain_location) {
         await pool.query(
           `INSERT INTO fleet_finder_seen (name, address, city, state, expires_at)
            VALUES ($1, $2, $3, $4, $5)
