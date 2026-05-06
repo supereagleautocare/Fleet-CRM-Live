@@ -9,9 +9,12 @@ const { pool }  = require('../db/schema');
 const { requireAuth: auth } = require('../middleware/auth');
 const Anthropic = require('@anthropic-ai/sdk');
 
-// ── Pricing constants (claude-haiku-4-5) ─────────────────────────────────────
-const PRICE_INPUT_PER_M  = 0.80;   // $ per million input tokens
-const PRICE_OUTPUT_PER_M = 4.00;   // $ per million output tokens
+// ── Pricing constants (claude-haiku-4-5-20251001) ────────────────────────────
+const PRICE_INPUT_PER_M        = 1.00;   // $ per million input tokens
+const PRICE_OUTPUT_PER_M       = 5.00;   // $ per million output tokens
+const PRICE_CACHE_WRITE_PER_M  = 1.25;   // $ per million cache write tokens (5m TTL)
+const PRICE_CACHE_READ_PER_M   = 0.10;   // $ per million cache read tokens
+const PRICE_WEB_SEARCH_PER_USE = 0.011;  // $ per web search query
 
 
 // ── Address normalization for fuzzy duplicate detection ──────────────────────
@@ -536,6 +539,7 @@ router.post('/search', auth, async (req, res) => {
     let outputTokens      = 0;
     let cacheReadTokens   = 0;
     let cacheWriteTokens  = 0;
+    let webSearchCount    = 0;
     let turnCount         = 0;
 
     // ── Phase 1: Research (web searches, no JSON pressure) ────────────────────
@@ -640,7 +644,7 @@ Begin searching now.`;
         researchMessages.push({ role: 'assistant', content: response.content });
         const toolResults = response.content
           .filter(b => b.type === 'tool_use')
-          .map(b => ({ type: 'tool_result', tool_use_id: b.id, content: '' }));
+          .map(b => { if (b.name === 'web_search') webSearchCount++; return { type: 'tool_result', tool_use_id: b.id, content: '' }; });
         if (toolResults.length > 0) {
           researchMessages.push({ role: 'user', content: toolResults });
         } else {
@@ -671,9 +675,9 @@ Output ONLY valid JSON. No explanation, no markdown, no text of any kind outside
       ...researchMessages,
       {
         role: 'user',
-        content: `Convert all companies from your research above into this JSON array.
-Include EVERY company mentioned, even national chains (estimate their LOCAL ${shopCity} fleet, not national).
-Use null for any field you could not verify. Do not skip companies due to missing data.
+        content: `Convert the TOP 20 companies from your research into this JSON array, ranked by fleet probability (highest first).
+If you found more than 20, pick the 20 most promising — prioritize confirmed local offices, named field employees, and explicit vehicle mentions over uncertain leads.
+Use null for any field you could not verify.
 
 IMPORTANT — keep all string fields SHORT to avoid truncation:
 - fleet_note: max 120 characters (one tight sentence)
@@ -816,8 +820,12 @@ Required format per company:
 
     // ── 11. Log cost ──────────────────────────────────────────────────────────
     const costUsd = parseFloat(
-      ((inputTokens / 1_000_000) * PRICE_INPUT_PER_M +
-       (outputTokens / 1_000_000) * PRICE_OUTPUT_PER_M).toFixed(5)
+      ((inputTokens      / 1_000_000) * PRICE_INPUT_PER_M       +
+       (outputTokens     / 1_000_000) * PRICE_OUTPUT_PER_M      +
+       (cacheWriteTokens / 1_000_000) * PRICE_CACHE_WRITE_PER_M +
+       (cacheReadTokens  / 1_000_000) * PRICE_CACHE_READ_PER_M  +
+       webSearchCount                 * PRICE_WEB_SEARCH_PER_USE
+      ).toFixed(5)
     );
     await pool.query(
       `INSERT INTO fleet_finder_cost_log
