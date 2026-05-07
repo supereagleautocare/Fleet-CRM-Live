@@ -494,6 +494,11 @@ router.post('/search', auth, async (req, res) => {
       `SELECT name, address, city, main_phone FROM companies WHERE status = 'active'`
     );
     const existingNames = existing.rows.map(r => normalizeName(r.name)).filter(Boolean);
+    // Build a skip list of name + address pairs for Claude (name only if no address)
+    const crmSkipList = existing.rows
+      .map(r => r.address ? `${r.name} — ${r.address}` : r.name)
+      .filter(Boolean)
+      .join('\n');
 
     // ── 4. Pull dismissed companies ────────────────────────────────────────────
     await pool.query(`DELETE FROM fleet_finder_seen WHERE expires_at < now()::text`);
@@ -609,8 +614,9 @@ For each company found, report:
 • National chain or local independent; if chain, confirm local branch exists
 • Your confidence they run local vehicles here and why
 
-Already in CRM (research anyway — just note "already in CRM"):
-${existingNames.slice(0, 40).join(', ')}
+SKIP LIST — do not research or include these exact locations. They are already in this shop's CRM.
+If you find a company on this list at a DIFFERENT address, that is a separate office — include it.
+${crmSkipList}
 
 After your searches, end your response with a short COVERAGE NOTE section (label it exactly "COVERAGE NOTE:") that answers in 2-3 sentences:
 1. Which sources you searched (Google Maps, LinkedIn, Indeed, FMCSA, etc.)
@@ -686,8 +692,8 @@ IMPORTANT — keep all string fields SHORT to avoid truncation:
 - fleet_signals: max 4 signals, each max 40 characters
 - local_field_employee_titles: list job titles only, no extra text
 
-For companies already in CRM set "already_in_crm": true so they can be shown differently in the UI.
-Already in CRM: ${existingNames.slice(0, 40).join(', ')}
+If any company slipped through that matches the skip list (same name + same address), set "already_in_crm": true.
+Skip list: ${crmSkipList}
 
 Required format per company:
 {
