@@ -344,11 +344,10 @@ function ResultCard({ company, onImport, onDismiss, importing }) {
       borderRadius: 14, marginBottom: 10,
       border: `1px solid ${inCrm ? '#d1d5db' : newLocation ? '#bae6fd' : '#e5e7eb'}`,
       boxShadow: '0 1px 4px rgba(0,0,0,.06)',
-      overflow: 'hidden',
       opacity: inCrm ? 0.75 : 1,
     }}>
       {/* Top stripe */}
-      <div style={{ height: 3, background: inCrm ? '#d1d5db' : newLocation ? '#0284c7' : colors.bar }} />
+      <div style={{ height: 3, background: inCrm ? '#d1d5db' : newLocation ? '#0284c7' : colors.bar, borderRadius: '14px 14px 0 0' }} />
 
       {/* Already in CRM banner */}
       {inCrm && (
