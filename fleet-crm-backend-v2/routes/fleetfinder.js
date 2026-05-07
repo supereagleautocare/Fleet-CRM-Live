@@ -619,10 +619,12 @@ Fleet signal keywords to watch for: "${customKeywords.join('", "')}"
 
 Run 8–10 searches and aim to find at least 12 distinct companies. Choose your sources freely — use the source menu in your instructions to decide what makes sense for each industry. Follow the evidence: if a Google Maps result looks promising, go to their website next. If a company has a job posting mentioning "company vehicle", search LinkedIn for their local employees next. If one industry search returns few results, try a second industry from the list.
 
-For each company found, report:
-• Name, industry, local address (or "not found")
-• LinkedIn field employees in ${shopCity} and their titles (if searched)
-• Website or job posting signals (fleet page, vehicle mentions, technician count)
+For each company found, record:
+• Name, industry, full street address (exact address if found on Google Maps or their website, not just city)
+• Phone number if visible on Google Maps or website
+• LinkedIn field employees in ${shopCity} — record the exact URL you searched and how many profiles you found
+• Indeed/Glassdoor signals — record the exact job posting URL that mentioned company vehicles
+• Website signals — record the exact page URL (fleet page, team page, careers page) where you found fleet evidence
 • National chain or local independent; if chain, confirm local branch exists
 • Your confidence they run local vehicles here and why
 
@@ -721,9 +723,11 @@ Required format per company:
   "contact_name": null,
   "contact_title": null,
   "local_office_found": boolean,
-  "local_office_address": string|null,
+  "local_office_address": string|null (full street address if found),
   "local_field_employees_found": number|null,
-  "local_field_employee_titles": string[],
+  "local_field_employee_titles": string[] (job titles only, e.g. ["Field Technician", "Cable Tech"]),
+  "local_field_employee_source": string|null (where you found them, e.g. "LinkedIn — 12 profiles found"),
+  "local_field_employee_url": string|null (direct URL to LinkedIn search or Indeed posting where employees were found),
   "fleet_probability": number (0-100),
   "fleet_note": string (max 120 chars),
   "research_notes": string (max 150 chars),
@@ -738,7 +742,9 @@ Required format per company:
   "already_in_crm": boolean,
   "lat": number|null (latitude if you found a specific address),
   "lng": number|null (longitude if you found a specific address),
-  "sources": [{"label": string, "url": string}]
+  "sources": [
+    {"label": string (e.g. "LinkedIn — 12 field employees", "Indeed — company vehicle posting", "Google Maps listing", "Company website fleet page"), "url": string}
+  ]
 }`,
       },
       { role: 'assistant', content: '[' }, // ← prefill forces JSON array start

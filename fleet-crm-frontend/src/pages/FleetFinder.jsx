@@ -463,7 +463,17 @@ function ResultCard({ company, onImport, onDismiss, importing }) {
           )}
           {company.local_field_employee_titles?.length > 0 && (
             <div style={{ marginBottom: 10, padding: '8px 10px', background: '#f0fdf4', borderRadius: 7, border: '1px solid #bbf7d0' }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: '#15803d', marginBottom: 4 }}>Local Field Employees Found</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, color: '#15803d' }}>Local Field Employees Found</span>
+                {company.local_field_employee_url ? (
+                  <a href={safeUrl(company.local_field_employee_url)} target="_blank" rel="noopener noreferrer"
+                    style={{ fontSize: 10, color: '#0284c7', fontWeight: 600, textDecoration: 'none' }}>
+                    ↗ {company.local_field_employee_source || 'View source'}
+                  </a>
+                ) : company.local_field_employee_source ? (
+                  <span style={{ fontSize: 10, color: '#6b7280' }}>{company.local_field_employee_source}</span>
+                ) : null}
+              </div>
               <div style={{ fontSize: 11, color: '#166534' }}>{company.local_field_employee_titles.join(' · ')}</div>
             </div>
           )}
