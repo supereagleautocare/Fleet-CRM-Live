@@ -238,7 +238,7 @@ function ChainModal({ company, chainInfo, onDecision, onCancel }) {
   const locList = chainInfo.existing_locations?.slice(0, 4) || [];
   return (
     <ModalShell
-      title={`${company.chain_name || company.name} is already in your CRM`}
+      title={`${company.name} is already in your CRM`}
       onCancel={onCancel}
     >
       <div style={{ marginBottom:14, padding:'12px 14px', background:'#f0f9ff', borderRadius:10, border:'1px solid #bae6fd', fontSize:12 }}>
@@ -274,13 +274,13 @@ function ChainModal({ company, chainInfo, onDecision, onCancel }) {
 function NewChainModal({ company, onDecision, onCancel }) {
   return (
     <ModalShell
-      title={`Start a chain group for ${company.chain_name || company.name}?`}
+      title={`Import ${company.name}?`}
       subtitle={`This looks like a national chain. Starting a chain group lets you track all local locations together.`}
       onCancel={onCancel}
     >
       <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
         <ModalBtn onClick={() => onDecision('start_chain')} border='#0369a1' bg='#f0f9ff'>
-          ➕ Import and start a "{company.chain_name || company.name}" chain group
+          ➕ Import and start a "{company.name}" chain group
         </ModalBtn>
         <ModalBtn onClick={() => onDecision('new')} border='#1a3358' bg='#eef2ff'>
           Import as a regular standalone company
