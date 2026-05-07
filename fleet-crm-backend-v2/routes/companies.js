@@ -257,7 +257,7 @@ router.get('/:id', async (req, res) => {
 // POST /api/companies
 router.post('/', async (req, res) => {
   try {
-    const { name, main_phone, industry, address, city, state, zip, website, notes, fleet_research, is_multi_location, location_name, location_group } = req.body;
+    const { name, main_phone, industry, address, city, state, zip, website, notes, fleet_research, is_multi_location, location_name, location_group, pipeline_stage } = req.body;
     if (!name) return res.status(400).json({ error: 'Company name is required.' });
 
     if (main_phone) {
@@ -267,18 +267,21 @@ router.post('/', async (req, res) => {
 
     const company_id = await getNextCompanyId();
     const fleetResearchJson = fleet_research ? (typeof fleet_research === 'string' ? fleet_research : JSON.stringify(fleet_research)) : null;
+    const stage = pipeline_stage || 'new';
     const { rows } = await pool.query(`
-      INSERT INTO companies (company_id, name, main_phone, industry, address, city, state, zip, website, notes, fleet_research, is_multi_location, location_name, location_group)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *
+      INSERT INTO companies (company_id, name, main_phone, industry, address, city, state, zip, website, notes, fleet_research, is_multi_location, location_name, location_group, pipeline_stage)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *
     `, [company_id, name.trim(), main_phone||null, industry||null, address||null, city||null,
         state||null, zip||null, website||null, notes||null, fleetResearchJson,
-        is_multi_location ? 1 : 0, location_name||null, location_group||name.trim()]);
+        is_multi_location ? 1 : 0, location_name||null, location_group||name.trim(), stage]);
     geocodeAndSave(rows[0].id, address, city);
-    const todayStr = new Date().toLocaleDateString('en-CA');
-    await pool.query(
-      "INSERT INTO follow_ups (source_type,entity_id,company_id_str,entity_name,phone,due_date,next_action) VALUES ('company',$1,$2,$3,$4,$5,'Call') ON CONFLICT (source_type,entity_id) DO NOTHING",
-      [rows[0].id, company_id, name.trim(), main_phone||null, todayStr]
-    );
+    if (stage !== 'dead') {
+      const todayStr = new Date().toLocaleDateString('en-CA');
+      await pool.query(
+        "INSERT INTO follow_ups (source_type,entity_id,company_id_str,entity_name,phone,due_date,next_action) VALUES ('company',$1,$2,$3,$4,$5,'Call') ON CONFLICT (source_type,entity_id) DO NOTHING",
+        [rows[0].id, company_id, name.trim(), main_phone||null, todayStr]
+      );
+    }
     res.status(201).json(rows[0]);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
