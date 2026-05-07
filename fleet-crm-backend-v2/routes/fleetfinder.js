@@ -617,7 +617,7 @@ Vehicle types this shop services: ${vehicleDesc}
 Fleet size preference (soft preference only — include companies close to this range): ${fleetSizeDesc}
 Fleet signal keywords to watch for: "${customKeywords.join('", "')}"
 
-Run 8–10 searches and aim to find at least 12 distinct companies. Choose your sources freely — use the source menu in your instructions to decide what makes sense for each industry. Follow the evidence: if a Google Maps result looks promising, go to their website next. If a company has a job posting mentioning "company vehicle", search LinkedIn for their local employees next. If one industry search returns few results, try a second industry from the list.
+Run 8–10 searches. Find the 15 BEST leads — not every company you can find, just the top 15 most promising ones ranked by how likely they are to run a local fleet. Once you have 15 strong leads, stop searching and write your summary. Quality over quantity — a well-researched list of 15 beats a shallow list of 50. Choose your sources freely and follow the evidence.
 
 For each company found, record:
 • Name, industry, full street address (exact address if found on Google Maps or their website, not just city)
@@ -695,8 +695,9 @@ Output ONLY valid JSON. No explanation, no markdown, no text of any kind outside
       ...researchMessages,
       {
         role: 'user',
-        content: `Convert the TOP 20 companies from your research into this JSON array, ranked by fleet probability (highest first).
-If you found more than 20, pick the 20 most promising — prioritize confirmed local offices, named field employees, and explicit vehicle mentions over uncertain leads.
+        content: `Convert the TOP 15 companies from your research into this JSON array, ranked by fleet probability (highest first).
+Pick the 15 most promising — prioritize confirmed local offices, named field employees, and explicit vehicle mentions over uncertain leads.
+OUTPUT AT MOST 15 OBJECTS. Stop after 15.
 Use null for any field you could not verify.
 
 IMPORTANT — keep all string fields SHORT to avoid truncation:

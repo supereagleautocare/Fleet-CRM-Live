@@ -769,7 +769,7 @@ export default function FleetFinder() {
       locationGroup = company.chain_name || company.name;
     }
 
-    await api.createCompany({
+    const created = await api.createCompany({
       name:       company.name,
       main_phone: company.main_phone  || null,
       industry:   company.industry    || null,
@@ -806,6 +806,11 @@ export default function FleetFinder() {
       location_group:    locationGroup,
     });
 
+    // Add to calling queue after import
+    if (created?.id) {
+      await api.addToCompanyQueue(created.id).catch(() => {});
+    }
+
     showToast(`${company.name} imported`, 'success');
     removeResult(index);
   }
@@ -814,9 +819,21 @@ export default function FleetFinder() {
 
   async function handleDismiss(company, index) {
     try {
-      await api.ffDismiss({ name: company.name, address: company.address, phone: company.main_phone, city: company.city, state: company.state });
+      // Import as Dead so it's blocked from future searches via the CRM skip list
+      await api.createCompany({
+        name:      company.name,
+        main_phone: company.main_phone || null,
+        industry:  company.industry   || null,
+        address:   company.address    || null,
+        city:      company.city       || null,
+        state:     company.state      || null,
+        zip:       company.zip        || null,
+        website:   company.website    || null,
+        pipeline_stage: 'dead',
+        notes: 'Reviewed via Fleet Finder — not a fit',
+      });
       removeResult(index);
-      showToast('Hidden from future searches', 'success');
+      showToast(`${company.name} marked as not a fit`, 'success');
     } catch (e) { showToast(e.message || 'Failed', 'error'); }
   }
 
