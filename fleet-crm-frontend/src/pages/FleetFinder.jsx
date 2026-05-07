@@ -550,6 +550,12 @@ function SegBtns({ options, selected, onSelect, format = v => v }) {
   );
 }
 
+// ── Module-level search state — survives component unmount ───────────────────
+// fetch() is NOT cancelled on unmount; we store the live promise here so the
+// component can re-attach to it when the user navigates back mid-search.
+let _searchPromise = null;   // the live ffSearch promise
+let _searchDone    = false;  // true once the promise settled
+
 // ── Main page ──────────────────────────────────────────────────────────────────
 export default function FleetFinder() {
   const { showToast } = useApp();
@@ -585,18 +591,36 @@ export default function FleetFinder() {
 
   const effectiveRadius = mode === 'drivetime' ? driveTimeToMiles(driveMinutes) : radius;
 
-  // Restore results from sessionStorage on mount (survives page navigation)
+  // Restore results on mount — either from an in-flight search or sessionStorage
   useEffect(() => {
-    try {
-      const saved = sessionStorage.getItem('ff_search_state');
-      if (saved) {
-        const { results: r, searchMeta: m, searchSummary: s, lastDebug: d } = JSON.parse(saved);
-        if (r?.length) setResults(r);
-        if (m) setSearchMeta(m);
-        if (s) setSearchSummary(s);
-        if (d) setLastDebug(d);
-      }
-    } catch (_) {}
+    if (_searchPromise && !_searchDone) {
+      // A search started before we navigated away — re-attach to it
+      setSearching(true);
+      setActivePanel('results');
+      _searchPromise.then(data => {
+        setResults(data.results || []);
+        setSearchMeta(data);
+        if (data.search_summary) setSearchSummary(data.search_summary);
+        if (data.debug) setLastDebug(data.debug);
+        api.ffBudget().then(b => setBudget(b)).catch(() => {});
+        api.ffCostLog().then(cl => setCostLog(cl)).catch(() => {});
+      }).catch(e => {
+        showToast(e.message || 'Search failed', 'error');
+      }).finally(() => {
+        setSearching(false);
+      });
+    } else {
+      try {
+        const saved = sessionStorage.getItem('ff_search_state');
+        if (saved) {
+          const { results: r, searchMeta: m, searchSummary: s, lastDebug: d } = JSON.parse(saved);
+          if (r?.length) setResults(r);
+          if (m) setSearchMeta(m);
+          if (s) setSearchSummary(s);
+          if (d) setLastDebug(d);
+        }
+      } catch (_) {}
+    }
   }, []);
 
   // Persist results to sessionStorage whenever they change
@@ -676,13 +700,18 @@ export default function FleetFinder() {
     if (budget.spent >= budget.budget) { showToast(`Monthly budget of $${budget.budget} reached`, 'error'); return; }
     setSearching(true); setResults([]); setSearchMeta(null); setSearchSummary(null); setActivePanel('results');
     try { sessionStorage.removeItem('ff_search_state'); } catch (_) {}
+
+    // Store promise at module level so navigating away doesn't cancel it
+    _searchDone   = false;
+    _searchPromise = api.ffSearch({
+      lat: shopLat, lng: shopLng,
+      radius_miles:   effectiveRadius,
+      polygon_coords: polygonCoords,
+      industries, vehicle_types: vehicleTypes, fleet_size: fleetSizes,
+    });
+
     try {
-      const data = await api.ffSearch({
-        lat: shopLat, lng: shopLng,
-        radius_miles:   effectiveRadius,
-        polygon_coords: polygonCoords,
-        industries, vehicle_types: vehicleTypes, fleet_size: fleetSizes,
-      });
+      const data = await _searchPromise;
       setResults(data.results || []);
       setSearchMeta(data);
       if (data.search_summary) setSearchSummary(data.search_summary);
@@ -690,7 +719,10 @@ export default function FleetFinder() {
       const [b, cl] = await Promise.all([api.ffBudget(), api.ffCostLog()]);
       setBudget(b); setCostLog(cl);
     } catch (e) { showToast(e.message || 'Search failed', 'error'); }
-    finally { setSearching(false); }
+    finally {
+      _searchDone = true;
+      setSearching(false);
+    }
   }
 
   async function handleImport(company, index) {
