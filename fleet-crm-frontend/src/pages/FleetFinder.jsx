@@ -473,7 +473,7 @@ function ResultCard({ company, onImport, onDismiss, importing }) {
             {company.main_phone && <InfoRow label="Phone">{company.main_phone}</InfoRow>}
             {company.website && (
               <InfoRow label="Website">
-                <a href={company.website} target="_blank" rel="noreferrer" style={{ color: '#2563eb' }}>
+                <a href={safeUrl(company.website)} target="_blank" rel="noreferrer" style={{ color: '#2563eb' }}>
                   {company.website.replace(/^https?:\/\/(www\.)?/, '')}
                 </a>
               </InfoRow>
@@ -484,8 +484,8 @@ function ResultCard({ company, onImport, onDismiss, importing }) {
           </div>
           {company.sources?.length > 0 && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-              {company.sources.map((s, i) => (
-                <a key={i} href={s.url} target="_blank" rel="noopener noreferrer"
+              {company.sources.filter(s => s.url).map((s, i) => (
+                <a key={i} href={safeUrl(s.url)} target="_blank" rel="noopener noreferrer"
                   style={{ padding: '3px 10px', background: 'white', border: '1px solid #bae6fd', borderRadius: 10, fontSize: 10, color: '#0284c7', fontWeight: 600, textDecoration: 'none' }}>
                   ↗ {s.label || s.url}
                 </a>
@@ -496,6 +496,12 @@ function ResultCard({ company, onImport, onDismiss, importing }) {
       )}
     </div>
   );
+}
+
+function safeUrl(url) {
+  if (!url) return null;
+  if (/^https?:\/\//i.test(url)) return url;
+  return 'https://' + url;
 }
 
 function Tag({ bg, c, children }) {
