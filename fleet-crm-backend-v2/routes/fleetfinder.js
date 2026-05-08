@@ -851,16 +851,19 @@ Required format per company:
       filtered.push(co);
     }
 
-    // ── 9. Geocode missing lat/lng in parallel, then calculate distances ──────
-    await Promise.all(filtered.map(async co => {
+    // ── 9. Geocode missing lat/lng — sequential to respect Nominatim 1 req/sec ─
+    for (const co of filtered) {
       if (!co.lat || !co.lng) {
-        const geo = await forwardGeocode(co.address, co.city, co.state);
+        // Try full address first, fall back to city+state for a centre-of-city pin
+        let geo = await forwardGeocode(co.address, co.city, co.state);
+        if (!geo && (co.city || co.state)) geo = await forwardGeocode(null, co.city, co.state);
         if (geo) { co.lat = geo.lat; co.lng = geo.lng; }
+        await new Promise(r => setTimeout(r, 1100)); // Nominatim rate limit: 1 req/s
       }
       if (co.lat && co.lng) {
         co.distance_miles = distMiles(lat, lng, co.lat, co.lng);
       }
-    }));
+    }
 
     // ── 10. Sort by fleet probability desc ────────────────────────────────────
     filtered.sort((a, b) => (b.fleet_probability || 0) - (a.fleet_probability || 0));
