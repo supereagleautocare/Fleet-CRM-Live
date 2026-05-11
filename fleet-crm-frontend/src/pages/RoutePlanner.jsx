@@ -1588,7 +1588,7 @@ function PersistentMap({ routeStops=[], startGeo=null, returnHome=false, nearbyC
       const icon = SICON[c.pipeline_stage] || '🏢';
       const markerHtml = isInRoute
         ? `<div style="width:18px;height:18px;border-radius:50%;background:#1e40af;border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,.3);cursor:pointer"></div>`
-        : `<div style="width:14px;height:14px;border-radius:50%;background:white;border:1.5px solid ${col};box-shadow:0 1px 4px rgba(0,0,0,.25);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:8px;line-height:1">${icon}</div>`;
+        : `<div style="width:14px;height:14px;border-radius:50%;background:white;border:2px solid ${col};box-shadow:0 1px 4px rgba(0,0,0,.25);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:8px;line-height:1">${icon}</div>`;
       const anchor = isInRoute ? [9,9] : [7,7];
       const marker = L.marker([c.lat, c.lng], { icon: L.divIcon({ html:markerHtml, className:'', iconAnchor:anchor }) })
         .addTo(nearbyLayerRef.current).bindPopup(popup, {maxWidth:270});
