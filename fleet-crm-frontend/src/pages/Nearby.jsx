@@ -136,21 +136,28 @@ export default function Nearby({ embedded = false }) {
 
   const activePos = locationMode === 'address' && customAddrPos ? customAddrPos : myPos;
 
+  const [shopPos, setShopPos] = useState(null);
+
   useEffect(() => {
-    Promise.all([api.nearbyData(), api.contactTypes()])
-      .then(([data, ct]) => { setCompanies(data); setContactTypes(ct || {}); })
+    Promise.all([api.nearbyData(), api.contactTypes(), api.settings()])
+      .then(([data, ct, settings]) => {
+        setCompanies(data); setContactTypes(ct || {});
+        const find = key => settings?.find?.(s => s.key === key)?.value;
+        const lat = parseFloat(find('shop_lat')), lng = parseFloat(find('shop_lng'));
+        if (lat && lng) setShopPos({ lat, lng });
+      })
       .catch(e => console.error(e))
       .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {
-    if (!navigator.geolocation) { setMyPos({lat:35.2271,lng:-80.8431}); return; }
+    if (!navigator.geolocation) { setMyPos(shopPos || {lat:35.2271,lng:-80.8431}); return; }
     navigator.geolocation.getCurrentPosition(
       pos => setMyPos({lat:pos.coords.latitude,lng:pos.coords.longitude}),
-      ()  => { setLocError('Location denied — using Charlotte center.'); setMyPos({lat:35.2271,lng:-80.8431}); },
+      ()  => { setLocError('Location denied — using shop address.'); setMyPos(shopPos || {lat:35.2271,lng:-80.8431}); },
       {timeout:8000}
     );
-  }, []);
+  }, [shopPos]);
 
   async function lookupCustomAddr() {
     if (!customAddr.trim()) return;

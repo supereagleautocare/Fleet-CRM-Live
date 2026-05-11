@@ -258,8 +258,12 @@ export default function RoutePlanner({ embedded = false }) {
       .then(([data, ct, settings]) => {
         setVisits(data);
         setContactTypes(ct.configured || []);
-        const shopAddr = settings?.find?.(s => s.key === 'shop_address')?.value;
+        const find = key => settings?.find?.(s => s.key === key)?.value;
+        const shopAddr = find('shop_address');
+        const shopLat  = parseFloat(find('shop_lat'));
+        const shopLng  = parseFloat(find('shop_lng'));
         if (shopAddr) setStartAddr(shopAddr);
+        if (shopLat && shopLng) setStartAddrGeo({ lat: shopLat, lng: shopLng });
         const today = new Date().toISOString().split('T')[0];
         setSelected(new Set(data.filter(v=>v.scheduled_date<=today).map(v=>v.id)));
         const t={}, o=[];
@@ -1087,6 +1091,7 @@ useEffect(() => {
                 return c?.lat && c?.lng ? { num: i+1, lat: c.lat, lng: c.lng, name: v.entity_name, companyId: v.entity_id } : null;
               }).filter(Boolean);
             })() : []}
+            initialCenter={startAddrGeo || null}
             myGps={myGps}
             navigate={navigate}
             onMapReady={m => { mapInstanceRef2.current = m; }}
@@ -1221,7 +1226,7 @@ useEffect(() => {
           {/* Reset view button — desktop only */}
           {window.innerWidth > 900 && (
             <button
-              onClick={() => { try { mapInstanceRef2.current?.setView([35.2271, -80.8431], 10); } catch(_){} }}
+              onClick={() => { try { const c = startAddrGeo || {lat:35.2271,lng:-80.8431}; mapInstanceRef2.current?.setView([c.lat,c.lng], 10); } catch(_){} }}
               style={{position:'absolute',bottom:60,left:10,zIndex:1000,background:'rgba(255,255,255,.92)',backdropFilter:'blur(6px)',borderRadius:8,padding:'5px 10px',fontSize:11,fontWeight:700,color:'var(--gray-700)',border:'1px solid var(--gray-200)',cursor:'pointer',boxShadow:'0 1px 6px rgba(0,0,0,.12)'}}>
               ⌖ Reset view
             </button>
@@ -1483,7 +1488,7 @@ function MissingAddressesPopup({ missing, navigate }) {
   );
 }
 // ── Persistent Leaflet Map ────────────────────────────────────────────────────
-function PersistentMap({ routeStops=[], startGeo=null, returnHome=false, nearbyCompanies=[], onAddNearby, navigate, onMapReady, myGps=null, selectedStops=[] }) {
+function PersistentMap({ routeStops=[], startGeo=null, returnHome=false, nearbyCompanies=[], onAddNearby, navigate, onMapReady, myGps=null, selectedStops=[], initialCenter=null }) {
   const mapRef           = useRef(null);
   const mapInstanceRef   = useRef(null);
   const routeLayerRef    = useRef(null);
@@ -1519,7 +1524,8 @@ function PersistentMap({ routeStops=[], startGeo=null, returnHome=false, nearbyC
       if (mapInstanceRef.current) return;
       const el = mapRef.current;
       if (!el || el.offsetWidth === 0 || el.offsetHeight === 0) return; // still hidden
-      const map = L.map(el, { zoomControl:false, tap:false, dragging:true, touchZoom:true, scrollWheelZoom:true }).setView([35.2271, -80.8431], 10);
+      const center = initialCenter ? [initialCenter.lat, initialCenter.lng] : [35.2271, -80.8431];
+      const map = L.map(el, { zoomControl:false, tap:false, dragging:true, touchZoom:true, scrollWheelZoom:true }).setView(center, 10);
       L.control.zoom({ position: 'bottomleft' }).addTo(map);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution:'© OpenStreetMap', maxZoom:19 }).addTo(map);
       mapInstanceRef.current = map;
