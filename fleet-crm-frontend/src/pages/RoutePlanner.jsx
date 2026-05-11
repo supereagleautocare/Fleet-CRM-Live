@@ -261,7 +261,24 @@ export default function RoutePlanner({ embedded = false }) {
     prevStartAddr.current = activeStartAddr;
   }, [activeStartAddr, startMode]);
 
-  // ── 4. Load page data ─────────────────────────────────────────────────────
+  // ── 4. Sync endMode/endAddr into active route so map updates live ─────────
+  useEffect(() => {
+    if (!route) return;
+    const shouldReturn = endMode === 'home' || (endMode === 'custom' && !!endAddr.trim());
+    if (endMode !== 'custom' || !endAddr.trim()) {
+      setRoute(r => ({ ...r, returnHome: shouldReturn, endMode, endGeo: null, retAddr: '' }));
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const geo = await geocodeAddress(endAddr.trim());
+        setRoute(r => ({ ...r, returnHome: true, endMode: 'custom', endGeo: geo || null, retAddr: endAddr.trim() }));
+      } catch (_) {}
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [endMode, endAddr]);
+
+  // ── 5. Load page data ─────────────────────────────────────────────────────
   useEffect(() => {
     api.pipelineForecast().then(fc => setForecast(fc || [])).catch(()=>{});
     Promise.all([api.visitsAll(), api.contactTypes(), api.settings()])
@@ -1103,6 +1120,7 @@ useEffect(() => {
             routeStops={route ? (() => { const r=recalcTimeline(route.stops,routeStopMins,route.startTime,route.startGeo,route.returnHome); return r.stops; })() : []}
             startGeo={route?.startGeo || null}
             returnHome={route?.returnHome || false}
+            endGeo={route?.endGeo || null}
             nearbyCompanies={nearbyMapped.filter(c => {
               if (!c.geoOk) return false;
               if (nearbyFilter !== 'all' && c.pipeline_stage !== nearbyFilter) return false;
@@ -1519,7 +1537,7 @@ function MissingAddressesPopup({ missing, navigate }) {
   );
 }
 // ── Persistent Leaflet Map ────────────────────────────────────────────────────
-function PersistentMap({ routeStops=[], startGeo=null, returnHome=false, nearbyCompanies=[], onAddNearby, navigate, onMapReady, myGps=null, selectedStops=[], initialCenter=null }) {
+function PersistentMap({ routeStops=[], startGeo=null, returnHome=false, endGeo=null, nearbyCompanies=[], onAddNearby, navigate, onMapReady, myGps=null, selectedStops=[], initialCenter=null }) {
   const mapRef           = useRef(null);
   const mapInstanceRef   = useRef(null);
   const routeLayerRef    = useRef(null);
@@ -1608,7 +1626,8 @@ function PersistentMap({ routeStops=[], startGeo=null, returnHome=false, nearbyC
         .addTo(routeLayerRef.current).bindPopup('<b>🏠 Start / Shop</b>');
     }
     if (validStops.length >= 1 && startGeo?.lat) {
-      const waypoints = [[startGeo.lat,startGeo.lng], ...validStops.map(s=>[s.lat,s.lng]), ...(returnHome?[[startGeo.lat,startGeo.lng]]:[])];
+      const returnPt = endGeo || startGeo;
+      const waypoints = [[startGeo.lat,startGeo.lng], ...validStops.map(s=>[s.lat,s.lng]), ...(returnHome?[[returnPt.lat,returnPt.lng]]:[])];
       const coords = waypoints.map(p=>`${p[1]},${p[0]}`).join(';');
       fetch(`https://router.project-osrm.org/route/v1/driving/${coords}?geometries=geojson&overview=full`, {headers:{'User-Agent':'FleetCRM/1.0'}})
         .then(r=>r.json())
@@ -1625,7 +1644,7 @@ function PersistentMap({ routeStops=[], startGeo=null, returnHome=false, nearbyC
     } else if (validStops.length > 0) {
       map.fitBounds(L.latLngBounds(validStops.map(s=>[s.lat,s.lng])).pad(0.2));
     }
-  }, [routeStops.map(s=>s.id+','+s.lat).join('|'), startGeo?.lat, returnHome, mapReady]);
+  }, [routeStops.map(s=>s.id+','+s.lat).join('|'), startGeo?.lat, returnHome, endGeo?.lat, mapReady]);
 
   // Selected stops numbered pins (pre-route selection mode)
   useEffect(() => {
