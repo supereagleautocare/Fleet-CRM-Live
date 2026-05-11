@@ -1211,26 +1211,26 @@ useEffect(() => {
             </div>
           ) : (
             /* Desktop: full filter panel */
-            <div style={{position:'absolute',top:10,right:10,zIndex:1000,minWidth:230}}>
-              <div style={{background:'rgba(255,255,255,.96)',backdropFilter:'blur(6px)',borderRadius:12,padding:'8px 10px',boxShadow:'0 2px 14px rgba(0,0,0,.18)'}}>
-                <div style={{fontSize:9,fontWeight:800,color:'var(--gray-400)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:6,textAlign:'center'}}>
-                  Filter Nearby Companies
+            <div style={{position:'absolute',top:10,right:10,zIndex:1000,width:160}}>
+              <div style={{background:'rgba(255,255,255,.96)',backdropFilter:'blur(6px)',borderRadius:12,padding:'6px 8px',boxShadow:'0 2px 14px rgba(0,0,0,.18)'}}>
+                <div style={{fontSize:9,fontWeight:800,color:'var(--gray-400)',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:5,textAlign:'center'}}>
+                  Nearby Filter
                 </div>
-                <div style={{display:'flex',flexDirection:'column',gap:3}}>
+                <div style={{display:'flex',flexDirection:'column',gap:2}}>
                   {[
-                    {k:'all',   icon:null,  color:null,      label:'All Pipelines'},
+                    {k:'all',   icon:null,  color:null,      label:'All'},
                     {k:'call',  icon:'📞',  color:'#dc2626', label:'Calling'},
                     {k:'mail',  icon:'✉️',  color:'#16a34a', label:'Mail'},
                     {k:'email', icon:'📧',  color:'#2563eb', label:'Email'},
                     {k:'visit', icon:'📍',  color:'#f59e0b', label:'Visit'},
                   ].map(f=>(
                     <button key={f.k} onClick={()=>setNearbyFilter(f.k)}
-                      style={{display:'flex',alignItems:'center',gap:7,padding:'4px 8px',borderRadius:8,fontSize:11,fontWeight:600,cursor:'pointer',border:'none',
+                      style={{display:'flex',alignItems:'center',gap:6,padding:'4px 7px',borderRadius:7,fontSize:11,fontWeight:600,cursor:'pointer',border:'none',
                         background:nearbyFilter===f.k?'var(--navy-800)':'transparent',
                         color:nearbyFilter===f.k?'white':'var(--gray-700)',transition:'all .12s',textAlign:'left',width:'100%'}}>
                       {f.icon
-                        ? <div style={{width:16,height:16,borderRadius:'50%',background:'white',border:`2px solid ${f.color}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,flexShrink:0}}>{f.icon}</div>
-                        : <div style={{width:16,height:16,flexShrink:0}}/>}
+                        ? <div style={{width:15,height:15,borderRadius:'50%',background:'white',border:`2px solid ${f.color}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,flexShrink:0}}>{f.icon}</div>
+                        : <div style={{width:15,height:15,flexShrink:0}}/>}
                       {f.label}
                     </button>
                   ))}
