@@ -623,15 +623,18 @@ Vehicle types this shop services: ${vehicleDesc}
 Fleet size preference (soft preference only — include companies close to this range): ${fleetSizeDesc}
 Fleet signal keywords to watch for: "${customKeywords.join('", "')}"
 
-Run 8–10 searches. Find the 15 BEST leads — not every company you can find, just the top 15 most promising ones ranked by how likely they are to run a local fleet. Once you have 15 strong leads, stop searching and write your summary. Quality over quantity — a well-researched list of 15 beats a shallow list of 50. Choose your sources freely and follow the evidence.
+Run 8–10 searches. Find the 8–10 BEST leads — thoroughly confirmed, not just discovered. Quality over quantity.
 
-For each company found, record:
-• Name, industry, full street address (exact street address if found on Google Maps or their website — "Charlotte, NC" is NOT enough, dig for the actual street)
-• Phone number if visible on Google Maps or website
-• Decision-maker contact: look for operations manager, branch manager, field operations manager, or regional manager at the LOCAL office. Record their name, title, and LinkedIn profile URL.
-• LinkedIn field employees in ${shopCity} — record the exact URL you searched and how many profiles you found
-• Indeed/Glassdoor signals — record the exact job posting URL that mentioned company vehicles
-• Website signals — record the exact page URL (fleet page, team page, careers page) where you found fleet evidence
+For every company you plan to include on your final list, you must run these two searches before finalizing:
+1. LinkedIn: site:linkedin.com/in "[company name]" "${shopCity}" — count field-role profiles. Record the exact URL and how many you found. If zero, record "LinkedIn searched — no ${shopCity} employees found."
+2. Indeed: "[company name] ${shopCity}" technician OR driver — look for "company vehicle provided", "take-home truck", "route technician". Record the exact job posting URL if found. If nothing, record "Indeed searched — no fleet signal postings found."
+
+A company confirmed only by its own website gets a lower confidence score. LinkedIn and Indeed are your independent confirmation.
+
+For each company, also record:
+• Name, industry, full street address (exact street address — "Charlotte, NC" is NOT enough, dig for the actual street from their Contact Us page or Google Maps)
+• Phone number from Google Maps or their website
+• Decision-maker: operations manager, branch manager, field operations manager, or regional manager. Name, exact title, LinkedIn URL.
 • National chain or local independent; if chain, confirm local branch exists
 • Your confidence they run local vehicles here and why
 
@@ -702,9 +705,9 @@ Output ONLY valid JSON. No explanation, no markdown, no text of any kind outside
       ...researchMessages,
       {
         role: 'user',
-        content: `Convert the TOP 15 companies from your research into this JSON array, ranked by fleet probability (highest first).
-Pick the 15 most promising — prioritize confirmed local offices, named field employees, and explicit vehicle mentions over uncertain leads.
-OUTPUT AT MOST 15 OBJECTS. Stop after 15.
+        content: `Convert the TOP 10 companies from your research into this JSON array, ranked by fleet probability (highest first).
+Pick the 10 most promising — prioritize confirmed local offices, named field employees, and explicit vehicle mentions over uncertain leads.
+OUTPUT AT MOST 10 OBJECTS. Stop after 10.
 Use null for any field you could not verify.
 
 IMPORTANT — keep string fields within these limits to avoid truncation:
@@ -753,7 +756,7 @@ Required format per company:
   "lat": number|null (latitude if you found a specific address),
   "lng": number|null (longitude if you found a specific address),
   "sources": [
-    {"label": string (e.g. "LinkedIn — 12 field employees", "Indeed — company vehicle posting", "Google Maps listing", "Company website fleet page"), "url": string}
+    {"label": string (e.g. "LinkedIn — 12 field employees found", "LinkedIn — no Charlotte employees found", "Indeed — company vehicle job posting", "Indeed — no fleet signal postings found", "Google Maps listing", "Company website fleet page"), "url": string}
   ]
 }`,
       },
