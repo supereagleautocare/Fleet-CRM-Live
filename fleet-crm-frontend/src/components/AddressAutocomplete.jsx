@@ -57,7 +57,8 @@ export default function AddressAutocomplete({
   }, []);
 
   function handleChange(e) {
-    const val = normalizeSuite(e.target.value);
+    const raw = e.target.value;
+    const val = raw.trimEnd() !== raw ? raw : normalizeSuite(raw);
     onChange(val);
     setHighlighted(-1);
     clearTimeout(timerRef.current);
