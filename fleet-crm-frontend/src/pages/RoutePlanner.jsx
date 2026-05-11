@@ -86,8 +86,10 @@ export default function RoutePlanner({ embedded = false }) {
   const [selected, setSelected]           = useState(new Set());
   const [stopTimes, setStopTimes]         = useState({});
   const [order, setOrder]                 = useState([]);
-  const [startMode, setStartMode]         = useState('address');
-  const [startAddr, setStartAddr]         = useState('3816 Monroe Rd, Charlotte, NC 28205');
+  const [startMode, setStartMode]         = useState('shop');
+  const [shopAddr, setShopAddr]           = useState('');
+  const [shopAddrGeo, setShopAddrGeo]     = useState(null);
+  const [startAddr, setStartAddr]         = useState('');
   const [startAddrGeo, setStartAddrGeo]   = useState(null);
   const [timeMode, setTimeMode]           = useState('now');
   const [startTime, setStartTime]         = useState(nowTimeStr());
@@ -243,13 +245,14 @@ export default function RoutePlanner({ embedded = false }) {
   }, [route, routeStopMins, arriveAt]);
 
   // ── 3. Clear stale route when start address changes ───────────────────────
+  const activeStartAddr = startMode === 'shop' ? shopAddr : startAddr;
   useEffect(() => {
-    if (prevStartAddr.current !== startAddr && route) {
+    if (prevStartAddr.current !== activeStartAddr && route) {
       setRoute(null);
       showToast('Start address changed — re-plan your route');
     }
-    prevStartAddr.current = startAddr;
-  }, [startAddr]);
+    prevStartAddr.current = activeStartAddr;
+  }, [activeStartAddr, startMode]);
 
   // ── 4. Load page data ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -259,11 +262,11 @@ export default function RoutePlanner({ embedded = false }) {
         setVisits(data);
         setContactTypes(ct.configured || []);
         const find = key => settings?.find?.(s => s.key === key)?.value;
-        const shopAddr = find('shop_address');
-        const shopLat  = parseFloat(find('shop_lat'));
-        const shopLng  = parseFloat(find('shop_lng'));
-        if (shopAddr) setStartAddr(shopAddr);
-        if (shopLat && shopLng) setStartAddrGeo({ lat: shopLat, lng: shopLng });
+        const sAddr = find('shop_address');
+        const sLat  = parseFloat(find('shop_lat'));
+        const sLng  = parseFloat(find('shop_lng'));
+        if (sAddr) setShopAddr(sAddr);
+        if (sLat && sLng) setShopAddrGeo({ lat: sLat, lng: sLng });
         const today = new Date().toISOString().split('T')[0];
         setSelected(new Set(data.filter(v=>v.scheduled_date<=today).map(v=>v.id)));
         const t={}, o=[];
@@ -367,6 +370,7 @@ useEffect(() => {
 
   async function getStartCoords() {
     if (startMode === 'gps' && myGps) return myGps;
+    if (startMode === 'shop') return shopAddrGeo || await geocodeAddress(shopAddr);
     if (startAddrGeo) return startAddrGeo;
     return await geocodeAddress(startAddr);
   }
@@ -650,19 +654,24 @@ useEffect(() => {
           <div style={{display:'flex',alignItems:'center',gap:6}}>
             <span style={{fontSize:11,fontWeight:700,color:'var(--gray-500)',whiteSpace:'nowrap'}}>FROM</span>
             <div style={{display:'flex',gap:3}}>
-              {[{k:'gps',l:'📍 GPS'},{k:'address',l:'🏠 Address'}].map(o=>(
+              {[{k:'gps',l:'📍 GPS'},{k:'shop',l:'🏠 Shop'},{k:'custom',l:'📌 Custom'}].map(o=>(
                 <button key={o.k} onClick={()=>setStartMode(o.k)}
                   className={`btn btn-sm ${startMode===o.k?'btn-navy':'btn-ghost'}`}
                   style={{fontSize:11,padding:'3px 10px'}}>{o.l}</button>
               ))}
             </div>
-            {startMode==='address' && (
+            {startMode==='custom' && (
               <div style={{width:280}}>
                 <AddressAutocomplete value={startAddr}
                   onChange={v=>{ setStartAddr(v); setStartAddrGeo(null); }}
                   onSelect={({display,lat,lng})=>{ setStartAddr(display); if(lat&&lng) setStartAddrGeo({lat,lng}); }}
                   placeholder="Choose starting point"/>
               </div>
+            )}
+            {startMode==='shop' && shopAddr && (
+              <span style={{fontSize:11,color:'var(--gray-600)',padding:'4px 10px',background:'var(--gray-50)',borderRadius:6,border:'1px solid var(--gray-200)',maxWidth:260,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                {shopAddr}
+              </span>
             )}
             {startMode==='gps' && (
               <span style={{fontSize:11,color:'#2563eb',padding:'4px 10px',background:'#eff6ff',borderRadius:6,border:'1px solid #bfdbfe',display:'flex',alignItems:'center',gap:6}}>
@@ -741,17 +750,20 @@ useEffect(() => {
                 <div className="rms-row">
                   <span className="rms-label">FROM</span>
                   <div style={{display:'flex',gap:4}}>
-                    {[{k:'gps',l:'📍 GPS'},{k:'address',l:'🏠 Address'}].map(o=>(
+                    {[{k:'gps',l:'📍 GPS'},{k:'shop',l:'🏠 Shop'},{k:'custom',l:'📌 Custom'}].map(o=>(
                       <button key={o.k} onClick={()=>setStartMode(o.k)}
                         className={`btn btn-sm ${startMode===o.k?'btn-navy':'btn-ghost'}`}
                         style={{fontSize:12,padding:'4px 12px'}}>{o.l}</button>
                     ))}
                   </div>
-                  {startMode==='address' && (
+                  {startMode==='custom' && (
                     <AddressAutocomplete value={startAddr}
                       onChange={v=>{ setStartAddr(v); setStartAddrGeo(null); }}
                       onSelect={({display,lat,lng})=>{ setStartAddr(display); if(lat&&lng) setStartAddrGeo({lat,lng}); }}
                       placeholder="Choose starting point"/>
+                  )}
+                  {startMode==='shop' && shopAddr && (
+                    <span style={{fontSize:12,color:'var(--gray-600)',padding:'4px 10px',background:'var(--gray-50)',borderRadius:6,border:'1px solid var(--gray-200)'}}>{shopAddr}</span>
                   )}
                   {startMode==='gps' && (
                     <span style={{fontSize:12,color:'#2563eb',padding:'4px 10px',background:'#eff6ff',borderRadius:6,border:'1px solid #bfdbfe',display:'flex',alignItems:'center',gap:6}}>
@@ -1091,7 +1103,7 @@ useEffect(() => {
                 return c?.lat && c?.lng ? { num: i+1, lat: c.lat, lng: c.lng, name: v.entity_name, companyId: v.entity_id } : null;
               }).filter(Boolean);
             })() : []}
-            initialCenter={startAddrGeo || null}
+            initialCenter={shopAddrGeo || startAddrGeo || null}
             myGps={myGps}
             navigate={navigate}
             onMapReady={m => { mapInstanceRef2.current = m; }}
@@ -1226,7 +1238,7 @@ useEffect(() => {
           {/* Reset view button — desktop only */}
           {window.innerWidth > 900 && (
             <button
-              onClick={() => { try { const c = startAddrGeo || {lat:35.2271,lng:-80.8431}; mapInstanceRef2.current?.setView([c.lat,c.lng], 10); } catch(_){} }}
+              onClick={() => { try { const c = shopAddrGeo || startAddrGeo || {lat:35.2271,lng:-80.8431}; mapInstanceRef2.current?.setView([c.lat,c.lng], 10); } catch(_){} }}
               style={{position:'absolute',bottom:60,left:10,zIndex:1000,background:'rgba(255,255,255,.92)',backdropFilter:'blur(6px)',borderRadius:8,padding:'5px 10px',fontSize:11,fontWeight:700,color:'var(--gray-700)',border:'1px solid var(--gray-200)',cursor:'pointer',boxShadow:'0 1px 6px rgba(0,0,0,.12)'}}>
               ⌖ Reset view
             </button>
