@@ -1056,7 +1056,7 @@ useEffect(() => {
             returnHome={route?.returnHome || false}
             nearbyCompanies={nearbyMapped.filter(c => {
               if (!c.geoOk) return false;
-              if (nearbyFilter !== 'all' && c.priority !== nearbyFilter) return false;
+              if (nearbyFilter !== 'all' && c.pipeline_stage !== nearbyFilter) return false;
               return true;
             })}
             myGps={myGps}
@@ -1159,19 +1159,16 @@ useEffect(() => {
                 </div>
                 <div style={{display:'flex',flexDirection:'column',gap:3}}>
                   {[
-                    {k:'all',  dot:null,      label:'All companies'},
-                    {k:'hot',  dot:'#ef4444', label:'🔴 Drop In — overdue visit'},
-                    {k:'warm', dot:'#f59e0b', label:'🟡 Due Soon'},
-                    {k:'good', dot:'#22c55e', label:'🟢 Recently visited'},
-                    {k:'none', dot:'#94a3b8', label:'⚪ No contact yet'},
+                    {k:'all',   label:'All Pipelines'},
+                    {k:'call',  label:'📞 Calling'},
+                    {k:'mail',  label:'✉️ Mail'},
+                    {k:'email', label:'📧 Email'},
+                    {k:'visit', label:'📍 Visit'},
                   ].map(f=>(
                     <button key={f.k} onClick={()=>setNearbyFilter(f.k)}
                       style={{display:'flex',alignItems:'center',gap:7,padding:'4px 8px',borderRadius:8,fontSize:11,fontWeight:600,cursor:'pointer',border:'none',
                         background:nearbyFilter===f.k?'var(--navy-800)':'transparent',
                         color:nearbyFilter===f.k?'white':'var(--gray-700)',transition:'all .12s',textAlign:'left',width:'100%'}}>
-                      {f.dot
-                        ? <span style={{width:10,height:10,borderRadius:'50%',background:f.dot,flexShrink:0,border:'1.5px solid rgba(0,0,0,.15)'}}/>
-                        : <span style={{width:10,height:10,flexShrink:0}}/>}
                       {f.label}
                     </button>
                   ))}

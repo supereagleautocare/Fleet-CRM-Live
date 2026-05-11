@@ -179,6 +179,7 @@ router.get('/nearby-data', async (req, res) => {
     const { rows } = await pool.query(`
       SELECT c.id, c.company_id, c.name, c.main_phone, c.industry,
         c.address, c.city, c.state, c.zip, c.lat, c.lng,
+        c.pipeline_stage,
         c.is_multi_location, c.location_name, c.location_group,
         cl.contact_type AS last_contact_type,
         cl.logged_at    AS last_contacted,
@@ -197,7 +198,7 @@ router.get('/nearby-data', async (req, res) => {
         FROM follow_ups WHERE source_type='company'
         ORDER BY entity_id, id DESC
       ) fu ON fu.entity_id=c.id
-      WHERE c.status='active' AND c.company_status != 'dead'
+      WHERE c.status='active' AND c.pipeline_stage != 'dead'
       ORDER BY c.name ASC
     `);
     res.json(rows);
