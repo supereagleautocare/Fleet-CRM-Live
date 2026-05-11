@@ -1138,10 +1138,10 @@ useEffect(() => {
               <div style={{background:'rgba(255,255,255,.96)',backdropFilter:'blur(6px)',borderRadius:10,padding:'6px 8px',boxShadow:'0 2px 12px rgba(0,0,0,.18)'}}>
                 <div style={{fontSize:9,fontWeight:800,color:'var(--gray-400)',textTransform:'uppercase',letterSpacing:'.07em',marginBottom:5,textAlign:'center'}}>Map Legend</div>
                 {[
-                  {dot:'#1e40af',label:'Calling'},
-                  {dot:'#065f46',label:'Mail'},
-                  {dot:'#6b21a8',label:'Email'},
-                  {dot:'#92400e',label:'Visit'},
+                  {dot:'#dc2626',label:'Calling'},
+                  {dot:'#16a34a',label:'Mail'},
+                  {dot:'#2563eb',label:'Email'},
+                  {dot:'#f59e0b',label:'Visit'},
                   {dot:'#64748b',label:'New'},
                 ].map(f=>(
                   <div key={f.label} style={{display:'flex',alignItems:'center',gap:5,padding:'2px 0',fontSize:10,color:'var(--gray-700)'}}>
@@ -1161,10 +1161,10 @@ useEffect(() => {
                 <div style={{display:'flex',flexDirection:'column',gap:3}}>
                   {[
                     {k:'all',   icon:null,  color:null,      label:'All Pipelines'},
-                    {k:'call',  icon:'📞',  color:'#1e40af', label:'Calling'},
-                    {k:'mail',  icon:'✉️',  color:'#065f46', label:'Mail'},
-                    {k:'email', icon:'📧',  color:'#6b21a8', label:'Email'},
-                    {k:'visit', icon:'📍',  color:'#92400e', label:'Visit'},
+                    {k:'call',  icon:'📞',  color:'#dc2626', label:'Calling'},
+                    {k:'mail',  icon:'✉️',  color:'#16a34a', label:'Mail'},
+                    {k:'email', icon:'📧',  color:'#2563eb', label:'Email'},
+                    {k:'visit', icon:'📍',  color:'#f59e0b', label:'Visit'},
                   ].map(f=>(
                     <button key={f.k} onClick={()=>setNearbyFilter(f.k)}
                       style={{display:'flex',alignItems:'center',gap:7,padding:'4px 8px',borderRadius:8,fontSize:11,fontWeight:600,cursor:'pointer',border:'none',
@@ -1566,7 +1566,7 @@ function PersistentMap({ routeStops=[], startGeo=null, returnHome=false, nearbyC
     if (!map || !L || !nearbyLayerRef.current) return;
     nearbyLayerRef.current.clearLayers();
     Object.keys(window).filter(k=>k.startsWith('_addNearby_')).forEach(k=>delete window[k]);
-    const SCOLOR = { call:'#1e40af', mail:'#065f46', email:'#6b21a8', visit:'#92400e', new:'#64748b' };
+    const SCOLOR = { call:'#dc2626', mail:'#16a34a', email:'#2563eb', visit:'#f59e0b', new:'#64748b' };
     const SLBL   = { call:'📞 Calling', mail:'✉️ Mail', email:'📧 Email', visit:'📍 Visit', new:'New' };
     const routeIds = new Set(routeStops.map(s => s.companyId ?? s.id));
     nearbyCompanies.filter(c => c.geoOk && c.lat && c.lng).forEach(c => {
