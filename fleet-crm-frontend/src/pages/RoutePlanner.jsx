@@ -32,6 +32,13 @@ function optimize(start, stops, end) {
 }
 
 function driveMins(miles) { return Math.max(1, Math.round((miles/25)*60)); }
+function recomputeDrives(stops, startGeo) {
+  return stops.map((stop, i) => {
+    const prev = i === 0 ? startGeo : stops[i - 1];
+    const miles = dist(prev, stop);
+    return { ...stop, driveMiles: miles, driveMinutes: driveMins(miles) };
+  });
+}
 function fmt(m) { m=Math.round(m); if(m<60) return `${m}m`; return `${Math.floor(m/60)}h ${m%60>0?m%60+'m':''}`.trim(); }
 function fmtTime(date) { return date.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true}); }
 function addMins(date, mins) { return new Date(date.getTime()+mins*60000); }
@@ -1016,9 +1023,9 @@ useEffect(() => {
                           <div style={{display:'flex',gap:8,alignItems:'flex-start'}}>
                             <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:2,flexShrink:0}}>
                               <div style={{width:26,height:26,borderRadius:'50%',background:'var(--gold-500)',color:'var(--navy-950)',display:'flex',alignItems:'center',justifyContent:'center',fontWeight:800,fontSize:11}}>{i+1}</div>
-                              <button disabled={i===0} onClick={()=>setRoute(r=>{ const s=[...r.stops]; [s[i-1],s[i]]=[s[i],s[i-1]]; return {...r,stops:s}; })}
+                              <button disabled={i===0} onClick={()=>setRoute(r=>{ const s=[...r.stops]; [s[i-1],s[i]]=[s[i],s[i-1]]; return {...r,stops:recomputeDrives(s,r.startGeo)}; })}
                                 style={{width:20,height:16,border:'1px solid var(--gray-200)',borderRadius:3,background:'white',cursor:'pointer',fontSize:9,opacity:i===0?.25:1,padding:0}}>↑</button>
-                              <button disabled={i===liveStops.length-1} onClick={()=>setRoute(r=>{ const s=[...r.stops]; [s[i],s[i+1]]=[s[i+1],s[i]]; return {...r,stops:s}; })}
+                              <button disabled={i===liveStops.length-1} onClick={()=>setRoute(r=>{ const s=[...r.stops]; [s[i],s[i+1]]=[s[i+1],s[i]]; return {...r,stops:recomputeDrives(s,r.startGeo)}; })}
                                 style={{width:20,height:16,border:'1px solid var(--gray-200)',borderRadius:3,background:'white',cursor:'pointer',fontSize:9,opacity:i===liveStops.length-1?.25:1,padding:0}}>↓</button>
                             </div>
                             <div style={{flex:1,minWidth:0}}>
@@ -1039,12 +1046,18 @@ useEffect(() => {
                                 <span style={{fontWeight:700,fontSize:11,minWidth:26,textAlign:'center'}}>{stopMins}m</span>
                                 <button onClick={()=>setRouteStopMins(p=>({...p,[stop.id]:Math.min(240,stopMins+5)}))} style={{width:18,height:18,border:'1px solid var(--gray-200)',borderRadius:3,background:'white',cursor:'pointer',fontSize:12,padding:0,display:'flex',alignItems:'center',justifyContent:'center'}}>+</button>
                                 <span style={{width:1,height:14,background:'var(--gray-200)',margin:'0 2px'}}/>
-                                <span style={{fontSize:10,color:'var(--gray-500)'}}>arrive at:</span>
-                                <select value={target||''} onChange={e=>setArriveAt(p=>({...p,[stop.id]:e.target.value||undefined}))}
-                                  style={{fontSize:10,padding:'1px 4px',border:`1.5px solid ${target?bufferOk?'#22c55e':'#ef4444':'var(--gray-200)'}`,borderRadius:4,color:target?bufferOk?'#15803d':'#dc2626':'var(--gray-500)',background:target?bufferOk?'#f0fdf4':'#fef2f2':'white',cursor:'pointer'}}>
-                                  <option value="">— none —</option>
-                                  {ARRIVE_OPTIONS.map(o=><option key={o.val} value={o.val}>{o.label}</option>)}
-                                </select>
+                                <div style={{position:'relative',display:'inline-flex',alignItems:'center',flexShrink:0}}>
+                                  <div style={{display:'inline-flex',alignItems:'center',gap:3,padding:'3px 8px 3px 6px',borderRadius:12,border:`1.5px solid ${target?bufferOk?'#22c55e':'#ef4444':'var(--gray-200)'}`,background:target?bufferOk?'#f0fdf4':'#fef2f2':'var(--gray-50)',color:target?bufferOk?'#15803d':'#dc2626':'var(--gray-400)',fontSize:10,fontWeight:target?700:400,whiteSpace:'nowrap',pointerEvents:'none',userSelect:'none'}}>
+                                    <span style={{fontSize:11}}>⏰</span>
+                                    <span>{target?(ARRIVE_OPTIONS.find(o=>o.val===target)?.label||target):'Set time'}</span>
+                                    <span style={{fontSize:8,marginLeft:1,opacity:.6}}>▾</span>
+                                  </div>
+                                  <select value={target||''} onChange={e=>setArriveAt(p=>({...p,[stop.id]:e.target.value||undefined}))}
+                                    style={{position:'absolute',inset:0,opacity:0,cursor:'pointer',width:'100%',height:'100%',fontSize:10}}>
+                                    <option value="">⏰ Set arrival time</option>
+                                    {ARRIVE_OPTIONS.map(o=><option key={o.val} value={o.val}>{o.label}</option>)}
+                                  </select>
+                                </div>
                               </div>
                               <div style={{display:'flex',gap:5,marginTop:8}}>
                                 <button className="btn btn-primary btn-sm" style={{flex:1,fontSize:11,padding:'6px 0',fontWeight:700}}
@@ -1052,7 +1065,7 @@ useEffect(() => {
                                 <button className="btn btn-ghost btn-sm" style={{flex:1,fontSize:11,padding:'6px 0'}}
                                   onClick={async()=>{ setLoggingStop(stop.id); try { const qs=await api.visitQueueStatus(stop.companyId||stop.id); setQueueStatus(qs); } catch(_){ setQueueStatus(null); } }}>✅ Log</button>
                                 <button style={{fontSize:10,padding:'6px 8px',background:'white',border:'1px solid #fca5a5',color:'#dc2626',borderRadius:5,cursor:'pointer'}}
-                                  onClick={()=>{ const ns=route.stops.filter(s=>s.id!==stop.id); const nm={...routeStopMins}; delete nm[stop.id]; setRouteStopMins(nm); if(ns.length===0){setRoute(null);return;} setRoute(r=>({...r,stops:ns})); }}>✕</button>
+                                  onClick={()=>{ const ns=route.stops.filter(s=>s.id!==stop.id); const nm={...routeStopMins}; delete nm[stop.id]; setRouteStopMins(nm); if(ns.length===0){setRoute(null);return;} setRoute(r=>({...r,stops:recomputeDrives(ns,r.startGeo)})); }}>✕</button>
                               </div>
                             </div>
                           </div>
@@ -1118,14 +1131,14 @@ useEffect(() => {
                     if (result) { lat = result.lat; lng = result.lng; }
                   }
                   const newStop = { id:tempId, name:comp.name, address:comp.address||'', city:comp.city||'', lat, lng, geoOk:!!(lat&&lng), driveMiles:0, driveMinutes:0, stopMins:5, visitId:null, companyId:comp.id, stopNum:route.stops.length+1 };
-                  setRouteStopMins(p=>({...p,[tempId]:20}));
+                  setRouteStopMins(p=>({...p,[tempId]:5}));
                   setRoute(r => {
                     const allStops = [...r.stops, newStop];
                     if (autoOpt) {
                       const reordered = optimize(r.startGeo, allStops, r.endGeo||null);
-                      return { ...r, stops: reordered.map((s,i) => ({...s, stopNum:i+1})) };
+                      return { ...r, stops: recomputeDrives(reordered.map((s,i) => ({...s, stopNum:i+1})), r.startGeo) };
                     }
-                    return { ...r, stops: allStops };
+                    return { ...r, stops: recomputeDrives(allStops, r.startGeo) };
                   });
                   showToast('✅ ' + comp.name + ' added');
                 } else {
