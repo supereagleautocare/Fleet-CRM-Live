@@ -1160,16 +1160,19 @@ useEffect(() => {
                 </div>
                 <div style={{display:'flex',flexDirection:'column',gap:3}}>
                   {[
-                    {k:'all',   label:'All Pipelines'},
-                    {k:'call',  label:'📞 Calling'},
-                    {k:'mail',  label:'✉️ Mail'},
-                    {k:'email', label:'📧 Email'},
-                    {k:'visit', label:'📍 Visit'},
+                    {k:'all',   icon:null,  color:null,      label:'All Pipelines'},
+                    {k:'call',  icon:'📞',  color:'#1e40af', label:'Calling'},
+                    {k:'mail',  icon:'✉️',  color:'#065f46', label:'Mail'},
+                    {k:'email', icon:'📧',  color:'#6b21a8', label:'Email'},
+                    {k:'visit', icon:'📍',  color:'#92400e', label:'Visit'},
                   ].map(f=>(
                     <button key={f.k} onClick={()=>setNearbyFilter(f.k)}
                       style={{display:'flex',alignItems:'center',gap:7,padding:'4px 8px',borderRadius:8,fontSize:11,fontWeight:600,cursor:'pointer',border:'none',
                         background:nearbyFilter===f.k?'var(--navy-800)':'transparent',
                         color:nearbyFilter===f.k?'white':'var(--gray-700)',transition:'all .12s',textAlign:'left',width:'100%'}}>
+                      {f.icon
+                        ? <div style={{width:16,height:16,borderRadius:'50%',background:'white',border:`2px solid ${f.color}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,flexShrink:0}}>{f.icon}</div>
+                        : <div style={{width:16,height:16,flexShrink:0}}/>}
                       {f.label}
                     </button>
                   ))}
