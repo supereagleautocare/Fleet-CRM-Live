@@ -416,21 +416,10 @@ function ApiLogTab() {
 
 function FleetFinderSettings({ showToast }) {
   const [ffSettings, setFfSettings] = useState(null);
-  const [dismissed,  setDismissed]  = useState([]);
   const [saving,     setSaving]     = useState(false);
-  const [testRunning, setTestRunning] = useState(false);
-  const [testLog,     setTestLog]     = useState(null);
-  const [testOutput,  setTestOutput]  = useState(null);
 
   useEffect(() => {
-    async function load() {
-      try {
-        const [s, d] = await Promise.all([api.ffSettings(), api.ffDismissed()]);
-        setFfSettings(s);
-        setDismissed(d);
-      } catch (e) { showToast(e.message, 'error'); }
-    }
-    load();
+    api.ffSettings().then(setFfSettings).catch(e => showToast(e.message, 'error'));
   }, []);
 
   async function save(updates) {
@@ -441,29 +430,6 @@ function FleetFinderSettings({ showToast }) {
       showToast('Fleet Finder settings saved');
     } catch (e) { showToast(e.message, 'error'); }
     finally { setSaving(false); }
-  }
-
-  async function runTest() {
-    setTestRunning(true);
-    setTestLog(null);
-    setTestOutput(null);
-    try {
-      const r = await api.ffTestSearch();
-      setTestLog(r.log || []);
-      setTestOutput(r.final_output || '');
-    } catch (e) {
-      setTestLog([{ type: 'error', message: e.message }]);
-    } finally {
-      setTestRunning(false);
-    }
-  }
-
-  async function undismiss(id) {
-    try {
-      await api.ffUndismiss(id);
-      setDismissed(prev => prev.filter(d => d.id !== id));
-      showToast('Company restored to search results');
-    } catch (e) { showToast(e.message, 'error'); }
   }
 
   if (!ffSettings) return <div className="loading-wrap"><div className="spinner"/></div>;
@@ -539,122 +505,6 @@ function FleetFinderSettings({ showToast }) {
         </div>
       </div>
 
-      {/* Dismissed Companies */}
-      <div className="table-card" style={{ padding: '18px 22px' }}>
-        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>Dismissed Companies</div>
-        <div style={{ fontSize: 12, color: 'var(--gray-400)', marginBottom: 14 }}>
-          Companies you marked "Never Show Again." Un-dismiss to let them appear in future searches.
-        </div>
-        {dismissed.length === 0 ? (
-          <div style={{ fontSize: 12, color: 'var(--gray-400)' }}>No dismissed companies.</div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {dismissed.map(d => (
-              <div key={d.id} style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                padding: '8px 12px', background: 'var(--gray-50)', border: '1px solid var(--gray-200)', borderRadius: 7,
-              }}>
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: 13 }}>{d.name}</div>
-                  <div style={{ fontSize: 11, color: 'var(--gray-400)' }}>
-                    {[d.city, d.state].filter(Boolean).join(', ')}
-                    {d.dismissed_at && <span style={{ marginLeft: 8 }}>Dismissed {new Date(d.dismissed_at).toLocaleDateString()}</span>}
-                  </div>
-                </div>
-                <button onClick={() => undismiss(d.id)} style={{
-                  padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600,
-                  border: '1px solid var(--gray-200)', background: 'white', cursor: 'pointer', color: 'var(--blue-500)',
-                }}>Restore</button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Claude Web Search Test */}
-      <div className="table-card" style={{ padding: '18px 22px' }}>
-        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>Claude Web Search Test</div>
-        <div style={{ fontSize: 12, color: 'var(--gray-400)', marginBottom: 14 }}>
-          Runs a test search for <b>Prince Telecom in Charlotte, NC</b> — a real telecom subcontractor with ~100 trucks but no consumer web presence.
-          Use this to verify your Anthropic key is working and to see how Claude searches and what it costs.
-        </div>
-
-        <button
-          onClick={runTest}
-          disabled={testRunning || !ffSettings.ff_anthropic_key}
-          className="btn btn-primary"
-          style={{ marginBottom: 16 }}
-        >
-          {testRunning ? '⏳ Running test search…' : 'Run Test Search'}
-        </button>
-        {!ffSettings.ff_anthropic_key && (
-          <div style={{ fontSize: 11, color: '#dc2626', marginBottom: 12 }}>
-            Add your Anthropic API key above before running.
-          </div>
-        )}
-
-        {testLog && (
-          <div style={{
-            background: '#0f172a', borderRadius: 8, padding: '14px 16px',
-            fontFamily: 'var(--font-mono)', fontSize: 12, color: '#e2e8f0',
-            maxHeight: 420, overflowY: 'auto',
-          }}>
-            {testLog.map((entry, i) => {
-              if (entry.type === 'start') return (
-                <div key={i} style={{ color: '#94a3b8', marginBottom: 6 }}>
-                  {'>'} {entry.message}
-                </div>
-              );
-              if (entry.type === 'info') return (
-                <div key={i} style={{ color: '#64748b', marginBottom: 8 }}>
-                  {'>'} {entry.message}
-                </div>
-              );
-              if (entry.type === 'turn') return (
-                <div key={i} style={{ marginBottom: 10, borderLeft: '2px solid #334155', paddingLeft: 10 }}>
-                  <div style={{ color: '#f59e0b', fontWeight: 700 }}>
-                    Turn {entry.turn} — {entry.stop_reason}
-                    <span style={{ color: '#64748b', fontWeight: 400, marginLeft: 10 }}>
-                      {entry.input_tokens?.toLocaleString()} in / {entry.output_tokens?.toLocaleString()} out tokens
-                    </span>
-                  </div>
-                  {entry.searches?.map((q, j) => (
-                    <div key={j} style={{ color: '#38bdf8', marginTop: 3 }}>Searching: "{q}"</div>
-                  ))}
-                </div>
-              );
-              if (entry.type === 'result') return (
-                <div key={i} style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #1e293b', color: '#86efac' }}>
-                  <div>Total tokens: {entry.total_input_tokens?.toLocaleString()} in / {entry.total_output_tokens?.toLocaleString()} out</div>
-                  <div>Turns used: {entry.turns_used}</div>
-                  <div style={{ fontWeight: 700, fontSize: 13 }}>Estimated cost: ${entry.cost_usd}</div>
-                </div>
-              );
-              if (entry.type === 'error') return (
-                <div key={i} style={{ color: '#f87171', marginTop: 6 }}>
-                  ERROR: {entry.message}
-                </div>
-              );
-              return null;
-            })}
-          </div>
-        )}
-
-        {testOutput && (
-          <div style={{ marginTop: 14 }}>
-            <div style={{ fontWeight: 600, fontSize: 12, color: 'var(--gray-500)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.06em' }}>
-              Claude's Findings
-            </div>
-            <div style={{
-              background: 'var(--gray-50)', border: '1px solid var(--gray-200)', borderRadius: 8,
-              padding: '12px 14px', fontSize: 13, color: 'var(--gray-700)', lineHeight: 1.6,
-              maxHeight: 360, overflowY: 'auto', whiteSpace: 'pre-wrap',
-            }}>
-              {testOutput}
-            </div>
-          </div>
-        )}
-      </div>
     </div>
   );
 }
