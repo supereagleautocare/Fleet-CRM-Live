@@ -330,8 +330,168 @@ function ScoreTooltip({ factors, colors }) {
   );
 }
 
+// ── Compare modal (existing CRM record vs Fleet Finder result) ─────────────────
+function CompareModal({ company, onClose, onAddLocation, onSkip }) {
+  const [crmRecord,  setCrmRecord]  = useState(null);
+  const [crmHistory, setCrmHistory] = useState([]);
+  const [loading,    setLoading]    = useState(true);
+  const [error,      setError]      = useState(null);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const [rec, hist] = await Promise.all([
+          api.company(company.crm_match_id),
+          api.companyHistory(company.crm_match_id),
+        ]);
+        setCrmRecord(rec);
+        setCrmHistory(hist || []);
+      } catch (e) {
+        setError(e.message || 'Failed to load CRM record');
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, [company.crm_match_id]);
+
+  const STAGE_LABELS = { new:'New', call:'Calling', visit:'Visit', mail:'Mail', email:'Email', dead:'Dead/Lost', won:'Won' };
+
+  function CRMField({ label, value }) {
+    if (!value) return null;
+    return (
+      <div style={{ marginBottom: 8 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 2 }}>{label}</div>
+        <div style={{ fontSize: 13, color: '#111827' }}>{value}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.55)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:16, overflowY:'auto' }}>
+      <div style={{ background:'white', borderRadius:18, width:'100%', maxWidth:860, maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 24px 64px rgba(0,0,0,.25)' }}>
+
+        {/* Header */}
+        <div style={{ padding:'20px 24px 16px', borderBottom:'1px solid #e5e7eb', flexShrink:0 }}>
+          <div style={{ fontWeight:800, fontSize:17, color:'#111827', marginBottom:4 }}>Compare Locations — {company.name}</div>
+          <div style={{ fontSize:13, color:'#6b7280' }}>Is the Fleet Finder result a new office, or the same one you already have?</div>
+        </div>
+
+        {/* Body */}
+        <div style={{ display:'flex', flex:1, overflow:'hidden', minHeight:0 }}>
+
+          {/* Left — existing CRM record */}
+          <div style={{ flex:1, borderRight:'1px solid #e5e7eb', display:'flex', flexDirection:'column', overflow:'hidden' }}>
+            <div style={{ padding:'12px 20px', background:'#f9fafb', borderBottom:'1px solid #e5e7eb', flexShrink:0 }}>
+              <div style={{ fontSize:12, fontWeight:700, color:'#374151' }}>📁 Existing CRM Record</div>
+            </div>
+            <div style={{ flex:1, overflowY:'auto', padding:'16px 20px' }}>
+              {loading && <div style={{ color:'#9ca3af', fontSize:13 }}>Loading…</div>}
+              {error   && <div style={{ color:'#ef4444', fontSize:13 }}>{error}</div>}
+              {crmRecord && (
+                <>
+                  <CRMField label="Name"           value={crmRecord.name} />
+                  <CRMField label="Address"        value={[crmRecord.address, crmRecord.city, crmRecord.state, crmRecord.zip].filter(Boolean).join(', ')} />
+                  <CRMField label="Phone"          value={crmRecord.main_phone} />
+                  <CRMField label="Website"        value={crmRecord.website} />
+                  <CRMField label="Pipeline Stage" value={STAGE_LABELS[crmRecord.pipeline_stage] || crmRecord.pipeline_stage} />
+                  <CRMField label="Industry"       value={crmRecord.industry} />
+                  {crmRecord.notes && (
+                    <div style={{ marginBottom: 12 }}>
+                      <div style={{ fontSize:10, fontWeight:700, color:'#9ca3af', textTransform:'uppercase', letterSpacing:'.04em', marginBottom:4 }}>Notes</div>
+                      <div style={{ fontSize:12, color:'#374151', background:'#f9fafb', borderRadius:8, padding:'8px 12px', border:'1px solid #e5e7eb', whiteSpace:'pre-wrap' }}>{crmRecord.notes}</div>
+                    </div>
+                  )}
+
+                  {/* Call history */}
+                  {crmHistory.length > 0 && (
+                    <div>
+                      <div style={{ fontSize:10, fontWeight:700, color:'#9ca3af', textTransform:'uppercase', letterSpacing:'.04em', marginBottom:8 }}>Call & Activity History ({crmHistory.length})</div>
+                      {crmHistory.map((h, i) => (
+                        <div key={i} style={{ marginBottom:8, padding:'8px 10px', background:'#f9fafb', borderRadius:8, border:'1px solid #e5e7eb' }}>
+                          <div style={{ display:'flex', justifyContent:'space-between', marginBottom:3 }}>
+                            <span style={{ fontSize:11, fontWeight:700, color:'#374151' }}>{h.call_type || h.type || 'Activity'}</span>
+                            <span style={{ fontSize:10, color:'#9ca3af' }}>{h.logged_at ? new Date(h.logged_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : ''}</span>
+                          </div>
+                          {h.outcome && <div style={{ fontSize:11, color:'#6b7280', marginBottom:2 }}>Outcome: <b>{h.outcome}</b></div>}
+                          {h.notes   && <div style={{ fontSize:11, color:'#374151', whiteSpace:'pre-wrap' }}>{h.notes}</div>}
+                          {h.logged_by_name && <div style={{ fontSize:10, color:'#9ca3af', marginTop:3 }}>by {h.logged_by_name}</div>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {crmHistory.length === 0 && !loading && (
+                    <div style={{ fontSize:12, color:'#9ca3af', fontStyle:'italic' }}>No call history yet</div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Right — Fleet Finder result */}
+          <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
+            <div style={{ padding:'12px 20px', background:'#f0f9ff', borderBottom:'1px solid #bae6fd', flexShrink:0 }}>
+              <div style={{ fontSize:12, fontWeight:700, color:'#0369a1' }}>🔍 Fleet Finder Result</div>
+            </div>
+            <div style={{ flex:1, overflowY:'auto', padding:'16px 20px' }}>
+              <CRMField label="Name"    value={company.name} />
+              <CRMField label="Address" value={[company.address, company.city, company.state, company.zip].filter(Boolean).join(', ')} />
+              <CRMField label="Phone"   value={company.main_phone} />
+              <CRMField label="Website" value={company.website} />
+              <CRMField label="Fleet Probability" value={`${company.fleet_probability || 0}%`} />
+              <CRMField label="Estimated Fleet"   value={company.estimated_fleet_size} />
+              <CRMField label="Industry"          value={company.industry} />
+              {company.local_office_address && <CRMField label="Local Office Address" value={company.local_office_address} />}
+              {company.local_presence_evidence && (
+                <div style={{ marginBottom:8 }}>
+                  <div style={{ fontSize:10, fontWeight:700, color:'#9ca3af', textTransform:'uppercase', letterSpacing:'.04em', marginBottom:2 }}>Local Presence Evidence</div>
+                  <div style={{ fontSize:12, color:'#374151', fontStyle:'italic' }}>{company.local_presence_evidence}</div>
+                </div>
+              )}
+              {company.contact_name && (
+                <div style={{ marginBottom:8 }}>
+                  <div style={{ fontSize:10, fontWeight:700, color:'#9ca3af', textTransform:'uppercase', letterSpacing:'.04em', marginBottom:2 }}>Contact Found</div>
+                  <div style={{ fontSize:13, color:'#111827' }}>{company.contact_name}{company.contact_title && <span style={{ color:'#6b7280' }}> · {company.contact_title}</span>}</div>
+                  {company.contact_linkedin && <a href={safeUrl(company.contact_linkedin)} target="_blank" rel="noopener noreferrer" style={{ fontSize:11, color:'#0a66c2', fontWeight:600 }}>LinkedIn ↗</a>}
+                </div>
+              )}
+              {company.fleet_note && (
+                <div style={{ marginBottom:8 }}>
+                  <div style={{ fontSize:10, fontWeight:700, color:'#9ca3af', textTransform:'uppercase', letterSpacing:'.04em', marginBottom:4 }}>AI Research Note</div>
+                  <div style={{ fontSize:12, color:'#374151', background:'#f0fdf4', borderRadius:8, padding:'8px 12px', border:'1px solid #bbf7d0', fontStyle:'italic' }}>{company.fleet_note}</div>
+                </div>
+              )}
+              {company.sources?.length > 0 && (
+                <div>
+                  <div style={{ fontSize:10, fontWeight:700, color:'#9ca3af', textTransform:'uppercase', letterSpacing:'.04em', marginBottom:6 }}>Sources</div>
+                  {company.sources.filter(s => s.url).map((s, i) => (
+                    <a key={i} href={safeUrl(s.url)} target="_blank" rel="noopener noreferrer" style={{ display:'block', fontSize:11, color:'#2563eb', marginBottom:4 }}>↗ {s.label}</a>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Footer buttons */}
+        <div style={{ padding:'16px 24px', borderTop:'1px solid #e5e7eb', display:'flex', gap:10, flexShrink:0 }}>
+          <button onClick={onAddLocation} style={{ flex:2, padding:'10px', borderRadius:8, border:'none', background:'#0369a1', color:'white', fontWeight:700, fontSize:13, cursor:'pointer' }}>
+            + Add as New Location
+          </button>
+          <button onClick={onSkip} style={{ flex:1, padding:'10px', borderRadius:8, border:'1px solid #e5e7eb', background:'white', color:'#6b7280', fontWeight:600, fontSize:13, cursor:'pointer' }}>
+            Same office — Skip
+          </button>
+          <button onClick={onClose} style={{ flex:1, padding:'10px', borderRadius:8, border:'1px solid #e5e7eb', background:'white', color:'#9ca3af', fontSize:13, cursor:'pointer' }}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Result card ────────────────────────────────────────────────────────────────
-function ResultCard({ company, onImport, onDismiss, importing }) {
+function ResultCard({ company, onImport, onDismiss, onCompare, importing }) {
   const [expanded, setExpanded] = useState(false);
   const prob         = company.fleet_probability || 0;
   const colors       = PROB_COLOR(prob);
@@ -365,6 +525,13 @@ function ResultCard({ company, onImport, onDismiss, importing }) {
           <span style={{ fontSize: 11, color: '#0369a1', fontWeight: 700 }}>📍 New location</span>
           {company.crm_match_name && (
             <span style={{ fontSize: 11, color: '#0284c7' }}>you already have <b>{company.crm_match_name}</b>{company.crm_match_city ? ` (${company.crm_match_city})` : ''} — this is a different office</span>
+          )}
+          {company.crm_match_id && (
+            <button
+              onClick={e => { e.stopPropagation(); onCompare(); }}
+              style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 700, color: '#0369a1', background: 'white', border: '1px solid #bae6fd', borderRadius: 6, padding: '2px 10px', cursor: 'pointer' }}>
+              Compare ↔
+            </button>
           )}
         </div>
       )}
@@ -500,7 +667,14 @@ function ResultCard({ company, onImport, onDismiss, importing }) {
                 )}
               </InfoRow>
             )}
-            {company.local_office_address && <InfoRow label="Local Office">{company.local_office_address}</InfoRow>}
+            {company.local_office_address
+              ? <InfoRow label="Local Office">{company.local_office_address}</InfoRow>
+              : company.local_presence_evidence && (
+                <InfoRow label="Local Presence">
+                  <span style={{ color: '#92400e', fontStyle: 'italic' }}>{company.local_presence_evidence}</span>
+                </InfoRow>
+              )
+            }
           </div>
           {company.sources?.length > 0 && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
@@ -596,6 +770,7 @@ export default function FleetFinder() {
   const [dupModal,       setDupModal]       = useState(null);
   const [chainModal,     setChainModal]     = useState(null);  // { company, chainInfo, index }
   const [newChainModal,  setNewChainModal]  = useState(null);  // { company, index }
+  const [compareModal,   setCompareModal]   = useState(null);  // { company, index }
 
   const [shopLat, setShopLat] = useState(35.1965);
   const [shopLng, setShopLng] = useState(-80.7812);
@@ -833,6 +1008,7 @@ export default function FleetFinder() {
         industry_category:           company.industry_category          || null,
         local_office_found:          company.local_office_found         || false,
         local_office_address:        company.local_office_address       || null,
+        local_presence_evidence:     company.local_presence_evidence    || null,
         local_field_employees_found: company.local_field_employees_found || null,
         local_field_employee_titles: company.local_field_employee_titles || [],
         is_local_independent:        company.is_local_independent       ?? null,
@@ -1155,6 +1331,7 @@ export default function FleetFinder() {
                   <ResultCard key={`${co.name}-${i}`} company={co}
                     onImport={() => handleImport(co, i)}
                     onDismiss={() => handleDismiss(co, i)}
+                    onCompare={() => setCompareModal({ company: co, index: i })}
                     importing={!!importing[i]} />
                 ))}
 
@@ -1253,6 +1430,14 @@ export default function FleetFinder() {
           company={newChainModal.company}
           onDecision={d => handleNewChainDecision(d, newChainModal.company, newChainModal.index)}
           onCancel={() => { setNewChainModal(null); setImporting(p => ({ ...p, [newChainModal.index]: false })); }}
+        />
+      )}
+      {compareModal && (
+        <CompareModal
+          company={compareModal.company}
+          onClose={() => setCompareModal(null)}
+          onAddLocation={() => { setCompareModal(null); handleImport(compareModal.company, compareModal.index); }}
+          onSkip={() => { setCompareModal(null); handleDismiss(compareModal.company, compareModal.index); }}
         />
       )}
     </div>

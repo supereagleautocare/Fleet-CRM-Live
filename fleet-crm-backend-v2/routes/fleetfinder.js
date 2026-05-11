@@ -573,6 +573,7 @@ GOOGLE MAPS / GOOGLE BUSINESS — usually a great first move
 COMPANY WEBSITE — follow up once you have a name
   Worth checking if a company looks promising. Fleet pages, service area maps, and team/technician pages often reveal headcount. A company listing 12 named technicians has at least 12 vehicles. "About Us" pages sometimes mention how many trucks they run.
   Try: "[company name] fleet" or "[company name] our team" or go directly to their site.
+  ALWAYS check their Contact Us page — it almost always has the real street address and phone number. Record both exactly as shown.
 
 INDEED / GLASSDOOR — great for confirming fleet operation
   Job postings that say "company vehicle provided", "take-home truck", "stocked service van", or "route technician" are strong fleet signals. Employee reviews sometimes mention "company truck" or "take-home vehicle" too.
@@ -721,17 +722,18 @@ Required format per company:
   "name": string,
   "industry": string,
   "industry_category": "consumer_facing"|"contract_driven"|"both",
-  "address": string|null,
-  "city": string|null,
-  "state": string|null,
-  "zip": string|null,
-  "main_phone": string|null,
+  "address": string|null (HQ/main office street address from their Contact Us page — not a service area, the real mailing address),
+  "city": string|null (HQ city),
+  "state": string|null (HQ state),
+  "zip": string|null (HQ zip),
+  "main_phone": string|null (phone number from their Contact Us page or Google Maps — always record this if visible),
   "website": string|null,
   "contact_name": string|null (decision-maker's full name — ops manager, branch manager, field manager, regional manager),
   "contact_title": string|null (their exact job title),
   "contact_linkedin": string|null (their LinkedIn profile URL),
-  "local_office_found": boolean,
-  "local_office_address": string|null (full street address if found),
+  "local_office_found": boolean (TRUE only if a confirmed physical branch/office exists in the search area — NOT just because they list it as a service area on their website. Confirmed = Google Maps listing for a local address, or a specific local address on their locations page, or LinkedIn employees explicitly based at a local office),
+  "local_office_address": string|null (street address of the LOCAL branch/office, only if different from HQ and actually confirmed — do not put HQ address here),
+  "local_presence_evidence": string|null (explain exactly WHY you think they operate locally — e.g. "3 LinkedIn profiles show Charlotte-based technicians", "Indeed job posting for Charlotte installer", "Website lists Charlotte service area but no physical office found". Be specific — this is shown to the user),
   "local_field_employees_found": number|null,
   "local_field_employee_titles": string[] (job titles only, e.g. ["Field Technician", "Cable Tech"]),
   "local_field_employee_source": string|null (where you found them, e.g. "LinkedIn — 12 profiles found"),
@@ -840,6 +842,7 @@ Required format per company:
           co.new_chain_location = true;
           co.crm_match_name    = crmMatch.name;
           co.crm_match_city    = crmMatch.city;
+          co.crm_match_id      = crmMatch.id;
         }
       } else {
         co.already_in_crm = false;
