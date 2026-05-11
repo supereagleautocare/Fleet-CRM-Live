@@ -866,11 +866,14 @@ useEffect(() => {
                         <div style={{marginTop:8}}><button className="btn btn-ghost btn-sm" onClick={()=>setStopFilter('all')}>Show all</button></div>
                       </div>
                     );
+                    const stopNumMap = {};
+                    order.filter(id => selected.has(id)).forEach((id, i) => { stopNumMap[id] = i + 1; });
                     return filteredIds.map((id, idx) => {
                       const v = visits.find(v=>v.id===id); if(!v) return null;
                       const isOver = v.scheduled_date < todayStr;
                       const isToday = v.scheduled_date === todayStr;
                       const isSel = selected.has(v.id);
+                      const stopNum = stopNumMap[id];
                       return (
                         <div key={v.id} className="stop-card" onClick={()=>toggleStop(v.id)}
                           style={{display:'flex',gap:10,padding:'10px 14px',borderBottom:'1px solid var(--gray-100)',cursor:'pointer',
@@ -881,10 +884,15 @@ useEffect(() => {
                             style={{width:14,height:14,accentColor:'var(--gold-500)',cursor:'pointer',flexShrink:0,marginTop:3}}/>
                           <div style={{flex:1,minWidth:0}}>
                             <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
-                              <div
-                                style={{fontWeight:600,fontSize:13,color:'var(--navy-700)',cursor:'pointer',textDecoration:'underline',textDecorationStyle:'dotted',textUnderlineOffset:3,display:'inline'}}
-                                onClick={e=>{ e.stopPropagation(); navigate('/companies?company='+v.entity_id); }}
-                              >{v.entity_name}</div>
+                              <div style={{display:'flex',alignItems:'center',gap:6,minWidth:0}}>
+                                {isSel && stopNum && (
+                                  <span style={{width:20,height:20,borderRadius:'50%',background:'#f59e0b',color:'#1e293b',fontWeight:900,fontSize:11,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{stopNum}</span>
+                                )}
+                                <div
+                                  style={{fontWeight:600,fontSize:13,color:'var(--navy-700)',cursor:'pointer',textDecoration:'underline',textDecorationStyle:'dotted',textUnderlineOffset:3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}
+                                  onClick={e=>{ e.stopPropagation(); navigate('/companies?company='+v.entity_id); }}
+                                >{v.entity_name}</div>
+                              </div>
                               <div style={{display:'flex',gap:2,flexShrink:0,marginLeft:6}} onClick={e=>e.stopPropagation()}>
                                 <button onClick={()=>moveUp(id)} disabled={idx===0}
                                   style={{padding:'0 5px',border:'1px solid var(--gray-200)',borderRadius:3,background:'white',cursor:'pointer',fontSize:10,opacity:idx===0?.3:1}}>↑</button>
