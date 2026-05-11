@@ -1581,7 +1581,13 @@ function PersistentMap({ routeStops=[], startGeo=null, returnHome=false, nearbyC
         ${c.last_notes?`<div style="font-size:11px;color:#475569;padding:4px 6px;background:#f8fafc;border-radius:4px;border-left:2px solid #e2e8f0;margin-bottom:5px;font-style:italic">"${c.last_notes.slice(0,80)}${c.last_notes.length>80?'…':''}"</div>`:''}
         ${!isInRoute&&onAddNearby?`<button onclick="window._addNearby_${c.id}&&window._addNearby_${c.id}()" style="margin-top:4px;width:100%;padding:6px 0;background:#f59e0b;border:none;border-radius:6px;cursor:pointer;font-weight:800;font-size:12px;color:#1e293b">+ Add to Route</button>`:`<div style="margin-top:4px;font-size:11px;color:#15803d;font-weight:700;text-align:center;padding:4px;background:#f0fdf4;border-radius:5px">✓ Already in route</div>`}
       </div>`;
-      const marker = L.marker([c.lat, c.lng], { icon: L.divIcon({ html:`<div style="width:${isInRoute?18:12}px;height:${isInRoute?18:12}px;border-radius:50%;background:${isInRoute?'#1e40af':col};border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,.3);cursor:pointer"></div>`, className:'', iconAnchor:[isInRoute?9:6,isInRoute?9:6] }) })
+      const SICON = { call:'📞', mail:'✉️', email:'📧', visit:'📍', new:'🆕' };
+      const icon = SICON[c.pipeline_stage] || '🏢';
+      const markerHtml = isInRoute
+        ? `<div style="width:18px;height:18px;border-radius:50%;background:#1e40af;border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,.3);cursor:pointer"></div>`
+        : `<div style="width:26px;height:26px;border-radius:50%;background:white;border:2.5px solid ${col};box-shadow:0 2px 6px rgba(0,0,0,.25);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px;line-height:1">${icon}</div>`;
+      const anchor = isInRoute ? [9,9] : [13,13];
+      const marker = L.marker([c.lat, c.lng], { icon: L.divIcon({ html:markerHtml, className:'', iconAnchor:anchor }) })
         .addTo(nearbyLayerRef.current).bindPopup(popup, {maxWidth:270});
       if (!isInRoute && onAddNearby) window[`_addNearby_${c.id}`] = () => { onAddNearby(c); map.closePopup(); };
             window[`_navTo_${c.id}`] = () => { map.closePopup(); navigate('/companies?company=' + c.id); };
