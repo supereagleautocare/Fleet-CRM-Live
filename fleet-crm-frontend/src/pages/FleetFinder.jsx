@@ -488,7 +488,18 @@ function ResultCard({ company, onImport, onDismiss, importing }) {
               </InfoRow>
             )}
             {company.estimated_fleet_size && <InfoRow label="Est. Fleet">{company.estimated_fleet_size}</InfoRow>}
-            {company.contact_name && <InfoRow label="Contact">{company.contact_name}{company.contact_title && <span style={{ color: '#9ca3af' }}> · {company.contact_title}</span>}</InfoRow>}
+            {company.contact_name && (
+              <InfoRow label="Contact">
+                <span style={{ fontWeight: 600 }}>{company.contact_name}</span>
+                {company.contact_title && <span style={{ color: '#6b7280' }}> · {company.contact_title}</span>}
+                {company.contact_linkedin && (
+                  <a href={safeUrl(company.contact_linkedin)} target="_blank" rel="noopener noreferrer"
+                    style={{ marginLeft: 8, fontSize: 11, color: '#0a66c2', fontWeight: 600, textDecoration: 'none' }}>
+                    LinkedIn ↗
+                  </a>
+                )}
+              </InfoRow>
+            )}
             {company.local_office_address && <InfoRow label="Local Office">{company.local_office_address}</InfoRow>}
           </div>
           {company.sources?.length > 0 && (
@@ -829,6 +840,7 @@ export default function FleetFinder() {
         chain_name:                  company.chain_name                 || null,
         contact_name:                company.contact_name               || null,
         contact_title:               company.contact_title              || null,
+        contact_linkedin:            company.contact_linkedin           || null,
         sources:                     company.sources                    || [],
         distance_miles:              company.distance_miles != null ? parseFloat(company.distance_miles.toFixed(1)) : null,
         searched_at:                 new Date().toISOString(),

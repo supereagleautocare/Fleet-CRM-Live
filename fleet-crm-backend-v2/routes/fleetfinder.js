@@ -578,10 +578,15 @@ INDEED / GLASSDOOR — great for confirming fleet operation
   Job postings that say "company vehicle provided", "take-home truck", "stocked service van", or "route technician" are strong fleet signals. Employee reviews sometimes mention "company truck" or "take-home vehicle" too.
   Try: "[industry] ${shopCity} company vehicle" or "[company name] technician job"
 
-LINKEDIN PEOPLE SEARCH — our best signal for local fleet size
-  Searching for employees by company + city is the most reliable way to count local field workers. Each field employee = one vehicle minimum.
-  Try searching Google: site:linkedin.com/in "[company name]" "${shopCity}"
-  This finds individual profiles rather than just the company page.
+LINKEDIN PEOPLE SEARCH — two separate goals
+  GOAL 1 — count field workers (fleet size signal): site:linkedin.com/in "[company name]" "${shopCity}"
+  Each field employee profile = one vehicle minimum.
+
+  GOAL 2 — find the decision-maker contact: search for someone with a management title at the local office.
+  Try: site:linkedin.com/in "[company name]" "${shopCity}" "operations manager"
+  Also try: "branch manager", "field operations manager", "regional manager", "service manager", "fleet manager"
+  These are the people who actually decide which shop services the vehicles. Record their full name, exact title, and LinkedIn profile URL.
+  Priority order: Operations Manager > Branch Manager > Field Operations Manager > Regional Manager > Service Manager > Fleet Manager
 
 YELP / BBB — good for smaller independents
   Smaller local companies that don't rank well on Google often show up here. Reviews sometimes mention "their fleet of vans" or "the technician arrived in a company truck."
@@ -620,8 +625,9 @@ Fleet signal keywords to watch for: "${customKeywords.join('", "')}"
 Run 8–10 searches. Find the 15 BEST leads — not every company you can find, just the top 15 most promising ones ranked by how likely they are to run a local fleet. Once you have 15 strong leads, stop searching and write your summary. Quality over quantity — a well-researched list of 15 beats a shallow list of 50. Choose your sources freely and follow the evidence.
 
 For each company found, record:
-• Name, industry, full street address (exact address if found on Google Maps or their website, not just city)
+• Name, industry, full street address (exact street address if found on Google Maps or their website — "Charlotte, NC" is NOT enough, dig for the actual street)
 • Phone number if visible on Google Maps or website
+• Decision-maker contact: look for operations manager, branch manager, field operations manager, or regional manager at the LOCAL office. Record their name, title, and LinkedIn profile URL.
 • LinkedIn field employees in ${shopCity} — record the exact URL you searched and how many profiles you found
 • Indeed/Glassdoor signals — record the exact job posting URL that mentioned company vehicles
 • Website signals — record the exact page URL (fleet page, team page, careers page) where you found fleet evidence
@@ -721,8 +727,9 @@ Required format per company:
   "zip": string|null,
   "main_phone": string|null,
   "website": string|null,
-  "contact_name": null,
-  "contact_title": null,
+  "contact_name": string|null (decision-maker's full name — ops manager, branch manager, field manager, regional manager),
+  "contact_title": string|null (their exact job title),
+  "contact_linkedin": string|null (their LinkedIn profile URL),
   "local_office_found": boolean,
   "local_office_address": string|null (full street address if found),
   "local_field_employees_found": number|null,
