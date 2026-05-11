@@ -12,6 +12,24 @@ const VEHICLE_LABELS = {
   heavy_duty_diesel:  'Heavy Duty Diesel (F-750+, Class 7-8)',
 };
 
+const STRATEGY_OPTIONS = [
+  {
+    value: 'all',
+    label: 'All Companies',
+    desc: 'Searches both consumer-facing and B2B contract companies. Uses Google Maps, Yelp, LinkedIn, Indeed, SAM.gov, and FMCSA. Best when you want a wide mix of leads.',
+  },
+  {
+    value: 'b2b',
+    label: 'B2B / Contract',
+    desc: 'For companies that win service contracts — telecom subs, utility crews, fiber contractors, government service companies. Many have no Google Maps presence. Leads with LinkedIn employee counts, Indeed job postings, SAM.gov contract awards, and FMCSA records.',
+  },
+  {
+    value: 'consumer',
+    label: 'Consumer-Facing',
+    desc: 'For businesses customers search for directly — HVAC, pest control, plumbing, delivery, landscaping. Leads with Google Maps, Yelp, and BBB. LinkedIn used to find the owner or ops manager rather than count field employees.',
+  },
+];
+
 const FLEET_SIZE_OPTIONS = [
   { value: 'any',   label: 'Any size' },
   { value: 'xs',    label: '1–5' },
@@ -793,6 +811,7 @@ export default function FleetFinder() {
   const [indSearch,    setIndSearch]     = useState('');
   const [vehicleTypes, setVehicleTypes]  = useState(Object.keys(VEHICLE_LABELS));
   const [fleetSizes,   setFleetSizes]    = useState(['any']);
+  const [strategy,     setStrategy]     = useState('all');
 
   const [estimate,     setEstimate]      = useState(null);
   const [searching,    setSearching]     = useState(false);
@@ -928,6 +947,7 @@ export default function FleetFinder() {
       radius_miles:   effectiveRadius,
       polygon_coords: polygonCoords,
       industries, vehicle_types: vehicleTypes, fleet_size: fleetSizes,
+      strategy,
     });
 
     try {
@@ -1274,6 +1294,32 @@ export default function FleetFinder() {
             })}
           </div>
         </div>
+
+        {/* Divider */}
+        <div style={{ width: 1, height: 28, background: '#e5e7eb', flexShrink: 0 }} />
+
+        {/* Search strategy dropdown */}
+        <Pill
+          label={`🎯 ${STRATEGY_OPTIONS.find(o => o.value === strategy)?.label ?? 'All Companies'}`}
+          active={strategy !== 'all'}
+          width={340}
+        >
+          <div style={{ fontWeight: 700, fontSize: 13, color: '#111827', marginBottom: 12 }}>Search Strategy</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {STRATEGY_OPTIONS.map(opt => (
+              <button key={opt.value} onClick={() => setStrategy(opt.value)} style={{
+                textAlign: 'left', padding: '10px 12px', borderRadius: 10, cursor: 'pointer', width: '100%',
+                border: strategy === opt.value ? '2px solid #1a3358' : '1.5px solid #e5e7eb',
+                background: strategy === opt.value ? '#eef2ff' : 'white',
+              }}>
+                <div style={{ fontWeight: 700, fontSize: 12, color: strategy === opt.value ? '#1a3358' : '#374151', marginBottom: 3 }}>
+                  {opt.label} {strategy === opt.value && '✓'}
+                </div>
+                <div style={{ fontSize: 11, color: '#6b7280', lineHeight: 1.5 }}>{opt.desc}</div>
+              </button>
+            ))}
+          </div>
+        </Pill>
 
         <div style={{ flex: 1 }} />
 

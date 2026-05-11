@@ -465,6 +465,7 @@ router.post('/search', auth, async (req, res) => {
     industries     = [],
     vehicle_types  = [],
     fleet_size: fleetSizeRaw = 'any',
+    strategy = 'all',
   } = req.body;
   // fleet_size may now be an array (multi-select) or legacy string
   const fleetSizeArr = Array.isArray(fleetSizeRaw) ? fleetSizeRaw : [fleetSizeRaw];
@@ -560,9 +561,58 @@ router.post('/search', auth, async (req, res) => {
     let turnCount         = 0;
 
     // ── Phase 1: Research (web searches, no JSON pressure) ────────────────────
-    const researchSystem = `You are a fleet vehicle research agent for an auto repair shop in ${locationStr}.
-Your job right now: SEARCH and GATHER information. Do not output JSON yet.
+    // ── Strategy-specific WHERE TO SEARCH section ────────────────────────────
+    const whereToSearch = strategy === 'b2b' ? `
+══ SEARCH STRATEGY: B2B / CONTRACT COMPANIES ═══════════════════════════════
+These companies win service contracts — many have NO Google Maps presence.
+Find them through LinkedIn, job boards, and contractor registries.
 
+LINKEDIN (primary) — your most powerful B2B source
+  Field employees: site:linkedin.com/in "[company name]" "${shopCity}" — each field-role profile = 1 vehicle
+  Find companies in the industry: "${industryList}" "${shopCity}" site:linkedin.com/in technician OR installer OR driver
+  Decision-maker: site:linkedin.com/in "[company name]" "${shopCity}" "operations manager" OR "branch manager" OR "field manager"
+  Priority: Operations Manager > Branch Manager > Field Ops Manager > Regional Manager > Fleet Manager
+
+INDEED / GLASSDOOR (primary) — job postings reveal fleet operations
+  "[industry] ${shopCity} company vehicle" or "[company name] technician ${shopCity}"
+  Look for: "company vehicle provided", "take-home truck", "stocked service van", "CDL required", "route technician"
+  Record exact job posting URL if found.
+
+SAM.GOV / STATE CONTRACTOR REGISTRIES (primary) — government contract winners
+  site:sam.gov "${shopCity}" [industry] — telecom subs, utility contractors, government service companies.
+
+FMCSA (primary for cross-state fleets) — site:safer.fmcsa.dot.gov
+  Freight, utility crews, large contractors crossing state lines. DOT registration = confirmed commercial vehicles.
+
+SUBCONTRACTOR SEARCHES — highly effective for telecom and utility
+  "[large carrier] contractor ${shopCity}" (e.g. "Spectrum contractor ${shopCity}", "AT&T subcontractor ${shopCity}")
+
+COMPANY WEBSITE (secondary) — ALWAYS check Contact Us for real street address and phone.
+
+GOOGLE MAPS (secondary) — many B2B companies not listed but try "[industry] contractor ${shopCity}".` : strategy === 'consumer' ? `
+══ SEARCH STRATEGY: CONSUMER-FACING COMPANIES ══════════════════════════════
+These businesses need customers to find them — they show up on Google Maps, Yelp, and BBB.
+
+GOOGLE MAPS (primary) — best first move
+  "[industry] ${shopCity}" — expect 5-8 local results. Business descriptions mention team size and vehicles.
+  Customer reviews often say "their technician arrived in a company truck" or "the crew showed up in 3 vans."
+
+YELP / BBB (primary for smaller independents)
+  Smaller owner-operated companies that don't rank on Google. Reviews explicitly mention vehicles and technician counts.
+
+COMPANY WEBSITE — follow up on every promising Google Maps or Yelp result
+  Fleet pages, team pages, "About Us" pages often mention number of trucks. Careers pages show hiring for field roles.
+  ALWAYS check Contact Us for the real street address and phone. Record both exactly as shown.
+
+INDEED / GLASSDOOR (secondary) — confirms fleet operations
+  "[company name] ${shopCity}" technician — look for "company vehicle provided", "take-home truck".
+  Record exact job posting URL if found.
+
+LINKEDIN (secondary) — lower signal for consumer companies but useful for finding the decision-maker
+  site:linkedin.com/in "[company name]" "${shopCity}" — find the owner or ops manager.
+  Priority: Owner > Operations Manager > Service Manager
+
+FMCSA — usually not applicable for local consumer companies; skip unless the company clearly crosses state lines.` : `
 ══ WHERE TO SEARCH — starting points that have worked well ═════════════════
 You have full freedom to search wherever makes sense. These are starting points that tend to produce good results — use your own judgment if you think a different source will work better for a specific company or industry.
 
@@ -596,7 +646,11 @@ FMCSA (site:safer.fmcsa.dot.gov) — situational, use your judgment
   We've had mixed results here. It works well for companies that likely cross state lines (freight, waste haulers, large utility crews). For purely local service companies like pest control or HVAC, they usually don't have a DOT number, so it's probably not worth a search credit — but if you think it might apply, go for it.
 
 SAM.GOV / STATE CONTRACTOR REGISTRIES — for contract-driven industries
-  Good for telecom subs, utility contractors, government service companies that win public contracts.
+  Good for telecom subs, utility contractors, government service companies that win public contracts.`;
+
+    const researchSystem = `You are a fleet vehicle research agent for an auto repair shop in ${locationStr}.
+Your job right now: SEARCH and GATHER information. Do not output JSON yet.
+${whereToSearch}
 
 FOLLOW THE EVIDENCE — each search should build on what you already found. If Google Maps surfaces a company, go to their website next. If a job posting mentions "company van provided", search LinkedIn for that company's local employees next. Don't follow a rigid plan if the evidence is pointing somewhere more useful.
 
@@ -615,7 +669,14 @@ WHAT TO INCLUDE:
   • Companies where any source mentions "company vehicle", "take-home truck", "route technician", "our fleet", "service van".
   • Do NOT drop a company just because you couldn't confirm exact fleet size — note uncertainty.`;
 
+    const strategyNote = strategy === 'b2b'
+      ? 'B2B/CONTRACT — find companies that win service contracts. Many have no Google Maps presence. Lead with LinkedIn and Indeed.'
+      : strategy === 'consumer'
+      ? 'CONSUMER-FACING — find businesses customers search for. They have Google Maps listings and Yelp pages. Lead with Google Maps.'
+      : 'ALL COMPANIES — both B2B/contract and consumer-facing.';
+
     const researchPrompt = `Find fleet businesses in ${locationDesc} (states: ${stateList}).
+Search focus: ${strategyNote}
 
 Target area: ${locationStr}
 Industries: ${industryList}
