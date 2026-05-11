@@ -498,6 +498,26 @@ function ResultCard({ company, onImport, onDismiss, onCompare, importing }) {
   const inCrm        = company.already_in_crm;
   const newLocation  = company.new_chain_location;
 
+  // Build a unified evidence list: field employees first, then sources (deduped by URL)
+  const evidenceRows = [];
+  const seenUrls = new Set();
+  if (company.local_field_employees_found > 0) {
+    const titleStr = company.local_field_employee_titles?.length
+      ? ` (${company.local_field_employee_titles.join(', ')})`
+      : '';
+    evidenceRows.push({
+      label: `${company.local_field_employees_found} field employee${company.local_field_employees_found !== 1 ? 's' : ''} found in area${titleStr}`,
+      url: company.local_field_employee_url || null,
+    });
+    if (company.local_field_employee_url) seenUrls.add(company.local_field_employee_url);
+  }
+  for (const s of (company.sources || [])) {
+    if (!s.label && !s.url) continue;
+    if (s.url && seenUrls.has(s.url)) continue;
+    evidenceRows.push({ label: s.label, url: s.url || null });
+    if (s.url) seenUrls.add(s.url);
+  }
+
   return (
     <div style={{
       background: inCrm ? '#f9fafb' : 'white',
@@ -613,39 +633,69 @@ function ResultCard({ company, onImport, onDismiss, onCompare, importing }) {
       {/* Expanded details */}
       {expanded && (
         <div style={{ borderTop: '1px solid #f3f4f6', padding: '14px 16px', background: '#f9fafb', fontSize: 12 }}>
+
+          {/* Why they have a fleet — the paragraph */}
           {company.fleet_note && (
-            <div style={{ background: colors.bg, borderLeft: `3px solid ${colors.bar}`, padding: '8px 12px', borderRadius: 6, marginBottom: 10, color: colors.text, fontWeight: 500, lineHeight: 1.5 }}>
-              {company.fleet_note}
-            </div>
-          )}
-          {company.research_notes && (
-            <div style={{ color: '#4b5563', marginBottom: 10, lineHeight: 1.6 }}>{company.research_notes}</div>
-          )}
-          {company.fleet_signals?.length > 0 && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 10 }}>
-              {company.fleet_signals.map((s, i) => (
-                <span key={i} style={{ padding: '2px 8px', background: '#dbeafe', borderRadius: 8, fontSize: 10, color: '#1e40af', fontWeight: 600 }}>{s}</span>
-              ))}
-            </div>
-          )}
-          {company.local_field_employee_titles?.length > 0 && (
-            <div style={{ marginBottom: 10, padding: '8px 10px', background: '#f0fdf4', borderRadius: 7, border: '1px solid #bbf7d0' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                <span style={{ fontSize: 10, fontWeight: 700, color: '#15803d' }}>Local Field Employees Found</span>
-                {company.local_field_employee_url ? (
-                  <a href={safeUrl(company.local_field_employee_url)} target="_blank" rel="noopener noreferrer"
-                    style={{ fontSize: 10, color: '#0284c7', fontWeight: 600, textDecoration: 'none' }}>
-                    ↗ {company.local_field_employee_source || 'View source'}
-                  </a>
-                ) : company.local_field_employee_source ? (
-                  <span style={{ fontSize: 10, color: '#6b7280' }}>{company.local_field_employee_source}</span>
-                ) : null}
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 6 }}>
+                Why We Think They Have a Fleet
               </div>
-              <div style={{ fontSize: 11, color: '#166534' }}>{company.local_field_employee_titles.join(' · ')}</div>
+              <div style={{ background: colors.bg, borderLeft: `3px solid ${colors.bar}`, padding: '9px 12px', borderRadius: 6, color: colors.text, fontSize: 12, lineHeight: 1.6 }}>
+                {company.fleet_note}
+              </div>
             </div>
           )}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 16px', color: '#4b5563', marginBottom: 10 }}>
-            {company.address && <InfoRow label="Address">{company.address}<br />{company.city}, {company.state} {company.zip}</InfoRow>}
+
+          {/* What to do — actionable call guidance */}
+          {company.next_step && (
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 6 }}>
+                What to Do
+              </div>
+              <div style={{ background: '#eff6ff', borderLeft: '3px solid #3b82f6', padding: '9px 12px', borderRadius: 6, fontSize: 12, color: '#1e3a5f', lineHeight: 1.6 }}>
+                {company.next_step}
+              </div>
+            </div>
+          )}
+
+          {/* Evidence — every finding paired with a Verify link */}
+          {evidenceRows.length > 0 && (
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 7 }}>
+                Evidence Found
+              </div>
+              <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
+                {evidenceRows.map((row, i) => (
+                  <div key={i} style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '8px 12px', gap: 12,
+                    borderBottom: i < evidenceRows.length - 1 ? '1px solid #f3f4f6' : 'none',
+                  }}>
+                    <span style={{ fontSize: 12, color: '#374151', flex: 1, lineHeight: 1.4 }}>{row.label}</span>
+                    {row.url ? (
+                      <a href={safeUrl(row.url)} target="_blank" rel="noopener noreferrer"
+                        style={{ fontSize: 11, color: '#2563eb', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                        Verify ↗
+                      </a>
+                    ) : (
+                      <span style={{ fontSize: 11, color: '#d1d5db', whiteSpace: 'nowrap', flexShrink: 0 }}>No link</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Fallback when no sources at all */}
+          {evidenceRows.length === 0 && company.local_presence_evidence && (
+            <div style={{ marginBottom: 14, padding: '8px 12px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#92400e', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 4 }}>Local Presence</div>
+              <div style={{ fontSize: 12, color: '#92400e', fontStyle: 'italic', lineHeight: 1.4 }}>{company.local_presence_evidence}</div>
+            </div>
+          )}
+
+          {/* Details — contact info, address, fleet size */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 16px', color: '#4b5563', borderTop: evidenceRows.length > 0 || company.fleet_note ? '1px solid #e5e7eb' : 'none', paddingTop: evidenceRows.length > 0 || company.fleet_note ? 12 : 0 }}>
             {company.main_phone && <InfoRow label="Phone">{company.main_phone}</InfoRow>}
             {company.website && (
               <InfoRow label="Website">
@@ -655,6 +705,7 @@ function ResultCard({ company, onImport, onDismiss, onCompare, importing }) {
               </InfoRow>
             )}
             {company.estimated_fleet_size && <InfoRow label="Est. Fleet">{company.estimated_fleet_size}</InfoRow>}
+            {company.address && <InfoRow label="Address">{company.address}<br />{company.city}, {company.state} {company.zip}</InfoRow>}
             {company.contact_name && (
               <InfoRow label="Contact">
                 <span style={{ fontWeight: 600 }}>{company.contact_name}</span>
@@ -667,25 +718,8 @@ function ResultCard({ company, onImport, onDismiss, onCompare, importing }) {
                 )}
               </InfoRow>
             )}
-            {company.local_office_address
-              ? <InfoRow label="Local Office">{company.local_office_address}</InfoRow>
-              : company.local_presence_evidence && (
-                <InfoRow label="Local Presence">
-                  <span style={{ color: '#92400e', fontStyle: 'italic' }}>{company.local_presence_evidence}</span>
-                </InfoRow>
-              )
-            }
+            {company.local_office_address && <InfoRow label="Local Office">{company.local_office_address}</InfoRow>}
           </div>
-          {company.sources?.length > 0 && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-              {company.sources.filter(s => s.url).map((s, i) => (
-                <a key={i} href={safeUrl(s.url)} target="_blank" rel="noopener noreferrer"
-                  style={{ padding: '3px 10px', background: 'white', border: '1px solid #bae6fd', borderRadius: 10, fontSize: 10, color: '#0284c7', fontWeight: 600, textDecoration: 'none' }}>
-                  ↗ {s.label || s.url}
-                </a>
-              ))}
-            </div>
-          )}
         </div>
       )}
     </div>

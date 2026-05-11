@@ -653,7 +653,7 @@ Begin searching now.`;
       turnCount++;
       const response = await anthropic.messages.create({
         model:      'claude-haiku-4-5-20251001',
-        max_tokens: 3500,
+        max_tokens: 6000,
         system:     [{ type: 'text', text: researchSystem, cache_control: { type: 'ephemeral' } }],
         tools:      [{ type: 'web_search_20250305', name: 'web_search' }],
         messages:   researchMessages,
@@ -707,9 +707,9 @@ Pick the 15 most promising — prioritize confirmed local offices, named field e
 OUTPUT AT MOST 15 OBJECTS. Stop after 15.
 Use null for any field you could not verify.
 
-IMPORTANT — keep all string fields SHORT to avoid truncation:
-- fleet_note: max 120 characters (one tight sentence)
-- research_notes: max 150 characters (key finding + one gap)
+IMPORTANT — keep string fields within these limits to avoid truncation:
+- fleet_note: max 280 characters (2-3 sentences — WHY this company likely has a local fleet: what was found, what kind of vehicles, rough size. Write so a sales rep can read it cold and immediately understand the opportunity)
+- next_step: max 220 characters (specific call action — if the listed address is HQ not a local office say so and what to ask when calling, who to ask for by name/title if known, flag anything unusual like a 1099 contractor model or unconfirmed local presence)
 - score_factors: max 4 factors, factor text max 60 characters each
 - fleet_signals: max 4 signals, each max 40 characters
 - local_field_employee_titles: list job titles only, no extra text
@@ -739,8 +739,8 @@ Required format per company:
   "local_field_employee_source": string|null (where you found them, e.g. "LinkedIn — 12 profiles found"),
   "local_field_employee_url": string|null (direct URL to LinkedIn search or Indeed posting where employees were found),
   "fleet_probability": number (0-100),
-  "fleet_note": string (max 120 chars),
-  "research_notes": string (max 150 chars),
+  "fleet_note": string (2-3 sentences, max 280 chars — why this company likely has a local fleet, what evidence supports it, and rough vehicle count. Sales rep reads this cold and immediately understands the opportunity),
+  "next_step": string (max 220 chars — specific call action: note if listed address is HQ not local office and what to say when calling, name/title to ask for if known, flag 1099 contractor model or unconfirmed local presence),
   "fleet_signals": string[],
   "score_factors": [{"factor": string, "impact": "+"|"-", "points": number}],
   "estimated_fleet_size": string|null,
