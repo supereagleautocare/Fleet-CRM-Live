@@ -1138,10 +1138,11 @@ useEffect(() => {
               <div style={{background:'rgba(255,255,255,.96)',backdropFilter:'blur(6px)',borderRadius:10,padding:'6px 8px',boxShadow:'0 2px 12px rgba(0,0,0,.18)'}}>
                 <div style={{fontSize:9,fontWeight:800,color:'var(--gray-400)',textTransform:'uppercase',letterSpacing:'.07em',marginBottom:5,textAlign:'center'}}>Map Legend</div>
                 {[
-                  {dot:'#ef4444',label:'Drop In'},
-                  {dot:'#f59e0b',label:'Due Soon'},
-                  {dot:'#22c55e',label:'Visited'},
-                  {dot:'#94a3b8',label:'No Contact'},
+                  {dot:'#1e40af',label:'Calling'},
+                  {dot:'#065f46',label:'Mail'},
+                  {dot:'#6b21a8',label:'Email'},
+                  {dot:'#92400e',label:'Visit'},
+                  {dot:'#64748b',label:'New'},
                 ].map(f=>(
                   <div key={f.label} style={{display:'flex',alignItems:'center',gap:5,padding:'2px 0',fontSize:10,color:'var(--gray-700)'}}>
                     <span style={{width:9,height:9,borderRadius:'50%',background:f.dot,flexShrink:0,border:'1px solid rgba(0,0,0,.12)'}}/>
@@ -1562,11 +1563,11 @@ function PersistentMap({ routeStops=[], startGeo=null, returnHome=false, nearbyC
     if (!map || !L || !nearbyLayerRef.current) return;
     nearbyLayerRef.current.clearLayers();
     Object.keys(window).filter(k=>k.startsWith('_addNearby_')).forEach(k=>delete window[k]);
-    const PCOLOR = { hot:'#ef4444', warm:'#f59e0b', good:'#22c55e', none:'#94a3b8' };
-    const PLBL   = { hot:'🔴 Drop In', warm:'🟡 Due Soon', good:'🟢 Recent', none:'⚪ No Contact' };
+    const SCOLOR = { call:'#1e40af', mail:'#065f46', email:'#6b21a8', visit:'#92400e', new:'#64748b' };
+    const SLBL   = { call:'📞 Calling', mail:'✉️ Mail', email:'📧 Email', visit:'📍 Visit', new:'New' };
     const routeIds = new Set(routeStops.map(s => s.companyId ?? s.id));
     nearbyCompanies.filter(c => c.geoOk && c.lat && c.lng).forEach(c => {
-      const col = PCOLOR[c.priority] || '#94a3b8';
+      const col = SCOLOR[c.pipeline_stage] || '#64748b';
       const isInRoute = routeIds.has(c.id);
       const lastContactDate = c.last_contacted ? new Date(c.last_contacted).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : null;
       const followup = c.followup_due ? new Date(c.followup_due+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}) : null;
@@ -1574,7 +1575,7 @@ function PersistentMap({ routeStops=[], startGeo=null, returnHome=false, nearbyC
         <div style="font-weight:800;font-size:13px;margin-bottom:2px"><button onclick="window._navTo_${c.id}&&window._navTo_${c.id}()" style="background:none;border:none;cursor:pointer;font-weight:800;font-size:13px;color:#1e40af;text-decoration:underline;text-decoration-style:dotted;padding:0;font-family:system-ui">${c.name}</button></div>
         ${c.main_phone?`<div style="font-size:11px;color:#3b82f6;font-family:monospace;margin-bottom:3px">${c.main_phone}</div>`:''}
         ${c.address?`<div style="font-size:11px;color:#64748b;margin-bottom:4px">📍 ${c.address}${c.city?', '+c.city:''}</div>`:''}
-        <span style="display:inline-block;padding:2px 8px;border-radius:10px;background:${col}22;border:1px solid ${col}55;font-size:10px;font-weight:700;color:${col};margin-bottom:5px">${PLBL[c.priority]}</span>
+        <span style="display:inline-block;padding:2px 8px;border-radius:10px;background:${col}22;border:1px solid ${col}55;font-size:10px;font-weight:700;color:${col};margin-bottom:5px">${SLBL[c.pipeline_stage]||'New'}</span>
         ${lastContactDate?`<div style="font-size:11px;color:#475569;margin-bottom:3px">📞 <b>${c.last_contact_type||'Contacted'}</b> · ${lastContactDate}</div>`:`<div style="font-size:11px;color:#94a3b8;margin-bottom:3px">No contact yet</div>`}
         ${followup?`<div style="font-size:11px;color:#d97706;margin-bottom:3px">📅 Follow-up: <b>${followup}</b></div>`:''}
         ${c.last_notes?`<div style="font-size:11px;color:#475569;padding:4px 6px;background:#f8fafc;border-radius:4px;border-left:2px solid #e2e8f0;margin-bottom:5px;font-style:italic">"${c.last_notes.slice(0,80)}${c.last_notes.length>80?'…':''}"</div>`:''}
