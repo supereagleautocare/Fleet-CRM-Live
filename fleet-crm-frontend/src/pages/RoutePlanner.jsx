@@ -1235,9 +1235,13 @@ useEffect(() => {
                     </button>
                   ))}
                 </div>
-                <div style={{marginTop:6,paddingTop:6,borderTop:'1px solid var(--gray-100)',fontSize:10,color:'var(--gray-400)',textAlign:'center'}}>
-                  {nearbyMapped.length} companies on map
-                  {stillGeocoding > 0 && <span> · ⏳ {stillGeocoding} more loading</span>}
+                <div style={{marginTop:5,paddingTop:5,borderTop:'1px solid var(--gray-100)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:4}}>
+                  <span style={{fontSize:10,color:'var(--gray-400)',whiteSpace:'nowrap'}}>{nearbyMapped.length} on map</span>
+                  {stillGeocoding > 0 && (
+                    <span style={{display:'inline-flex',alignItems:'center',gap:2,background:'#fffbeb',color:'#d97706',border:'1px solid #fcd34d',borderRadius:8,padding:'1px 5px',fontSize:9,fontWeight:700,whiteSpace:'nowrap'}}>
+                      ⏳ {stillGeocoding} loading
+                    </span>
+                  )}
                 </div>
                 {(() => {
                   const missing = nearbyCompanies.filter(c => !c.lat || !c.lng);
@@ -1433,17 +1437,19 @@ function MissingAddressesPopup({ missing, navigate }) {
   const visible = missing.filter(c => !dismissed.has(c.id));
   if (visible.length === 0) return null;
   return (
-    <div style={{position:'relative',display:'inline-block',marginTop:4}}>
+    <div style={{position:'relative',marginTop:4}}>
       <button
         onClick={() => setOpen(o => !o)}
         style={{
-          display:'flex',alignItems:'center',gap:4,
+          display:'flex',alignItems:'center',justifyContent:'space-between',gap:4,
+          width:'100%',boxSizing:'border-box',
           fontSize:10,fontWeight:700,color:'#dc2626',
           background:'#fef2f2',border:'1px solid #fca5a5',
-          borderRadius:6,padding:'2px 8px',cursor:'pointer',
+          borderRadius:6,padding:'3px 7px',cursor:'pointer',
         }}
       >
-        ⚠ {visible.length} address{visible.length !== 1 ? 'es' : ''} not found ···
+        <span>⚠ {visible.length} missing address{visible.length !== 1 ? 'es' : ''}</span>
+        <span style={{fontSize:8,opacity:.5}}>{open ? '▲' : '▼'}</span>
       </button>
       {open && (
         <>
