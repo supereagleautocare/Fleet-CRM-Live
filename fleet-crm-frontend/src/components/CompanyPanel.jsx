@@ -29,7 +29,7 @@ function distMiles(a, b) {
 // Session cache — no re-fetch when reopening the same company
 const _routeCache = new Map();
 
-const MAPBOX_TOKEN = 'pk.eyJ1Ijoic3VwZXJlYWdsZSIsImEiOiJjbW5razA0eG0wenhiMnNxNGM2N3J5Nm5rIn0.N5S0ONYavIOfHa_p3sMF7Q';
+const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
 
 async function fetchRouteFromOSRM(from, to) {
   try {
