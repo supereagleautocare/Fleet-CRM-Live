@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { api, fmtPhone, fmtDate, companyDisplayName } from '../api.js';
 import { useApp } from '../App.jsx';
 import CompanyPanel from '../components/CompanyPanel.jsx';
+import AddressAutocomplete from '../components/AddressAutocomplete.jsx';
 
 function getPriority(company) {
   const today = new Date(); today.setHours(0,0,0,0);
@@ -328,16 +329,18 @@ export default function Nearby({ embedded = false }) {
             🏠 Specific Address
           </button>
           {locationMode==='address' && (
-            <>
-              <input className="form-input" style={{width:280,margin:0,fontSize:13}}
-                placeholder="123 Main St, Charlotte NC…"
+            <div style={{width:300}}>
+              <AddressAutocomplete
                 value={customAddr}
-                onChange={e=>setCustomAddr(e.target.value)}
-                onKeyDown={e=>e.key==='Enter'&&lookupCustomAddr()}
+                onChange={setCustomAddr}
+                onSelect={({display, lat, lng}) => {
+                  setCustomAddr(display);
+                  if (lat && lng) { setCustomAddrPos({lat, lng}); setLocError(''); }
+                }}
+                placeholder="123 Main St, Charlotte NC…"
               />
-              <button className="btn btn-sm btn-primary" onClick={lookupCustomAddr}>Go</button>
-              {customAddrPos && <span style={{fontSize:11,color:'#15803d'}}>✓ Located</span>}
-            </>
+              {customAddrPos && <span style={{fontSize:11,color:'#15803d',marginTop:4,display:'block'}}>✓ Located</span>}
+            </div>
           )}
         </div>
 

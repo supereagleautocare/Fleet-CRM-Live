@@ -105,7 +105,7 @@ export default function AddressAutocomplete({
     const zip   = a.postcode || a.postal_code || '';
     const fullDisplay = normalizeSuite([streetAddr || item.name, city, state, zip].filter(Boolean).join(', '));
     onChange(fullDisplay || item.display_name.split(',').slice(0, 3).join(',').trim());
-    onSelect?.({ display: fullDisplay, address: streetAddr || item.name, city, state, zip, name: item.name });
+    onSelect?.({ display: fullDisplay, address: streetAddr || item.name, city, state, zip, name: item.name, lat: parseFloat(item.lat), lng: parseFloat(item.lon) });
     setOpen(false); setResults([]);
   }
 

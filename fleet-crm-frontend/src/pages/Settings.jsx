@@ -4,7 +4,8 @@ import { api } from '../api.js';
 import { useApp } from '../App.jsx';
 import ScriptEditor from '../components/ScriptEditor.jsx';
 import ScoreCardSettings from '../components/ScoreCardSettings.jsx';
-import ScoreCardModal from '../components/ScoreCardModal.jsx'; 
+import ScoreCardModal from '../components/ScoreCardModal.jsx';
+import AddressAutocomplete from '../components/AddressAutocomplete.jsx';
 
 const DEFAULT_PERMS = {
   can_access_settings:  false,
@@ -924,17 +925,18 @@ export default function Settings() {
                   <div style={{ fontSize:12, color:'var(--gray-400)', marginBottom:16 }}>Used to calculate distance in call logs, route planner, and nearby views.</div>
                   <div className="form-group">
                     <label className="form-label">Address</label>
-                    <input className="form-input" defaultValue={settings['shop_address']?.value || ''} placeholder="123 Main St, Charlotte, NC 28205"
-                      onBlur={async e => {
-                        const val = e.target.value.trim();
-                        if (!val || val===settings['shop_address']?.value) return;
-                        await updateSetting('shop_address', val);
-                        try {
-                          const r = await fetch('https://nominatim.openstreetmap.org/search?q='+encodeURIComponent(val)+'&format=json&limit=1&countrycodes=us',{headers:{'User-Agent':'FleetCRM/1.0'}});
-                          const d = await r.json();
-                          if (d[0]) { await updateSetting('shop_lat',d[0].lat); await updateSetting('shop_lng',d[0].lon); showToast('✅ Shop address saved and geocoded'); }
-                        } catch(_) {}
+                    <AddressAutocomplete
+                      value={settings['shop_address']?.value || ''}
+                      onChange={val => setSettings(prev => ({ ...prev, shop_address: { ...(prev.shop_address || { key:'shop_address' }), value: val } }))}
+                      onSelect={async ({ display, lat, lng }) => {
+                        await Promise.all([
+                          updateSetting('shop_address', display),
+                          lat && updateSetting('shop_lat', String(lat)),
+                          lng && updateSetting('shop_lng', String(lng)),
+                        ]);
+                        showToast('✅ Shop address saved');
                       }}
+                      placeholder="123 Main St, Charlotte, NC 28205"
                     />
                     {settings['shop_lat']?.value && settings['shop_lng']?.value && (
                       <div style={{ fontSize:11, color:'#15803d', marginTop:6 }}>
