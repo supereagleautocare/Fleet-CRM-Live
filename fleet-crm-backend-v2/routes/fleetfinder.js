@@ -503,7 +503,7 @@ router.post('/search', auth, async (req, res) => {
 
     // ── 3. Pull existing companies for dedup ──────────────────────────────────
     const existing = await pool.query(
-      `SELECT name, address, city, main_phone FROM companies WHERE status = 'active'`
+      `SELECT id, name, address, city, main_phone FROM companies WHERE status = 'active'`
     );
     const existingNames = existing.rows.map(r => normalizeName(r.name)).filter(Boolean);
     // Build a skip list of name + address pairs for Claude (name only if no address)
