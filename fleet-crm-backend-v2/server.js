@@ -64,7 +64,6 @@ app.use('/api/quicklog',   require('./routes/quicklog'));
 app.use('/api/scripts',    require('./routes/scripts'));
 app.use('/api/scorecard',  require('./routes/scorecard'));
 app.use('/api/pipeline',   require('./routes/pipeline'));
-app.use('/api/tekmetric',  require('./routes/tekmetric'));
 app.use('/api/companies',  require('./routes/companies'));
 app.use('/api/customers',  require('./routes/customers'));  // ← this line is missing entirely
 app.use('/api/followups',  require('./routes/followups'));
@@ -117,54 +116,60 @@ app.listen(PORT, () => {
   }
   console.log('');
 });
-// ─── Background geocode job ───────────────────────────────────────────────────
+// ─── Background geocode job (runs for every tenant schema) ───────────────────
 const https = require('https');
-const { pool } = require('./db/schema');
+const { getAllSchemas, makeDb } = require('./db/tenant');
 
 async function geocodeMissing() {
-  let companies = [];
-  try {
-    const result = await pool.query(`
-      SELECT id, address, city, state FROM companies
-      WHERE status = 'active'
-        AND address IS NOT NULL AND address != ''
-        AND (lat IS NULL OR lng IS NULL)
-    `);
-    companies = result.rows;
-  } catch(e) { return; }
+  let schemas;
+  try { schemas = await getAllSchemas(); } catch(e) { return; }
 
-  if (companies.length === 0) return;
-  console.log(`[geocode] ${companies.length} companies missing coordinates — starting background job`);
+  for (const schema of schemas) {
+    const db = makeDb(schema);
+    let companies = [];
+    try {
+      const result = await db.query(`
+        SELECT id, address, city, state FROM companies
+        WHERE status = 'active'
+          AND address IS NOT NULL AND address != ''
+          AND (lat IS NULL OR lng IS NULL)
+      `);
+      companies = result.rows;
+    } catch(e) { continue; }
 
-  let i = 0;
-  const interval = setInterval(() => {
-    if (i >= companies.length) {
-      clearInterval(interval);
-      console.log('[geocode] all done');
-      return;
-    }
-    const co = companies[i++];
-    const cleanAddr = co.address.replace(/\s*(suite|ste\.?|unit|apt\.?|floor|fl\.?|#)\s*\S+/gi, '').trim();
-    const q = encodeURIComponent(`${cleanAddr}, ${co.city || 'Charlotte'}, ${co.state || 'NC'}`);
-    https.get(
-      `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1&countrycodes=us`,
-      { headers: { 'User-Agent': 'SuperEagleFleetCRM/1.0', 'Accept-Language': 'en' } },
-      res => {
-        let raw = '';
-        res.on('data', chunk => raw += chunk);
-        res.on('end', () => {
-          try {
-            const results = JSON.parse(raw);
-            if (results.length > 0) {
-              pool.query('UPDATE companies SET lat = $1, lng = $2 WHERE id = $3',
-                [parseFloat(results[0].lat), parseFloat(results[0].lon), co.id]);
-              console.log(`[geocode] ✓ ${co.id}`);
-            }
-          } catch(_) {}
-        });
+    if (companies.length === 0) continue;
+    console.log(`[geocode:${schema}] ${companies.length} companies missing coordinates`);
+
+    let i = 0;
+    const interval = setInterval(() => {
+      if (i >= companies.length) {
+        clearInterval(interval);
+        console.log(`[geocode:${schema}] done`);
+        return;
       }
-    ).on('error', () => {});
-  }, 1100);
+      const co = companies[i++];
+      const cleanAddr = co.address.replace(/\s*(suite|ste\.?|unit|apt\.?|floor|fl\.?|#)\s*\S+/gi, '').trim();
+      const q = encodeURIComponent(`${cleanAddr}, ${co.city || 'Charlotte'}, ${co.state || 'NC'}`);
+      https.get(
+        `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1&countrycodes=us`,
+        { headers: { 'User-Agent': 'SuperEagleFleetCRM/1.0', 'Accept-Language': 'en' } },
+        res => {
+          let raw = '';
+          res.on('data', chunk => raw += chunk);
+          res.on('end', () => {
+            try {
+              const results = JSON.parse(raw);
+              if (results.length > 0) {
+                db.query('UPDATE companies SET lat = $1, lng = $2 WHERE id = $3',
+                  [parseFloat(results[0].lat), parseFloat(results[0].lon), co.id]);
+                console.log(`[geocode:${schema}] ✓ ${co.id}`);
+              }
+            } catch(_) {}
+          });
+        }
+      ).on('error', () => {});
+    }, 1100);
+  }
 }
 
 setTimeout(geocodeMissing, 5000);
@@ -172,17 +177,23 @@ setInterval(geocodeMissing, 24*60*60*1000);
 
 // ─── One-time backfill: create follow-up records for companies that have none ──
 async function backfillFollowupDates() {
-  try {
-    const { rowCount } = await pool.query(`
-      INSERT INTO follow_ups (source_type, entity_id, company_id_str, entity_name, phone, due_date, next_action)
-      SELECT 'company', c.id, c.company_id, c.name, c.main_phone, LEFT(c.created_at, 10), 'Call'
-      FROM companies c
-      WHERE c.status = 'active'
-        AND NOT EXISTS (SELECT 1 FROM follow_ups fu WHERE fu.source_type='company' AND fu.entity_id=c.id)
-      ON CONFLICT (source_type, entity_id) DO NOTHING
-    `);
-    if (rowCount > 0) console.log(`[backfill] created follow-up records for ${rowCount} companies`);
-  } catch (e) { console.error('[backfill] error:', e.message); }
+  let schemas;
+  try { schemas = await getAllSchemas(); } catch(e) { return; }
+
+  for (const schema of schemas) {
+    const db = makeDb(schema);
+    try {
+      const { rowCount } = await db.query(`
+        INSERT INTO follow_ups (source_type, entity_id, company_id_str, entity_name, phone, due_date, next_action)
+        SELECT 'company', c.id, c.company_id, c.name, c.main_phone, LEFT(c.created_at, 10), 'Call'
+        FROM companies c
+        WHERE c.status = 'active'
+          AND NOT EXISTS (SELECT 1 FROM follow_ups fu WHERE fu.source_type='company' AND fu.entity_id=c.id)
+        ON CONFLICT (source_type, entity_id) DO NOTHING
+      `);
+      if (rowCount > 0) console.log(`[backfill:${schema}] created ${rowCount} follow-up records`);
+    } catch (e) { console.error(`[backfill:${schema}] error:`, e.message); }
+  }
 }
 setTimeout(backfillFollowupDates, 4000);
 module.exports = app;

@@ -3,7 +3,6 @@
  */
 
 const express = require('express');
-const { pool } = require('../db/schema');
 const { requireAuth } = require('../middleware/auth');
 const { appendCallLog, rebuildFollowUps, cancelOldFollowUps, scheduleNextAction } = require('./shared');
 
@@ -12,7 +11,7 @@ router.use(requireAuth);
 
 router.get('/', async (req, res) => {
   try {
-    const { rows } = await pool.query(`
+    const { rows } = await req.db.query(`
       SELECT f.*,
         CASE WHEN f.due_date < current_date THEN 1 ELSE 0 END AS is_overdue
       FROM follow_ups f
@@ -25,7 +24,7 @@ router.get('/', async (req, res) => {
 
 router.get('/all', async (req, res) => {
   try {
-    const { rows } = await pool.query(`
+    const { rows } = await req.db.query(`
       SELECT f.*,
         CASE WHEN f.due_date < current_date THEN 1 ELSE 0 END AS is_overdue,
         CASE WHEN f.due_date = current_date THEN 1 ELSE 0 END AS is_due_today
@@ -39,7 +38,7 @@ router.get('/all', async (req, res) => {
 
 router.get('/counts', async (req, res) => {
   try {
-    const { rows } = await pool.query(`
+    const { rows } = await req.db.query(`
       SELECT
         COUNT(*) as total,
         SUM(CASE WHEN due_date < current_date THEN 1 ELSE 0 END) as overdue,
@@ -53,7 +52,7 @@ router.get('/counts', async (req, res) => {
 
 router.put('/:id', async (req, res) => {
   try {
-    const { rows } = await pool.query('SELECT * FROM follow_ups WHERE id = $1', [req.params.id]);
+    const { rows } = await req.db.query('SELECT * FROM follow_ups WHERE id = $1', [req.params.id]);
     if (!rows[0]) return res.status(404).json({ error: 'Follow-up not found.' });
 
     const { working_notes, is_locked } = req.body;
@@ -64,7 +63,7 @@ router.put('/:id', async (req, res) => {
     if (!updates.length) return res.status(400).json({ error: 'Nothing to update.' });
 
     values.push(req.params.id);
-    const { rows: updated } = await pool.query(
+    const { rows: updated } = await req.db.query(
       `UPDATE follow_ups SET ${updates.join(', ')} WHERE id = $${i} RETURNING *`,
       values
     );
@@ -74,24 +73,24 @@ router.put('/:id', async (req, res) => {
 
 router.delete('/:id', async (req, res) => {
   try {
-    const { rows } = await pool.query('SELECT * FROM follow_ups WHERE id = $1', [req.params.id]);
+    const { rows } = await req.db.query('SELECT * FROM follow_ups WHERE id = $1', [req.params.id]);
     if (!rows[0]) return res.status(404).json({ error: 'Follow-up not found.' });
     if (rows[0].is_locked) return res.status(403).json({ error: 'This row is locked. Unlock it first.' });
-    await pool.query('DELETE FROM follow_ups WHERE id = $1', [req.params.id]);
+    await req.db.query('DELETE FROM follow_ups WHERE id = $1', [req.params.id]);
     res.json({ message: 'Follow-up removed.' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 router.post('/refresh', async (req, res) => {
   try {
-    const result = await rebuildFollowUps();
+    const result = await rebuildFollowUps(req.db);
     res.json({ message: 'Follow-ups refreshed.', ...result });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ── POST /api/followups/:id/complete ─────────────────────────────────────────
 router.post('/:id/complete', async (req, res) => {
-  const client = await pool.connect();
+  const client = await req.db.connect();
   try {
     const { rows: fuRows } = await client.query('SELECT * FROM follow_ups WHERE id = $1', [req.params.id]);
     const followUp = fuRows[0];
@@ -119,7 +118,7 @@ router.post('/:id/complete', async (req, res) => {
 
     await client.query('BEGIN');
 
-    const logEntry = await appendCallLog({
+    const logEntry = await appendCallLog(req.db, {
       log_type: 'company', entity_id: company.id, company_id_str: company.company_id,
       entity_name: company.name, phone: followUp.phone || company.main_phone,
       direct_line: direct_line || followUp.direct_line || null,
@@ -180,7 +179,7 @@ router.post('/:id/complete', async (req, res) => {
       }
     }
 
-    const { next_action_date: nad } = await scheduleNextAction(pool, {
+    const { next_action_date: nad } = await scheduleNextAction(req.db, {
       company, contact_type, next_action, next_action_date_override,
       contact_name: contact_name||followUp.contact_name||null,
       direct_line:  direct_line||followUp.direct_line||null,

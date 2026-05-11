@@ -5,7 +5,6 @@
 
 const express   = require('express');
 const router    = express.Router();
-const { pool }  = require('../db/schema');
 const { requireAuth: auth } = require('../middleware/auth');
 const Anthropic = require('@anthropic-ai/sdk');
 
@@ -159,7 +158,7 @@ function getStatesInRadius(lat, lng, radiusMiles) {
 // ── GET /api/fleetfinder/settings ────────────────────────────────────────────
 router.get('/settings', auth, async (req, res) => {
   try {
-    const result = await pool.query(
+    const result = await req.db.query(
       `SELECT key, value FROM config_settings WHERE key LIKE 'ff_%' OR key IN ('shop_lat','shop_lng')`
     );
     const settings = {};
@@ -180,7 +179,7 @@ router.put('/settings', auth, async (req, res) => {
     for (const [key, value] of Object.entries(updates)) {
       if (!key.startsWith('ff_')) continue;
       const val = typeof value === 'string' ? value : JSON.stringify(value);
-      await pool.query(
+      await req.db.query(
         `INSERT INTO config_settings (key, value, label) VALUES ($1, $2, $3)
          ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = now()::text`,
         [key, val, key]
@@ -196,8 +195,8 @@ router.put('/settings', auth, async (req, res) => {
 router.get('/budget', auth, async (req, res) => {
   try {
     const [budgetRow, spentRow] = await Promise.all([
-      pool.query(`SELECT value FROM config_settings WHERE key = 'ff_monthly_budget'`),
-      pool.query(
+      req.db.query(`SELECT value FROM config_settings WHERE key = 'ff_monthly_budget'`),
+      req.db.query(
         `SELECT COALESCE(SUM(cost_usd), 0) as spent
          FROM fleet_finder_cost_log
          WHERE ran_at >= date_trunc('month', now())::text`
@@ -214,7 +213,7 @@ router.get('/budget', auth, async (req, res) => {
 // ── GET /api/fleetfinder/cost-log ────────────────────────────────────────────
 router.get('/cost-log', auth, async (req, res) => {
   try {
-    const result = await pool.query(
+    const result = await req.db.query(
       `SELECT * FROM fleet_finder_cost_log ORDER BY ran_at DESC LIMIT 50`
     );
     res.json(result.rows);
@@ -230,7 +229,7 @@ router.get('/test-search', auth, async (req, res) => {
 
   let anthropicKey = process.env.ANTHROPIC_API_KEY;
   if (!anthropicKey) {
-    const keyRow = await pool.query(`SELECT value FROM config_settings WHERE key = 'ff_anthropic_key'`);
+    const keyRow = await req.db.query(`SELECT value FROM config_settings WHERE key = 'ff_anthropic_key'`);
     anthropicKey = keyRow.rows[0]?.value?.trim() || '';
   }
   if (!anthropicKey) {
@@ -325,7 +324,7 @@ router.get('/test-search', auth, async (req, res) => {
 // Returns dead CRM companies (the single source of truth for dismissed leads)
 router.get('/dismissed', auth, async (req, res) => {
   try {
-    const result = await pool.query(
+    const result = await req.db.query(
       `SELECT id, name, address, city, state, main_phone AS phone, created_at AS dismissed_at
        FROM companies WHERE status = 'active' AND company_status = 'dead'
        ORDER BY created_at DESC`
@@ -341,7 +340,7 @@ router.get('/dismissed', auth, async (req, res) => {
 router.post('/dismiss', auth, async (req, res) => {
   try {
     const { name, address, phone, city, state, website, zip } = req.body;
-    const result = await pool.query(
+    const result = await req.db.query(
       `INSERT INTO companies (name, address, city, state, zip, main_phone, website, status, company_status, pipeline_stage, created_at, updated_at, stage_updated_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7,'active','dead','dead',
          to_char(now(),'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
@@ -380,7 +379,7 @@ router.post('/check-duplicate', auth, async (req, res) => {
     const normAddr    = normalizeAddress(address || '');
     const normPhone   = normalizePhone(phone || '');
 
-    const companies = await pool.query(
+    const companies = await req.db.query(
       `SELECT id, company_id, name, address, city, state, main_phone,
               is_multi_location, location_name, location_group
        FROM companies WHERE status = 'active'`
@@ -428,7 +427,7 @@ router.post('/check-chain', auth, async (req, res) => {
     if (!chain_name) return res.json({ found: false });
 
     const normChain = chain_name.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
-    const result = await pool.query(
+    const result = await req.db.query(
       `SELECT name, city, state, location_group
        FROM companies
        WHERE status = 'active'
@@ -471,7 +470,7 @@ router.post('/search', auth, async (req, res) => {
     // Resolve API key — env var takes priority, then CRM settings
     let anthropicKey = process.env.ANTHROPIC_API_KEY;
     if (!anthropicKey) {
-      const keyRow = await pool.query(`SELECT value FROM config_settings WHERE key = 'ff_anthropic_key'`);
+      const keyRow = await req.db.query(`SELECT value FROM config_settings WHERE key = 'ff_anthropic_key'`);
       anthropicKey = keyRow.rows[0]?.value?.trim() || '';
     }
     if (!anthropicKey) {
@@ -481,8 +480,8 @@ router.post('/search', auth, async (req, res) => {
   try {
     // ── 1. Budget check ───────────────────────────────────────────────────────
     const [budgetRow, spentRow] = await Promise.all([
-      pool.query(`SELECT value FROM config_settings WHERE key = 'ff_monthly_budget'`),
-      pool.query(
+      req.db.query(`SELECT value FROM config_settings WHERE key = 'ff_monthly_budget'`),
+      req.db.query(
         `SELECT COALESCE(SUM(cost_usd), 0) as spent
          FROM fleet_finder_cost_log
          WHERE ran_at >= date_trunc('month', now())::text`
@@ -502,8 +501,8 @@ router.post('/search', auth, async (req, res) => {
 
     // ── 3. Pull existing companies for dedup ──────────────────────────────────
     const [existingRes, deadRes] = await Promise.all([
-      pool.query(`SELECT id, name, address, city, main_phone FROM companies WHERE status = 'active' AND company_status != 'dead'`),
-      pool.query(`SELECT name, address, city FROM companies WHERE status = 'active' AND company_status = 'dead'`),
+      req.db.query(`SELECT id, name, address, city, main_phone FROM companies WHERE status = 'active' AND company_status != 'dead'`),
+      req.db.query(`SELECT name, address, city FROM companies WHERE status = 'active' AND company_status = 'dead'`),
     ]);
     const existing = existingRes;
     const existingNames = existing.rows.map(r => normalizeName(r.name)).filter(Boolean);
@@ -515,7 +514,7 @@ router.post('/search', auth, async (req, res) => {
     ].filter(Boolean).join('\n');
 
     // ── 4. Build dismissed key set from dead CRM companies ────────────────────
-    await pool.query(`DELETE FROM fleet_finder_seen WHERE expires_at < now()::text`);
+    await req.db.query(`DELETE FROM fleet_finder_seen WHERE expires_at < now()::text`);
     const dismissedKeys = new Set(
       deadRes.rows.map(r => `${normalizeName(r.name)}|${normalizeAddress(r.address || '')}`)
     );
@@ -934,7 +933,7 @@ Required format per company:
 
       // Log as "seen" only for genuinely new companies
       if (!co.already_in_crm && !co.new_chain_location) {
-        await pool.query(
+        await req.db.query(
           `INSERT INTO fleet_finder_seen (name, address, city, state, expires_at)
            VALUES ($1, $2, $3, $4, $5)
            ON CONFLICT DO NOTHING`,
@@ -971,7 +970,7 @@ Required format per company:
        webSearchCount                 * PRICE_WEB_SEARCH_PER_USE
       ).toFixed(5)
     );
-    await pool.query(
+    await req.db.query(
       `INSERT INTO fleet_finder_cost_log
          (search_label, industries, radius_miles, result_count, input_tokens, output_tokens, cost_usd)
        VALUES ($1, $2, $3, $4, $5, $6, $7)`,

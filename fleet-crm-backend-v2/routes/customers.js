@@ -3,7 +3,6 @@
  */
 
 const express = require('express');
-const { pool } = require('../db/schema');
 const { requireAuth } = require('../middleware/auth');
 const { calcFollowUpDate, appendCallLog, cancelOldFollowUps } = require('./shared');
 
@@ -29,7 +28,7 @@ router.get('/', async (req, res) => {
     }
     sql += ' ORDER BY last_name ASC, first_name ASC';
 
-    const { rows } = await pool.query(sql, params);
+    const { rows } = await req.db.query(sql, params);
     res.json(rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -37,11 +36,11 @@ router.get('/', async (req, res) => {
 // ── GET /api/customers/:id ────────────────────────────────────────────────────
 router.get('/:id', async (req, res) => {
   try {
-    const { rows } = await pool.query('SELECT * FROM customers WHERE id = $1', [req.params.id]);
+    const { rows } = await req.db.query('SELECT * FROM customers WHERE id = $1', [req.params.id]);
     const customer = rows[0];
     if (!customer) return res.status(404).json({ error: 'Customer not found.' });
 
-    const { rows: statsRows } = await pool.query(
+    const { rows: statsRows } = await req.db.query(
       "SELECT COUNT(*) as total_calls, MAX(logged_at) as last_contacted FROM call_log WHERE entity_id = $1 AND log_type = 'customer'",
       [req.params.id]
     );
@@ -62,12 +61,12 @@ router.post('/', async (req, res) => {
     if (!phone) return res.status(400).json({ error: 'Phone number is required.' });
 
     const normalized = phone.replace(/\D/g, '');
-    const existing = await pool.query('SELECT id FROM customers WHERE phone = $1', [normalized]);
+    const existing = await req.db.query('SELECT id FROM customers WHERE phone = $1', [normalized]);
     if (existing.rows[0]) {
       return res.status(409).json({ error: 'A customer with that phone number already exists.', existing_id: existing.rows[0].id });
     }
 
-    const { rows } = await pool.query(`
+    const { rows } = await req.db.query(`
       INSERT INTO customers
         (first_name, last_name, phone, email, lifetime_visits, lifetime_spend,
          lifetime_gp_per_hr, last_visit_date, last_visit_ro_total, marketing_source, notes)
@@ -90,7 +89,7 @@ router.post('/', async (req, res) => {
 // ── PUT /api/customers/:id ────────────────────────────────────────────────────
 router.put('/:id', async (req, res) => {
   try {
-    const { rows } = await pool.query('SELECT * FROM customers WHERE id = $1', [req.params.id]);
+    const { rows } = await req.db.query('SELECT * FROM customers WHERE id = $1', [req.params.id]);
     if (!rows[0]) return res.status(404).json({ error: 'Customer not found.' });
 
     const fields = [
@@ -112,7 +111,7 @@ router.put('/:id', async (req, res) => {
     updates.push(`updated_at = to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`);
     values.push(req.params.id);
 
-    const { rows: updated } = await pool.query(
+    const { rows: updated } = await req.db.query(
       `UPDATE customers SET ${updates.join(', ')} WHERE id = $${i} RETURNING *`,
       values
     );
@@ -123,7 +122,7 @@ router.put('/:id', async (req, res) => {
 // ── GET /api/customers/:id/history ───────────────────────────────────────────
 router.get('/:id/history', async (req, res) => {
   try {
-    const { rows } = await pool.query(`
+    const { rows } = await req.db.query(`
       SELECT cl.*, u.name AS logged_by_display
       FROM call_log cl
       LEFT JOIN users u ON u.id = cl.logged_by
@@ -137,7 +136,7 @@ router.get('/:id/history', async (req, res) => {
 // ── GET /api/customers/queue/list ────────────────────────────────────────────
 router.get('/queue/list', async (req, res) => {
   try {
-    const { rows } = await pool.query(`
+    const { rows } = await req.db.query(`
       SELECT
         q.*,
         c.first_name,
@@ -161,15 +160,15 @@ router.post('/queue', async (req, res) => {
     const { customer_id } = req.body;
     if (!customer_id) return res.status(400).json({ error: 'customer_id is required.' });
 
-    const { rows } = await pool.query('SELECT * FROM customers WHERE id = $1', [customer_id]);
+    const { rows } = await req.db.query('SELECT * FROM customers WHERE id = $1', [customer_id]);
     if (!rows[0]) return res.status(404).json({ error: 'Customer not found.' });
 
-    const existing = await pool.query(
+    const existing = await req.db.query(
       "SELECT id FROM calling_queue WHERE queue_type = 'customer' AND entity_id = $1", [customer_id]
     );
     if (existing.rows[0]) return res.status(409).json({ error: 'Customer is already in the calling queue.' });
 
-    const { rows: inserted } = await pool.query(
+    const { rows: inserted } = await req.db.query(
       "INSERT INTO calling_queue (queue_type, entity_id, added_by) VALUES ('customer', $1, $2) RETURNING *",
       [customer_id, req.user.id]
     );
@@ -180,7 +179,7 @@ router.post('/queue', async (req, res) => {
 // ── DELETE /api/customers/queue/:queueId ─────────────────────────────────────
 router.delete('/queue/:queueId', async (req, res) => {
   try {
-    const result = await pool.query(
+    const result = await req.db.query(
       "DELETE FROM calling_queue WHERE id = $1 AND queue_type = 'customer'", [req.params.queueId]
     );
     if (result.rowCount === 0) return res.status(404).json({ error: 'Queue entry not found.' });
@@ -191,12 +190,12 @@ router.delete('/queue/:queueId', async (req, res) => {
 // ── POST /api/customers/queue/:queueId/complete ───────────────────────────────
 router.post('/queue/:queueId/complete', async (req, res) => {
   try {
-    const { rows: qRows } = await pool.query(
+    const { rows: qRows } = await req.db.query(
       "SELECT * FROM calling_queue WHERE id = $1 AND queue_type = 'customer'", [req.params.queueId]
     );
     if (!qRows[0]) return res.status(404).json({ error: 'Queue entry not found.' });
 
-    const { rows: cRows } = await pool.query('SELECT * FROM customers WHERE id = $1', [qRows[0].entity_id]);
+    const { rows: cRows } = await req.db.query('SELECT * FROM customers WHERE id = $1', [qRows[0].entity_id]);
     const customer = cRows[0];
     if (!customer) return res.status(404).json({ error: 'Customer not found.' });
 
@@ -205,17 +204,17 @@ router.post('/queue/:queueId/complete', async (req, res) => {
     if (!next_action)  return res.status(400).json({ error: 'next_action is required (Call/Stop).' });
     if (next_action === 'Visit') return res.status(400).json({ error: 'Customers cannot be visited.' });
 
-    const { rows: priorRows } = await pool.query(
+    const { rows: priorRows } = await req.db.query(
       "SELECT COUNT(*) as cnt FROM call_log WHERE entity_id = $1 AND log_type = 'customer'", [customer.id]
     );
     const priorAttempts = parseInt(priorRows[0].cnt);
 
     let next_action_date = null;
     if (next_action === 'Call') {
-      next_action_date = await calcFollowUpDate('customer', contact_type);
+      next_action_date = await calcFollowUpDate(req.db, 'customer', contact_type);
     }
 
-    const logEntry = await appendCallLog({
+    const logEntry = await appendCallLog(req.db, {
       log_type: 'customer',
       entity_id: customer.id,
       entity_name: `${customer.first_name} ${customer.last_name}`,
@@ -237,8 +236,8 @@ router.post('/queue/:queueId/complete', async (req, res) => {
     });
 
     if (next_action === 'Call' && next_action_date) {
-      await cancelOldFollowUps('customer', customer.id);
-      await pool.query(`
+      await cancelOldFollowUps(req.db, 'customer', customer.id);
+      await req.db.query(`
         INSERT INTO follow_ups
           (source_type, entity_id, entity_name, phone, contact_name, due_date, source_log_id)
         VALUES ('customer', $1, $2, $3, $4, $5, $6)
@@ -254,7 +253,7 @@ router.post('/queue/:queueId/complete', async (req, res) => {
       ]);
     }
 
-    await pool.query('DELETE FROM calling_queue WHERE id = $1', [req.params.queueId]);
+    await req.db.query('DELETE FROM calling_queue WHERE id = $1', [req.params.queueId]);
 
     res.json({
       message: 'Call logged successfully.',
@@ -274,7 +273,7 @@ router.post('/import', async (req, res) => {
   }
 
   const results = { imported: 0, skipped: 0, already_called: 0, errors: [] };
-  const client = await pool.connect();
+  const client = await req.db.connect();
 
   try {
     const { rows: calledRows } = await client.query(

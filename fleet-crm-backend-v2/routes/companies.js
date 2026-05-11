@@ -1,23 +1,23 @@
 /**
- * FLEET CRM — COMPANY ROUTES (PostgreSQL)
+ * FLEET CRM — COMPANY ROUTES (PostgreSQL, multi-tenant)
  */
 
 const express = require('express');
-const { pool } = require('../db/schema');
 const { requireAuth } = require('../middleware/auth');
+const { makeDb } = require('../db/tenant');
 const { getNextCompanyId, appendCallLog, clearAllCompanyQueues, scheduleNextAction } = require('./shared');
 
 const router = express.Router();
 router.use(requireAuth);
 
-// ── Geocode queue ─────────────────────────────────────────────────────────────
+// ── Geocode queue (background worker, needs schema to scope the UPDATE) ───────
 const geocodeQueue = [];
 let geocodeWorkerRunning = false;
 
 function geocodeWorker() {
   if (geocodeQueue.length === 0) { geocodeWorkerRunning = false; return; }
   geocodeWorkerRunning = true;
-  const { companyId, address, city } = geocodeQueue.shift();
+  const { companyId, address, city, schema } = geocodeQueue.shift();
   const cleanAddr = address.replace(/\s*(suite|ste\.?|unit|apt\.?|floor|fl\.?|#)\s*\S+/gi, '').trim();
   const full = encodeURIComponent(`${cleanAddr}, ${city || 'Charlotte'}, NC`);
   require('https').get(
@@ -29,7 +29,7 @@ function geocodeWorker() {
         try {
           const results = JSON.parse(raw);
           if (results.length > 0) {
-            pool.query('UPDATE companies SET lat=$1, lng=$2 WHERE id=$3',
+            makeDb(schema).query('UPDATE companies SET lat=$1, lng=$2 WHERE id=$3',
               [parseFloat(results[0].lat), parseFloat(results[0].lon), companyId]).catch(()=>{});
           }
         } catch(_) {}
@@ -39,9 +39,9 @@ function geocodeWorker() {
   ).on('error', () => setTimeout(geocodeWorker, 1100));
 }
 
-function geocodeAndSave(companyId, address, city) {
+function geocodeAndSave(companyId, address, city, schema) {
   if (!address) return;
-  geocodeQueue.push({ companyId, address, city });
+  geocodeQueue.push({ companyId, address, city, schema });
   if (!geocodeWorkerRunning) geocodeWorker();
 }
 
@@ -66,13 +66,14 @@ function contactDisplayName(val) {
   const name = String(val || '').trim();
   return name || 'Unnamed Contact';
 }
+
 // ═══════════════════════════════════════════════════════
 // CALLING QUEUE
 // ═══════════════════════════════════════════════════════
 
 router.get('/queue/list', async (req, res) => {
   try {
-    const { rows } = await pool.query(`
+    const { rows } = await req.db.query(`
       SELECT q.*, c.name AS company_name, c.company_id AS company_id_str, c.main_phone, c.industry, c.address, c.city,
         cc.name AS preferred_contact_name, cc.direct_line AS preferred_direct_line,
         cc.email AS preferred_email, cc.role_title AS preferred_role
@@ -90,15 +91,15 @@ router.post('/queue', async (req, res) => {
   try {
     const { company_id } = req.body;
     if (!company_id) return res.status(400).json({ error: 'company_id is required.' });
-    const { rows: coRows } = await pool.query('SELECT * FROM companies WHERE id=$1', [company_id]);
+    const { rows: coRows } = await req.db.query('SELECT * FROM companies WHERE id=$1', [company_id]);
     if (!coRows[0]) return res.status(404).json({ error: 'Company not found.' });
-    const { rows: ex } = await pool.query("SELECT id FROM calling_queue WHERE queue_type='company' AND entity_id=$1", [company_id]);
+    const { rows: ex } = await req.db.query("SELECT id FROM calling_queue WHERE queue_type='company' AND entity_id=$1", [company_id]);
     if (ex[0]) return res.status(409).json({ error: 'Company is already in the calling queue.' });
-    const { rows } = await pool.query("INSERT INTO calling_queue (queue_type,entity_id,added_by) VALUES ('company',$1,$2) RETURNING *", [company_id, req.user.id]);
-    await pool.query("UPDATE companies SET pipeline_stage='call' WHERE id=$1 AND pipeline_stage='new'", [company_id]);
+    const { rows } = await req.db.query("INSERT INTO calling_queue (queue_type,entity_id,added_by) VALUES ('company',$1,$2) RETURNING *", [company_id, req.user.id]);
+    await req.db.query("UPDATE companies SET pipeline_stage='call' WHERE id=$1 AND pipeline_stage='new'", [company_id]);
     const co = coRows[0];
-    const todayStr = new Date().toISOString().split('T')[0]; // gives YYYY-MM-DD in local time
-    await pool.query(`
+    const todayStr = new Date().toISOString().split('T')[0];
+    await req.db.query(`
       INSERT INTO follow_ups (source_type, entity_id, company_id_str, entity_name, phone, due_date, next_action)
       VALUES ('company', $1, $2, $3, $4, $5, 'Call')
       ON CONFLICT (source_type, entity_id) DO NOTHING
@@ -109,16 +110,16 @@ router.post('/queue', async (req, res) => {
 
 router.delete('/queue/:queueId', async (req, res) => {
   try {
-    const { rowCount } = await pool.query("DELETE FROM calling_queue WHERE id=$1 AND queue_type='company'", [req.params.queueId]);
+    const { rowCount } = await req.db.query("DELETE FROM calling_queue WHERE id=$1 AND queue_type='company'", [req.params.queueId]);
     if (rowCount === 0) return res.status(404).json({ error: 'Queue entry not found.' });
     res.json({ message: 'Removed from queue.' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
+
 // ═══════════════════════════════════════════════════════
 // COMPANY PROFILES
 // ═══════════════════════════════════════════════════════
 
-// GET /api/companies
 router.get('/', async (req, res) => {
   try {
     const { search, industry, status = 'active', company_status, pipeline_stage, last_contacted } = req.query;
@@ -136,7 +137,7 @@ router.get('/', async (req, res) => {
       if (statuses.length === 1) {
         params.push(statuses[0]); where += ` AND c.company_status = $${params.length}`;
       } else if (statuses.length > 1) {
-        const placeholders = statuses.map((s, i) => { params.push(s); return `$${params.length}`; }).join(',');
+        const placeholders = statuses.map(s => { params.push(s); return `$${params.length}`; }).join(',');
         where += ` AND c.company_status IN (${placeholders})`;
       }
     }
@@ -146,7 +147,7 @@ router.get('/', async (req, res) => {
     else if (last_contacted === 'this_month') { where += ` AND cl.logged_at >= now() - interval '30 days'`; }
     else if (last_contacted === 'stale')      { where += ` AND (cl.logged_at IS NULL OR cl.logged_at < now() - interval '30 days')`; }
 
-    const { rows } = await pool.query(`
+    const { rows } = await req.db.query(`
       SELECT c.*,
         cc.name           as preferred_contact_name,
         cc.role_title     as preferred_contact_role,
@@ -173,10 +174,9 @@ router.get('/', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// GET /api/companies/nearby-data
 router.get('/nearby-data', async (req, res) => {
   try {
-    const { rows } = await pool.query(`
+    const { rows } = await req.db.query(`
       SELECT c.id, c.company_id, c.name, c.main_phone, c.industry,
         c.address, c.city, c.state, c.zip, c.lat, c.lng,
         c.pipeline_stage,
@@ -205,12 +205,11 @@ router.get('/nearby-data', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// GET /api/companies/search-name
 router.get('/search-name', async (req, res) => {
   try {
     const { q } = req.query;
     if (!q || q.trim().length < 2) return res.json([]);
-    const { rows } = await pool.query(`
+    const { rows } = await req.db.query(`
       SELECT id, name, main_phone, address, city, is_multi_location, location_name, location_group
       FROM companies WHERE name ILIKE $1 AND status='active'
       ORDER BY name ASC LIMIT 10
@@ -219,28 +218,27 @@ router.get('/search-name', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// GET /api/companies/:id
 router.get('/:id', async (req, res) => {
   try {
-    const { rows: coRows } = await pool.query('SELECT * FROM companies WHERE id=$1', [req.params.id]);
+    const { rows: coRows } = await req.db.query('SELECT * FROM companies WHERE id=$1', [req.params.id]);
     const company = coRows[0];
     if (!company) return res.status(404).json({ error: 'Company not found.' });
 
     const [contactsRes, statsRes, followupRes, branchRes, queueRes, followUpRes] = await Promise.all([
-      pool.query('SELECT * FROM company_contacts WHERE company_id=$1 ORDER BY is_preferred DESC, name ASC', [company.company_id]),
-      pool.query(`SELECT COUNT(*) as total_calls, MAX(logged_at) as last_contacted, MIN(logged_at) as first_contacted,
+      req.db.query('SELECT * FROM company_contacts WHERE company_id=$1 ORDER BY is_preferred DESC, name ASC', [company.company_id]),
+      req.db.query(`SELECT COUNT(*) as total_calls, MAX(logged_at) as last_contacted, MIN(logged_at) as first_contacted,
         SUM(CASE WHEN action_type!='Move' THEN 1 ELSE 0 END) as total_contacts
         FROM call_log WHERE entity_id=$1 AND log_type='company'`, [req.params.id]),
-      pool.query(`SELECT due_date, next_action FROM follow_ups WHERE entity_id=$1 AND source_type='company' AND is_locked=0 ORDER BY due_date ASC LIMIT 1`, [req.params.id]),
+      req.db.query(`SELECT due_date, next_action FROM follow_ups WHERE entity_id=$1 AND source_type='company' AND is_locked=0 ORDER BY due_date ASC LIMIT 1`, [req.params.id]),
       company.location_group
-        ? pool.query(`SELECT c.id, c.name, c.location_name, c.main_phone, c.address, c.city,
+        ? req.db.query(`SELECT c.id, c.name, c.location_name, c.main_phone, c.address, c.city,
             cl.contact_type AS last_contact_type, cl.logged_at AS last_contacted
             FROM companies c
             LEFT JOIN (SELECT DISTINCT ON (entity_id) entity_id, contact_type, logged_at FROM call_log WHERE log_type='company' ORDER BY entity_id, id DESC) cl ON cl.entity_id=c.id
             WHERE c.location_group=$1 AND c.id!=$2 ORDER BY c.name ASC`, [company.location_group, company.id])
         : Promise.resolve({ rows: [] }),
-      pool.query("SELECT id, added_at FROM calling_queue WHERE queue_type='company' AND entity_id=$1", [req.params.id]),
-      pool.query("SELECT due_date, next_action FROM follow_ups WHERE entity_id=$1 AND source_type='company' AND is_locked=0 ORDER BY id DESC LIMIT 1", [req.params.id]),
+      req.db.query("SELECT id, added_at FROM calling_queue WHERE queue_type='company' AND entity_id=$1", [req.params.id]),
+      req.db.query("SELECT due_date, next_action FROM follow_ups WHERE entity_id=$1 AND source_type='company' AND is_locked=0 ORDER BY id DESC LIMIT 1", [req.params.id]),
     ]);
 
     res.json({
@@ -255,30 +253,29 @@ router.get('/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// POST /api/companies
 router.post('/', async (req, res) => {
   try {
     const { name, main_phone, industry, address, city, state, zip, website, notes, fleet_research, is_multi_location, location_name, location_group, pipeline_stage } = req.body;
     if (!name) return res.status(400).json({ error: 'Company name is required.' });
 
     if (main_phone) {
-      const { rows: dupe } = await pool.query('SELECT id FROM companies WHERE main_phone=$1', [main_phone]);
+      const { rows: dupe } = await req.db.query('SELECT id FROM companies WHERE main_phone=$1', [main_phone]);
       if (dupe[0]) return res.status(409).json({ error: 'A company with that phone number already exists.', existing_id: dupe[0].id });
     }
 
-    const company_id = await getNextCompanyId();
+    const company_id = await getNextCompanyId(req.db);
     const fleetResearchJson = fleet_research ? (typeof fleet_research === 'string' ? fleet_research : JSON.stringify(fleet_research)) : null;
     const stage = pipeline_stage || 'new';
-    const { rows } = await pool.query(`
+    const { rows } = await req.db.query(`
       INSERT INTO companies (company_id, name, main_phone, industry, address, city, state, zip, website, notes, fleet_research, is_multi_location, location_name, location_group, pipeline_stage)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *
     `, [company_id, name.trim(), main_phone||null, industry||null, address||null, city||null,
         state||null, zip||null, website||null, notes||null, fleetResearchJson,
         is_multi_location ? 1 : 0, location_name||null, location_group||name.trim(), stage]);
-    geocodeAndSave(rows[0].id, address, city);
+    geocodeAndSave(rows[0].id, address, city, req.user.schema);
     if (stage !== 'dead') {
       const todayStr = new Date().toLocaleDateString('en-CA');
-      await pool.query(
+      await req.db.query(
         "INSERT INTO follow_ups (source_type,entity_id,company_id_str,entity_name,phone,due_date,next_action) VALUES ('company',$1,$2,$3,$4,$5,'Call') ON CONFLICT (source_type,entity_id) DO NOTHING",
         [rows[0].id, company_id, name.trim(), main_phone||null, todayStr]
       );
@@ -287,10 +284,9 @@ router.post('/', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// PUT /api/companies/:id
 router.put('/:id', async (req, res) => {
   try {
-    const { rows: coRows } = await pool.query('SELECT * FROM companies WHERE id=$1', [req.params.id]);
+    const { rows: coRows } = await req.db.query('SELECT * FROM companies WHERE id=$1', [req.params.id]);
     if (!coRows[0]) return res.status(404).json({ error: 'Company not found.' });
 
     const fields = ['name','main_phone','industry','address','city','state','zip','website','notes','status','is_multi_location','location_group','location_name'];
@@ -302,8 +298,8 @@ router.put('/:id', async (req, res) => {
     if (!updates.length) return res.status(400).json({ error: 'No fields to update.' });
     updates.push(`updated_at=to_char(now(),'YYYY-MM-DD"T"HH24:MI:SS"Z"')`);
     values.push(req.params.id);
-    const { rows } = await pool.query(`UPDATE companies SET ${updates.join(',')} WHERE id=$${i} RETURNING *`, values);
-    if (req.body.address !== undefined) geocodeAndSave(req.params.id, rows[0].address, rows[0].city);
+    const { rows } = await req.db.query(`UPDATE companies SET ${updates.join(',')} WHERE id=$${i} RETURNING *`, values);
+    if (req.body.address !== undefined) geocodeAndSave(req.params.id, rows[0].address, rows[0].city, req.user.schema);
     res.json(rows[0]);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -314,22 +310,22 @@ router.put('/:id', async (req, res) => {
 
 router.get('/:id/contacts', async (req, res) => {
   try {
-    const { rows: coRows } = await pool.query('SELECT company_id FROM companies WHERE id=$1', [req.params.id]);
+    const { rows: coRows } = await req.db.query('SELECT company_id FROM companies WHERE id=$1', [req.params.id]);
     if (!coRows[0]) return res.status(404).json({ error: 'Company not found.' });
-    const { rows } = await pool.query('SELECT * FROM company_contacts WHERE company_id=$1 ORDER BY is_preferred DESC, name ASC', [coRows[0].company_id]);
+    const { rows } = await req.db.query('SELECT * FROM company_contacts WHERE company_id=$1 ORDER BY is_preferred DESC, name ASC', [coRows[0].company_id]);
     res.json(rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 router.post('/:id/contacts', async (req, res) => {
   try {
-    const { rows: coRows } = await pool.query('SELECT * FROM companies WHERE id=$1', [req.params.id]);
+    const { rows: coRows } = await req.db.query('SELECT * FROM companies WHERE id=$1', [req.params.id]);
     const company = coRows[0];
     if (!company) return res.status(404).json({ error: 'Company not found.' });
     const { name, role_title, direct_line, email, is_preferred, notes } = req.body;
     if (!name) return res.status(400).json({ error: 'Contact name is required.' });
-    if (is_preferred) await pool.query('UPDATE company_contacts SET is_preferred=0 WHERE company_id=$1', [company.company_id]);
-    const { rows } = await pool.query(
+    if (is_preferred) await req.db.query('UPDATE company_contacts SET is_preferred=0 WHERE company_id=$1', [company.company_id]);
+    const { rows } = await req.db.query(
       'INSERT INTO company_contacts (company_id,name,role_title,direct_line,email,is_preferred,notes) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *',
       [company.company_id, name.trim(), role_title||null, direct_line||null, email||null, is_preferred?1:0, notes||null]
     );
@@ -339,12 +335,12 @@ router.post('/:id/contacts', async (req, res) => {
 
 router.put('/contacts/:contactId', async (req, res) => {
   try {
-    const { rows: ctRows } = await pool.query('SELECT * FROM company_contacts WHERE id=$1', [req.params.contactId]);
+    const { rows: ctRows } = await req.db.query('SELECT * FROM company_contacts WHERE id=$1', [req.params.contactId]);
     const contact = ctRows[0];
     if (!contact) return res.status(404).json({ error: 'Contact not found.' });
     const { name, role_title, direct_line, email, is_preferred, notes } = req.body;
-    if (is_preferred) await pool.query('UPDATE company_contacts SET is_preferred=0 WHERE company_id=$1', [contact.company_id]);
-    const { rows } = await pool.query(`
+    if (is_preferred) await req.db.query('UPDATE company_contacts SET is_preferred=0 WHERE company_id=$1', [contact.company_id]);
+    const { rows } = await req.db.query(`
       UPDATE company_contacts SET name=$1, role_title=$2, direct_line=$3, email=$4, is_preferred=$5, notes=$6,
         updated_at=to_char(now(),'YYYY-MM-DD"T"HH24:MI:SS"Z"')
       WHERE id=$7 RETURNING *
@@ -360,20 +356,18 @@ router.put('/contacts/:contactId', async (req, res) => {
 
 router.delete('/contacts/:contactId', async (req, res) => {
   try {
-    const { rowCount } = await pool.query('DELETE FROM company_contacts WHERE id=$1', [req.params.contactId]);
+    const { rowCount } = await req.db.query('DELETE FROM company_contacts WHERE id=$1', [req.params.contactId]);
     if (rowCount === 0) return res.status(404).json({ error: 'Contact not found.' });
     res.json({ message: 'Contact deleted.' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
-
-
 
 // ═══════════════════════════════════════════════════════
 // COMPLETE A COMPANY CALL
 // ═══════════════════════════════════════════════════════
 
 router.post('/queue/:queueId/complete', async (req, res) => {
-  const client = await pool.connect();
+  const client = await req.db.connect();
   try {
     const { rows: qRows } = await client.query("SELECT * FROM calling_queue WHERE id=$1 AND queue_type='company'", [req.params.queueId]);
     if (!qRows[0]) return res.status(404).json({ error: 'Queue entry not found.' });
@@ -397,7 +391,7 @@ router.post('/queue/:queueId/complete', async (req, res) => {
 
     await client.query('BEGIN');
 
-    const logEntry = await appendCallLog({
+    const logEntry = await appendCallLog(req.db, {
       log_type:'company', entity_id:company.id, company_id_str:company.company_id,
       entity_name:company.name, phone:company.main_phone, direct_line:direct_line||null,
       contact_name:contact_name||null, role_title:role_title||null, email:email||null,
@@ -432,7 +426,7 @@ router.post('/queue/:queueId/complete', async (req, res) => {
       }
     }
 
-    await scheduleNextAction(pool, {
+    await scheduleNextAction(req.db, {
       company, contact_type, next_action, next_action_date_override,
       contact_name:contact_name||null, direct_line:direct_line||null, email:email||null, log_id:logEntry.id,
     });
@@ -452,7 +446,7 @@ router.post('/queue/:queueId/complete', async (req, res) => {
 
 router.get('/:id/history', async (req, res) => {
   try {
-    const { rows } = await pool.query(`
+    const { rows } = await req.db.query(`
       SELECT cl.*, u.name AS logged_by_name,
         se.id AS scorecard_id, se.total_score AS scorecard_total,
         se.max_score AS scorecard_max, se.script_ids AS scorecard_script_ids,
@@ -470,7 +464,7 @@ router.get('/:id/history', async (req, res) => {
 
 router.get('/:id/followup', async (req, res) => {
   try {
-    const { rows } = await pool.query("SELECT * FROM follow_ups WHERE entity_id=$1 AND source_type='company' ORDER BY id DESC LIMIT 1", [req.params.id]);
+    const { rows } = await req.db.query("SELECT * FROM follow_ups WHERE entity_id=$1 AND source_type='company' ORDER BY id DESC LIMIT 1", [req.params.id]);
     res.json(rows[0] || null);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -479,32 +473,32 @@ router.put('/:id/followup-date', async (req, res) => {
   try {
     const { due_date, action } = req.body;
     if (!due_date) return res.status(400).json({ error: 'due_date is required.' });
-    const { rows: coRows } = await pool.query('SELECT * FROM companies WHERE id=$1', [req.params.id]);
+    const { rows: coRows } = await req.db.query('SELECT * FROM companies WHERE id=$1', [req.params.id]);
     const company = coRows[0];
     if (!company) return res.status(404).json({ error: 'Company not found.' });
 
     const stageMap = { Call:'call', Visit:'visit', Mail:'mail', Email:'email' };
     const newStage = stageMap[action] || 'call';
-    await pool.query('UPDATE companies SET pipeline_stage=$1 WHERE id=$2', [newStage, company.id]);
+    await req.db.query('UPDATE companies SET pipeline_stage=$1 WHERE id=$2', [newStage, company.id]);
 
-    const { rows: fuRows } = await pool.query("SELECT * FROM follow_ups WHERE entity_id=$1 AND source_type='company'", [req.params.id]);
+    const { rows: fuRows } = await req.db.query("SELECT * FROM follow_ups WHERE entity_id=$1 AND source_type='company'", [req.params.id]);
     if (fuRows[0]) {
-      await pool.query('UPDATE follow_ups SET due_date=$1, next_action=$2 WHERE id=$3', [due_date, action||'Call', fuRows[0].id]);
+      await req.db.query('UPDATE follow_ups SET due_date=$1, next_action=$2 WHERE id=$3', [due_date, action||'Call', fuRows[0].id]);
     } else {
-      await pool.query("INSERT INTO follow_ups (source_type,entity_id,company_id_str,entity_name,phone,due_date,next_action) VALUES ('company',$1,$2,$3,$4,$5,$6)",
+      await req.db.query("INSERT INTO follow_ups (source_type,entity_id,company_id_str,entity_name,phone,due_date,next_action) VALUES ('company',$1,$2,$3,$4,$5,$6)",
         [company.id, company.company_id, company.name, company.main_phone, due_date, action||'Call']);
     }
 
     if (action === 'Visit') {
-      const { rows: prefRows } = await pool.query('SELECT * FROM company_contacts WHERE company_id=$1 AND is_preferred=1', [company.company_id]);
+      const { rows: prefRows } = await req.db.query('SELECT * FROM company_contacts WHERE company_id=$1 AND is_preferred=1', [company.company_id]);
       const preferred = prefRows[0];
-      await pool.query(`INSERT INTO visit_queue (company_id,entity_id,entity_name,scheduled_date,address,city,contact_name,direct_line,email) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      await req.db.query(`INSERT INTO visit_queue (company_id,entity_id,entity_name,scheduled_date,address,city,contact_name,direct_line,email) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
         [company.company_id, company.id, company.name, due_date, company.address||'', company.city||'',
          preferred?.name||null, preferred?.direct_line||null, preferred?.email||null]);
     }
 
     const today = new Date().toISOString().split('T')[0];
-    await pool.query(`INSERT INTO call_log (log_type,entity_id,company_id_str,entity_name,action_type,contact_type,notes,next_action,next_action_date,logged_at)
+    await req.db.query(`INSERT INTO call_log (log_type,entity_id,company_id_str,entity_name,action_type,contact_type,notes,next_action,next_action_date,logged_at)
       VALUES ('company',$1,$2,$3,'Move','Rescheduled',$4,$5,$6,$7)`,
       [company.id, company.company_id, company.name, `Rescheduled ${action||'Call'} follow-up to ${due_date}`, action||'Call', due_date, today]);
 
@@ -515,7 +509,7 @@ router.put('/:id/followup-date', async (req, res) => {
 router.put('/:id/geocode', async (req, res) => {
   try {
     const { lat, lng } = req.body;
-    await pool.query('UPDATE companies SET lat=$1, lng=$2 WHERE id=$3', [lat||null, lng||null, req.params.id]);
+    await req.db.query('UPDATE companies SET lat=$1, lng=$2 WHERE id=$3', [lat||null, lng||null, req.params.id]);
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -525,14 +519,13 @@ router.put('/:id/geocode', async (req, res) => {
 // ═══════════════════════════════════════════════════════
 
 router.post('/import', async (req, res) => {
-  const client = await pool.connect();
+  const client = await req.db.connect();
   try {
     const { companies, add_to_queue = false } = req.body;
     if (!Array.isArray(companies) || companies.length === 0)
       return res.status(400).json({ error: 'Provide an array of companies to import.' });
 
     const results = { imported:0, skipped:0, contacts:0, history:0, duplicate_history:0, matched_existing:0, errors:[] };
-
     await client.query('BEGIN');
 
     const { rows: existingCompanies } = await client.query(`SELECT id, company_id, name, main_phone, address, city, state, zip, location_group FROM companies WHERE status='active'`);
@@ -558,15 +551,15 @@ router.post('/import', async (req, res) => {
           [row.industry||null, row.address||null, row.city||null, row.state||null, row.zip||null, row.website||null, row.notes||null, existingId]);
         results.skipped++;
       } else {
-        const company_id = await getNextCompanyId();
+        const company_id = await getNextCompanyId(req.db);
         const { rows: ins } = await client.query(`INSERT INTO companies (company_id,name,main_phone,industry,address,city,state,zip,website,notes,pipeline_stage) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'new') RETURNING id, company_id`,
           [company_id, name, phone||null, row.industry||null, row.address||null, row.city||null, row.state||null, row.zip||null, row.website||null, row.notes||null]);
         companyDbId = ins[0].id; companyIdStr = ins[0].company_id;
         results.imported++;
         existingCompanies.push({ id:companyDbId, company_id, name, main_phone:phone||null });
-        geocodeAndSave(companyDbId, row.address, row.city);
+        geocodeAndSave(companyDbId, row.address, row.city, req.user.schema);
 
-       if (add_to_queue) {
+        if (add_to_queue) {
           const { rows: inQ } = await client.query("SELECT id FROM calling_queue WHERE queue_type='company' AND entity_id=$1", [companyDbId]);
           if (!inQ[0]) {
             await client.query("INSERT INTO calling_queue (queue_type,entity_id,added_by) VALUES ('company',$1,$2)", [companyDbId, req.user.id]);
@@ -628,7 +621,7 @@ router.post('/import', async (req, res) => {
 });
 
 router.post('/import-new-companies', async (req, res) => {
-  const client = await pool.connect();
+  const client = await req.db.connect();
   try {
     const { companies } = req.body;
     if (!Array.isArray(companies) || companies.length === 0)
@@ -658,12 +651,12 @@ router.post('/import-new-companies', async (req, res) => {
         continue;
       }
 
-      const company_id = await getNextCompanyId();
+      const company_id = await getNextCompanyId(req.db);
       const { rows: ins } = await client.query(`INSERT INTO companies (company_id,name,main_phone,industry,address,city,state,zip,website,notes,pipeline_stage) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'new') RETURNING id`,
         [company_id, name, phone||null, row.industry||null, row.address||null, row.city||null, row.state||null, row.zip||null, row.website||null, row.notes||null]);
       existingCompanies.push({ id:ins[0].id, company_id, name, main_phone:phone||null, address:row.address||null, city:row.city||null, state:row.state||null, zip:row.zip||null, location_group:null });
       results.imported++;
-      geocodeAndSave(ins[0].id, row.address, row.city);
+      geocodeAndSave(ins[0].id, row.address, row.city, req.user.schema);
     }
 
     await client.query('COMMIT');
@@ -677,16 +670,16 @@ router.post('/import-new-companies', async (req, res) => {
 router.post('/backfill-followups', async (req, res) => {
   try {
     const today = new Date().toISOString().split('T')[0];
-    const { rows: companies } = await pool.query(`
+    const { rows: companies } = await req.db.query(`
       SELECT c.id, c.company_id, c.name, c.main_phone, c.pipeline_stage FROM companies c
       WHERE c.status='active' AND c.pipeline_stage IN ('new','call')
         AND NOT EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=c.id AND source_type='company')
     `);
     let created = 0;
     for (const co of companies) {
-      await pool.query("INSERT INTO follow_ups (source_type,entity_id,company_id_str,entity_name,phone,due_date,next_action) VALUES ('company',$1,$2,$3,$4,$5,'Call')",
+      await req.db.query("INSERT INTO follow_ups (source_type,entity_id,company_id_str,entity_name,phone,due_date,next_action) VALUES ('company',$1,$2,$3,$4,$5,'Call')",
         [co.id, co.company_id, co.name, co.main_phone, today]);
-      await pool.query("UPDATE companies SET pipeline_stage='call' WHERE id=$1", [co.id]);
+      await req.db.query("UPDATE companies SET pipeline_stage='call' WHERE id=$1", [co.id]);
       created++;
     }
     res.json({ message:`Created ${created} follow-up records.`, created });
@@ -698,7 +691,7 @@ router.post('/backfill-followups', async (req, res) => {
 // ═══════════════════════════════════════════════════════
 
 router.post('/:id/merge/:into_id', async (req, res) => {
-  const client = await pool.connect();
+  const client = await req.db.connect();
   try {
     const sourceId = parseInt(req.params.id);
     const targetId = parseInt(req.params.into_id);
@@ -784,7 +777,7 @@ router.post('/:id/merge/:into_id', async (req, res) => {
     await client.query('DELETE FROM companies WHERE id=$1', [sourceId]);
     await client.query('COMMIT');
 
-    const { rows: merged } = await pool.query('SELECT * FROM companies WHERE id=$1', [targetId]);
+    const { rows: merged } = await req.db.query('SELECT * FROM companies WHERE id=$1', [targetId]);
     res.json({ ok:true, merged_into:merged[0] });
   } catch (e) {
     await client.query('ROLLBACK');
@@ -792,19 +785,18 @@ router.post('/:id/merge/:into_id', async (req, res) => {
   } finally { client.release(); }
 });
 
-// GET /api/companies/:id/geocode-lookup
 router.get('/:id/geocode-lookup', async (req, res) => {
   try {
-    const { rows } = await pool.query('SELECT * FROM companies WHERE id=$1', [req.params.id]);
+    const { rows } = await req.db.query('SELECT * FROM companies WHERE id=$1', [req.params.id]);
     const company = rows[0];
     if (!company) return res.status(404).json({ error:'Not found' });
     if (company.lat && company.lng) return res.json({ lat:company.lat, lng:company.lng, cached:true });
     if (!company.address) return res.status(400).json({ error:'No address' });
 
     const https = require('https');
-    const query = encodeURIComponent(`${company.address}, ${company.city||'Charlotte'}, ${company.state||'NC'}`);
+    const q = encodeURIComponent(`${company.address}, ${company.city||'Charlotte'}, ${company.state||'NC'}`);
     const data = await new Promise((resolve, reject) => {
-      https.get(`https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1&countrycodes=us`,
+      https.get(`https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1&countrycodes=us`,
         { headers:{'User-Agent':'SuperEagleFleetCRM/1.0','Accept-Language':'en'} },
         response => {
           let body = '';
@@ -815,15 +807,15 @@ router.get('/:id/geocode-lookup', async (req, res) => {
 
     if (data.length > 0) {
       const lat = parseFloat(data[0].lat), lng = parseFloat(data[0].lon);
-      await pool.query('UPDATE companies SET lat=$1, lng=$2 WHERE id=$3', [lat, lng, company.id]);
+      await req.db.query('UPDATE companies SET lat=$1, lng=$2 WHERE id=$3', [lat, lng, company.id]);
       return res.json({ lat, lng, cached:false });
     }
     return res.status(404).json({ error:'Address not found' });
   } catch (err) { res.status(500).json({ error:err.message }); }
 });
-// DELETE /api/companies/:id
+
 router.delete('/:id', async (req, res) => {
-  const client = await pool.connect();
+  const client = await req.db.connect();
   try {
     const { rows } = await client.query('SELECT * FROM companies WHERE id = $1', [req.params.id]);
     const company = rows[0];
@@ -842,4 +834,5 @@ router.delete('/:id', async (req, res) => {
     res.status(500).json({ error: 'Delete failed: ' + e.message });
   } finally { client.release(); }
 });
+
 module.exports = router;

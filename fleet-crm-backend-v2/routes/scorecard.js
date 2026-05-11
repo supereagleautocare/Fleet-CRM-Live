@@ -3,7 +3,6 @@
  */
 
 const express = require('express');
-const { pool } = require('../db/schema');
 const { requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
@@ -12,7 +11,7 @@ router.use(requireAuth);
 // ── Questions ─────────────────────────────────────────────────────────────────
 router.get('/questions/:scriptId', async (req, res) => {
   try {
-    const { rows } = await pool.query(
+    const { rows } = await req.db.query(
       'SELECT * FROM scorecard_questions WHERE script_id=$1 ORDER BY sort_order,id',
       [req.params.scriptId]
     );
@@ -24,10 +23,10 @@ router.post('/questions/:scriptId', async (req, res) => {
   try {
     const { question, yes_points=1, no_points=0, partial_points=0.5 } = req.body;
     if (!question?.trim()) return res.status(400).json({ error: 'Question text required.' });
-    const { rows: m } = await pool.query(
+    const { rows: m } = await req.db.query(
       'SELECT MAX(sort_order) as m FROM scorecard_questions WHERE script_id=$1', [req.params.scriptId]
     );
-    const { rows } = await pool.query(`
+    const { rows } = await req.db.query(`
       INSERT INTO scorecard_questions (script_id,question,yes_points,no_points,partial_points,sort_order)
       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *
     `, [req.params.scriptId, question.trim(), yes_points, no_points, partial_points, (m[0].m ?? -1) + 1]);
@@ -37,7 +36,7 @@ router.post('/questions/:scriptId', async (req, res) => {
 
 router.put('/questions/:id', async (req, res) => {
   try {
-    const { rows: existing } = await pool.query('SELECT * FROM scorecard_questions WHERE id=$1', [req.params.id]);
+    const { rows: existing } = await req.db.query('SELECT * FROM scorecard_questions WHERE id=$1', [req.params.id]);
     if (!existing[0]) return res.status(404).json({ error: 'Not found.' });
     const { question, yes_points, no_points, partial_points, enabled } = req.body;
     const sets = [], vals = [];
@@ -48,7 +47,7 @@ router.put('/questions/:id', async (req, res) => {
     if (partial_points !== undefined) { sets.push(`partial_points=$${i++}`); vals.push(partial_points); }
     if (enabled        !== undefined) { sets.push(`enabled=$${i++}`);        vals.push(enabled ? 1 : 0); }
     if (!sets.length) return res.json(existing[0]);
-    const { rows } = await pool.query(
+    const { rows } = await req.db.query(
       `UPDATE scorecard_questions SET ${sets.join(',')} WHERE id=$${i} RETURNING *`,
       [...vals, req.params.id]
     );
@@ -58,7 +57,7 @@ router.put('/questions/:id', async (req, res) => {
 
 router.delete('/questions/:id', async (req, res) => {
   try {
-    await pool.query('DELETE FROM scorecard_questions WHERE id=$1', [req.params.id]);
+    await req.db.query('DELETE FROM scorecard_questions WHERE id=$1', [req.params.id]);
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -68,7 +67,7 @@ router.post('/reorder/:scriptId', async (req, res) => {
     const { ids } = req.body;
     if (!Array.isArray(ids)) return res.status(400).json({ error: 'ids array required.' });
     await Promise.all(ids.map((id, i) =>
-      pool.query('UPDATE scorecard_questions SET sort_order=$1 WHERE id=$2', [i, id])
+      req.db.query('UPDATE scorecard_questions SET sort_order=$1 WHERE id=$2', [i, id])
     ));
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -79,7 +78,7 @@ router.get('/entries', async (req, res) => {
   try {
     const days = parseInt(req.query.days) || 30;
     const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 19) + 'Z';
-    const { rows } = await pool.query(
+    const { rows } = await req.db.query(
       `SELECT * FROM scorecard_entries WHERE logged_at >= $1 ORDER BY logged_at DESC`,
       [cutoff]
     );
@@ -91,7 +90,7 @@ router.get('/entries/daily', async (req, res) => {
   try {
     const days = parseInt(req.query.days) || 30;
     const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 19) + 'Z';
-    const { rows } = await pool.query(`
+    const { rows } = await req.db.query(`
       SELECT
         substring(logged_at, 1, 10) AS day,
         COUNT(*) AS calls,
@@ -117,7 +116,7 @@ router.post('/entries', async (req, res) => {
       maxScore   = req.body.max_score;
     } else if (scriptArr.length > 0) {
       const placeholders = scriptArr.map((_, i) => `$${i+1}`).join(',');
-      const { rows: questions } = await pool.query(
+      const { rows: questions } = await req.db.query(
         `SELECT * FROM scorecard_questions WHERE script_id IN (${placeholders}) AND enabled=1`,
         scriptArr
       );
@@ -130,7 +129,7 @@ router.post('/entries', async (req, res) => {
       }
     }
 
-    const { rows } = await pool.query(`
+    const { rows } = await req.db.query(`
       INSERT INTO scorecard_entries (call_log_id,entity_id,entity_name,script_ids,answers,total_score,max_score,notes,rep_name)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *
     `, [call_log_id||null, entity_id||null, entity_name||null,
@@ -143,10 +142,10 @@ router.post('/entries', async (req, res) => {
 
 router.put('/entries/:id', async (req, res) => {
   try {
-    const { rows: existing } = await pool.query('SELECT * FROM scorecard_entries WHERE id=$1', [req.params.id]);
+    const { rows: existing } = await req.db.query('SELECT * FROM scorecard_entries WHERE id=$1', [req.params.id]);
     if (!existing[0]) return res.status(404).json({ error: 'Not found.' });
     const { reviewer_notes, reviewed_by } = req.body;
-    const { rows } = await pool.query(`
+    const { rows } = await req.db.query(`
       UPDATE scorecard_entries
       SET reviewer_notes=$1, reviewed_by=$2, reviewed_at=to_char(now(),'YYYY-MM-DD"T"HH24:MI:SS"Z"')
       WHERE id=$3 RETURNING *
@@ -158,7 +157,7 @@ router.put('/entries/:id', async (req, res) => {
 
 router.delete('/entries/:id', async (req, res) => {
   try {
-    await pool.query('DELETE FROM scorecard_entries WHERE id=$1', [req.params.id]);
+    await req.db.query('DELETE FROM scorecard_entries WHERE id=$1', [req.params.id]);
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -166,7 +165,7 @@ router.delete('/entries/:id', async (req, res) => {
 // ── Enabled toggle ────────────────────────────────────────────────────────────
 router.get('/enabled', async (req, res) => {
   try {
-    const { rows } = await pool.query("SELECT value FROM config_settings WHERE key='scorecard_enabled'");
+    const { rows } = await req.db.query("SELECT value FROM config_settings WHERE key='scorecard_enabled'");
     res.json({ enabled: rows[0]?.value === '1' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -174,7 +173,7 @@ router.get('/enabled', async (req, res) => {
 router.put('/enabled', async (req, res) => {
   try {
     const { enabled } = req.body;
-    await pool.query(`
+    await req.db.query(`
       INSERT INTO config_settings (key, value, label)
       VALUES ('scorecard_enabled', $1, 'Scorecard — pop up after every call')
       ON CONFLICT (key) DO UPDATE SET value=$1

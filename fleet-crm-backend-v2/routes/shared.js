@@ -1,31 +1,34 @@
 /**
- * FLEET CRM — SHARED UTILITIES (PostgreSQL)
+ * FLEET CRM — SHARED UTILITIES (PostgreSQL, multi-tenant)
+ *
+ * Every function takes `db` as its first argument.
+ * Pass `req.db` from route handlers so queries run in the right shop's schema.
  */
 
 const { pool } = require('../db/schema');
 
-// ─── Raw query helper ─────────────────────────────────────────────────────────
-async function query(sql, params = []) {
-  const result = await pool.query(sql, params);
+// ─── Raw query helpers ────────────────────────────────────────────────────────
+async function query(db, sql, params = []) {
+  const result = await db.query(sql, params);
   return result.rows;
 }
 
-async function queryOne(sql, params = []) {
-  const result = await pool.query(sql, params);
+async function queryOne(db, sql, params = []) {
+  const result = await db.query(sql, params);
   return result.rows[0] || null;
 }
 
-async function execute(sql, params = []) {
-  const result = await pool.query(sql, params);
+async function execute(db, sql, params = []) {
+  const result = await db.query(sql, params);
   const id = result.rows[0]?.id || null;
   return { lastInsertRowid: id, changes: result.rowCount };
 }
 
 // ─── Generate next Company ID (e.g. "CO-000171") ─────────────────────────────
-async function getNextCompanyId() {
-  const prefix = await getSetting('company_id_prefix', 'CO-');
-  const nextNum = parseInt(await getSetting('next_company_id', '1'), 10);
-  await pool.query(
+async function getNextCompanyId(db) {
+  const prefix  = await getSetting(db, 'company_id_prefix', 'CO-');
+  const nextNum = parseInt(await getSetting(db, 'next_company_id', '1'), 10);
+  await db.query(
     "UPDATE config_settings SET value = $1, updated_at = to_char(now(), 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') WHERE key = 'next_company_id'",
     [String(nextNum + 1)]
   );
@@ -33,29 +36,30 @@ async function getNextCompanyId() {
 }
 
 // ─── Get a config setting value ───────────────────────────────────────────────
-async function getSetting(key, fallback = null) {
-  const row = await queryOne('SELECT value FROM config_settings WHERE key = $1', [key]);
+async function getSetting(db, key, fallback = null) {
+  const row = await queryOne(db, 'SELECT value FROM config_settings WHERE key = $1', [key]);
   return row ? row.value : fallback;
 }
 
 // ─── Calculate follow-up date ─────────────────────────────────────────────────
-async function calcFollowUpDate(source, contact_type, action_type) {
+async function calcFollowUpDate(db, source, contact_type, action_type) {
   if (contact_type) {
     const rule = await queryOne(
+      db,
       'SELECT days FROM config_rules WHERE contact_type = $1 AND enabled = 1 LIMIT 1',
       [contact_type]
     );
     if (rule) return addDays(rule.days);
   }
-  if (action_type === 'mail')  return addDays(parseInt(await getSetting('mail_followup_days',  '30'), 10));
-  if (action_type === 'email') return addDays(parseInt(await getSetting('email_followup_days', '14'), 10));
-  if (action_type === 'visit') return addDays(parseInt(await getSetting('visit_delay_days',    '3'),  10));
-  return addDays(parseInt(await getSetting('call_followup_days', '3'), 10));
+  if (action_type === 'mail')  return addDays(parseInt(await getSetting(db, 'mail_followup_days',  '30'), 10));
+  if (action_type === 'email') return addDays(parseInt(await getSetting(db, 'email_followup_days', '14'), 10));
+  if (action_type === 'visit') return addDays(parseInt(await getSetting(db, 'visit_delay_days',    '3'),  10));
+  return addDays(parseInt(await getSetting(db, 'call_followup_days', '3'), 10));
 }
 
 // ─── Calculate visit date ─────────────────────────────────────────────────────
-async function calcVisitDate() {
-  const days = parseInt(await getSetting('visit_delay_days', '3'), 10);
+async function calcVisitDate(db) {
+  const days = parseInt(await getSetting(db, 'visit_delay_days', '3'), 10);
   return addDays(days);
 }
 
@@ -67,8 +71,8 @@ function addDays(n) {
   if (dow === 6) d.setDate(d.getDate() - 1);
   if (dow === 0) d.setDate(d.getDate() + 1);
   return d.getFullYear() + '-' +
-  String(d.getMonth() + 1).padStart(2, '0') + '-' +
-  String(d.getDate()).padStart(2, '0');
+    String(d.getMonth() + 1).padStart(2, '0') + '-' +
+    String(d.getDate()).padStart(2, '0');
 }
 
 // ─── Today as "YYYY-MM-DD" ───────────────────────────────────────────────────
@@ -77,18 +81,18 @@ function today() {
 }
 
 // ─── Append a row to call_log ─────────────────────────────────────────────────
-async function appendCallLog(data) {
-  // Auto-lookup counts_as_attempt from config_rules if not explicitly set
+async function appendCallLog(db, data) {
   let countsAsAttempt = data.counts_as_attempt !== undefined ? data.counts_as_attempt : 1;
   if (data.counts_as_attempt === undefined && data.contact_type && data.action_type === 'Call') {
     const rule = await queryOne(
+      db,
       'SELECT counts_as_attempt FROM config_rules WHERE contact_type = $1 AND action_type = $2 AND enabled = 1 LIMIT 1',
       [data.contact_type, 'call']
     );
     if (rule !== null) countsAsAttempt = rule.counts_as_attempt;
   }
 
-  const result = await pool.query(`
+  const result = await db.query(`
     INSERT INTO call_log (
       log_type, entity_id, company_id_str, entity_name, phone,
       direct_line, contact_name, role_title, email, industry,
@@ -140,26 +144,26 @@ async function appendCallLog(data) {
 }
 
 // ─── Cancel old follow-ups ────────────────────────────────────────────────────
-async function cancelOldFollowUps(source_type, entity_id) {
-  await pool.query(
+async function cancelOldFollowUps(db, source_type, entity_id) {
+  await db.query(
     'DELETE FROM follow_ups WHERE source_type = $1 AND entity_id = $2 AND is_locked = 0',
     [source_type, entity_id]
   );
 }
 
 // ─── Clear ALL queue entries for a company ────────────────────────────────────
-async function clearAllCompanyQueues(entity_id) {
-  await pool.query('DELETE FROM follow_ups    WHERE entity_id = $1 AND is_locked = 0', [entity_id]);
-  await pool.query('DELETE FROM calling_queue WHERE entity_id = $1', [entity_id]);
-  await pool.query('DELETE FROM visit_queue   WHERE entity_id = $1', [entity_id]);
+async function clearAllCompanyQueues(db, entity_id) {
+  await db.query('DELETE FROM follow_ups    WHERE entity_id = $1 AND is_locked = 0', [entity_id]);
+  await db.query('DELETE FROM calling_queue WHERE entity_id = $1', [entity_id]);
+  await db.query('DELETE FROM visit_queue   WHERE entity_id = $1', [entity_id]);
 }
 
 // ─── Schedule next action ─────────────────────────────────────────────────────
-async function scheduleNextAction(pool, { company, contact_type, next_action, next_action_date_override, contact_name, direct_line, email, log_id }) {
-  await clearAllCompanyQueues(company.id);
+async function scheduleNextAction(db, { company, contact_type, next_action, next_action_date_override, contact_name, direct_line, email, log_id }) {
+  await clearAllCompanyQueues(db, company.id);
 
   if (!next_action || next_action === 'Stop') {
-    await pool.query(
+    await db.query(
       "UPDATE companies SET pipeline_stage='dead', company_status='dead', stage_updated_at=to_char(now(),'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"'), updated_at=to_char(now(),'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') WHERE id=$1",
       [company.id]
     );
@@ -168,14 +172,15 @@ async function scheduleNextAction(pool, { company, contact_type, next_action, ne
 
   const stageMap = { Call:'call', Mail:'mail', Email:'email', Visit:'visit' };
   const nextStage = stageMap[next_action] || 'call';
-  const next_action_date = next_action_date_override || await calcFollowUpDate(null, contact_type, nextStage);
+  const next_action_date = next_action_date_override || await calcFollowUpDate(db, null, contact_type, nextStage);
 
   if (next_action === 'Visit') {
     const preferred = await queryOne(
+      db,
       'SELECT * FROM company_contacts WHERE company_id=$1 AND is_preferred=1',
       [company.company_id]
     );
-    await pool.query(
+    await db.query(
       `INSERT INTO visit_queue (company_id,entity_id,entity_name,scheduled_date,address,city,contact_name,direct_line,email,source_log_id)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
       [company.company_id, company.id, company.name, next_action_date,
@@ -183,7 +188,7 @@ async function scheduleNextAction(pool, { company, contact_type, next_action, ne
        direct_line||preferred?.direct_line||null, email||preferred?.email||null, log_id||null]
     );
   } else {
-    await pool.query(
+    await db.query(
       `INSERT INTO follow_ups (source_type,entity_id,company_id_str,entity_name,phone,direct_line,industry,contact_name,due_date,source_log_id,next_action)
        VALUES ('company',$1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
        ON CONFLICT (source_type, entity_id) DO UPDATE
@@ -194,28 +199,28 @@ async function scheduleNextAction(pool, { company, contact_type, next_action, ne
     );
   }
 
-  await pool.query(
+  await db.query(
     "UPDATE companies SET pipeline_stage=$1, stage_updated_at=to_char(now(),'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"'), updated_at=to_char(now(),'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') WHERE id=$2",
     [nextStage, company.id]
   );
 
   if (log_id && next_action_date) {
-    await pool.query('UPDATE call_log SET next_action_date=$1 WHERE id=$2', [next_action_date, log_id]);
+    await db.query('UPDATE call_log SET next_action_date=$1 WHERE id=$2', [next_action_date, log_id]);
   }
 
   return { next_action_date, nextStage };
 }
 
 // ─── Rebuild follow-ups ───────────────────────────────────────────────────────
-async function rebuildFollowUps() {
-  const { rows: dueCalls } = await pool.query(`
+async function rebuildFollowUps(db) {
+  const { rows: dueCalls } = await db.query(`
     SELECT DISTINCT ON (log_type, entity_id) *
     FROM call_log
     WHERE next_action = 'Call' AND next_action_date <= current_date
     ORDER BY log_type, entity_id, logged_at DESC
   `);
 
-  const { rows: existing } = await pool.query('SELECT * FROM follow_ups');
+  const { rows: existing } = await db.query('SELECT * FROM follow_ups');
   const existingKeys = new Set(existing.map(r => `${r.source_type}:${r.entity_id}`));
   const shouldBeIn = new Set();
   let added = 0;
@@ -224,7 +229,7 @@ async function rebuildFollowUps() {
     const key = `${call.log_type}:${call.entity_id}`;
     shouldBeIn.add(key);
     if (!existingKeys.has(key)) {
-      await pool.query(
+      await db.query(
         `INSERT INTO follow_ups
           (source_type,entity_id,company_id_str,entity_name,phone,direct_line,industry,contact_name,due_date,source_log_id,working_notes,is_locked)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,null,0)
@@ -239,10 +244,10 @@ async function rebuildFollowUps() {
 
   const toRemove = existing.filter(r => !shouldBeIn.has(`${r.source_type}:${r.entity_id}`) && !r.is_locked);
   for (const row of toRemove) {
-    await pool.query('DELETE FROM follow_ups WHERE id=$1', [row.id]);
+    await db.query('DELETE FROM follow_ups WHERE id=$1', [row.id]);
   }
 
-  const { rows: [{ cnt }] } = await pool.query('SELECT COUNT(*) as cnt FROM follow_ups');
+  const { rows: [{ cnt }] } = await db.query('SELECT COUNT(*) as cnt FROM follow_ups');
   return { added, removed: toRemove.length, total: parseInt(cnt) };
 }
 

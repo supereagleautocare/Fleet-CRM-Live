@@ -3,7 +3,6 @@
  */
 
 const express = require('express');
-const { pool } = require('../db/schema');
 const { requireAuth } = require('../middleware/auth');
 const { appendCallLog, calcFollowUpDate, clearAllCompanyQueues, scheduleNextAction } = require('./shared');
 
@@ -13,20 +12,20 @@ router.use(requireAuth);
 const STAGES = ['new', 'call', 'mail', 'email', 'visit', 'dead'];
 
 // ── Helper: set company stage and log the move ────────────────────────────────
-async function moveCompany(companyId, newStage, userId, userName, notes) {
-  const { rows } = await pool.query('SELECT * FROM companies WHERE id = $1', [companyId]);
+async function moveCompany(db, companyId, newStage, userId, userName, notes) {
+  const { rows } = await db.query('SELECT * FROM companies WHERE id = $1', [companyId]);
   const company = rows[0];
   if (!company) return null;
 
   const oldStage = company.pipeline_stage || 'new';
   if (oldStage === newStage) return company;
 
-  await pool.query(
+  await db.query(
     `UPDATE companies SET pipeline_stage=$1, stage_updated_at=to_char(now(),'YYYY-MM-DD"T"HH24:MI:SS"Z"'), updated_at=to_char(now(),'YYYY-MM-DD"T"HH24:MI:SS"Z"') WHERE id=$2`,
     [newStage, companyId]
   );
 
-  await appendCallLog({
+  await appendCallLog(db, {
     log_type: 'company',
     entity_id: company.id,
     company_id_str: company.company_id,
@@ -44,7 +43,7 @@ async function moveCompany(companyId, newStage, userId, userName, notes) {
     counts_as_attempt: 0,
   });
 
-  const { rows: updated } = await pool.query('SELECT * FROM companies WHERE id = $1', [companyId]);
+  const { rows: updated } = await db.query('SELECT * FROM companies WHERE id = $1', [companyId]);
   return updated[0];
 }
 
@@ -53,8 +52,7 @@ router.get('/board', async (req, res) => {
   try {
     const counts = {};
     await Promise.all(STAGES.map(async stage => {
-      // Treat NULL pipeline_stage as 'new'
-      const { rows } = await pool.query(
+      const { rows } = await req.db.query(
         stage === 'new'
           ? "SELECT COUNT(*) as cnt FROM companies WHERE (pipeline_stage='new' OR pipeline_stage IS NULL) AND status='active'"
           : "SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage=$1 AND status='active'",
@@ -65,10 +63,10 @@ router.get('/board', async (req, res) => {
 
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     const [starredRes, recentCallsRes, recentContactsRes, totalContactsRes] = await Promise.all([
-      pool.query("SELECT COUNT(*) as cnt FROM companies WHERE is_starred=1 AND status='active'"),
-      pool.query("SELECT COUNT(*) as cnt FROM call_log WHERE log_type='company' AND action_type='Call' AND counts_as_attempt=1 AND substring(logged_at,1,10) >= $1", [sevenDaysAgo]),
-      pool.query("SELECT COUNT(*) as cnt FROM call_log WHERE log_type='company' AND action_type!='Move' AND substring(logged_at,1,10) >= $1", [sevenDaysAgo]),
-      pool.query("SELECT COUNT(*) as cnt FROM call_log WHERE log_type='company' AND action_type!='Move'"),
+      req.db.query("SELECT COUNT(*) as cnt FROM companies WHERE is_starred=1 AND status='active'"),
+      req.db.query("SELECT COUNT(*) as cnt FROM call_log WHERE log_type='company' AND action_type='Call' AND counts_as_attempt=1 AND substring(logged_at,1,10) >= $1", [sevenDaysAgo]),
+      req.db.query("SELECT COUNT(*) as cnt FROM call_log WHERE log_type='company' AND action_type!='Move' AND substring(logged_at,1,10) >= $1", [sevenDaysAgo]),
+      req.db.query("SELECT COUNT(*) as cnt FROM call_log WHERE log_type='company' AND action_type!='Move'"),
     ]);
 
     counts.starred = parseInt(starredRes.rows[0].cnt);
@@ -80,13 +78,13 @@ router.get('/board', async (req, res) => {
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
+
 // ── Sidebar badge counts ──────────────────────────────────────────────────────
 router.get('/counts', async (req, res) => {
   try {
     const today = new Date().toLocaleDateString('en-CA');
     const [callingRes, mailRes, emailRes, visitsRes] = await Promise.all([
-      // Matches the /calling list query: in queue OR no unlocked follow-up OR due today; includes NULL stage
-      pool.query(`
+      req.db.query(`
         SELECT COUNT(DISTINCT c.id) as cnt
         FROM companies c
         LEFT JOIN (
@@ -99,12 +97,9 @@ router.get('/counts', async (req, res) => {
           AND (c.pipeline_stage IN ('new','call') OR c.pipeline_stage IS NULL)
           AND (cq.id IS NOT NULL OR fu.id IS NULL OR fu.due_date <= $1)
       `, [today]),
-      // Mail: companies in mail stage with unlocked follow-up due today or overdue (matches default "Due Today" filter)
-      pool.query(`SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='mail' AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND is_locked=0 AND due_date <= $1)`, [today]),
-      // Email: same as mail
-      pool.query(`SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='email' AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND is_locked=0 AND due_date <= $1)`, [today]),
-      // Visits due today or overdue (matches default "Due Today" filter in route planner)
-      pool.query(`SELECT COUNT(*) as cnt FROM visit_queue WHERE scheduled_date <= $1`, [today]),
+      req.db.query(`SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='mail' AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND is_locked=0 AND due_date <= $1)`, [today]),
+      req.db.query(`SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='email' AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND is_locked=0 AND due_date <= $1)`, [today]),
+      req.db.query(`SELECT COUNT(*) as cnt FROM visit_queue WHERE scheduled_date <= $1`, [today]),
     ]);
     res.json({
       calling: parseInt(callingRes.rows[0].cnt),
@@ -114,12 +109,12 @@ router.get('/counts', async (req, res) => {
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
-    // ── 7-day forecast ────────────────────────────────────────────────────────────
+
+// ── 7-day forecast ────────────────────────────────────────────────────────────
 router.get('/forecast', async (req, res) => {
   try {
     const today = new Date().toLocaleDateString('en-CA');
 
-    // Reusable CTE snippet for calling-stage companies with their latest unlocked follow-up
     const callingBase = `
       FROM companies c
       LEFT JOIN (
@@ -133,11 +128,10 @@ router.get('/forecast', async (req, res) => {
     `;
 
     const [oc, om, oe, ov] = await Promise.all([
-      // Overdue calling: has an actual overdue follow-up
-      pool.query(`SELECT COUNT(DISTINCT c.id) as cnt ${callingBase} AND fu.due_date < $1`, [today]),
-      pool.query(`SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='mail' AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND is_locked=0 AND due_date < $1)`, [today]),
-      pool.query(`SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='email' AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND is_locked=0 AND due_date < $1)`, [today]),
-      pool.query("SELECT COUNT(*) as cnt FROM visit_queue WHERE scheduled_date < $1", [today]),
+      req.db.query(`SELECT COUNT(DISTINCT c.id) as cnt ${callingBase} AND fu.due_date < $1`, [today]),
+      req.db.query(`SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='mail' AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND is_locked=0 AND due_date < $1)`, [today]),
+      req.db.query(`SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='email' AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND is_locked=0 AND due_date < $1)`, [today]),
+      req.db.query("SELECT COUNT(*) as cnt FROM visit_queue WHERE scheduled_date < $1", [today]),
     ]);
 
     const days = [{
@@ -153,13 +147,11 @@ router.get('/forecast', async (req, res) => {
       const label = i === 0 ? 'Today' : i === 1 ? 'Tomorrow'
         : d.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
 
-      const callingCntQuery = pool.query(`SELECT COUNT(DISTINCT c.id) as cnt ${callingBase} AND fu.due_date = $1`, [ds]);
-
       const [dc, dm, de, dv] = await Promise.all([
-        callingCntQuery,
-        pool.query(`SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='mail' AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND is_locked=0 AND due_date=$1)`, [ds]),
-        pool.query(`SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='email' AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND is_locked=0 AND due_date=$1)`, [ds]),
-        pool.query("SELECT COUNT(*) as cnt FROM visit_queue WHERE scheduled_date=$1", [ds]),
+        req.db.query(`SELECT COUNT(DISTINCT c.id) as cnt ${callingBase} AND fu.due_date = $1`, [ds]),
+        req.db.query(`SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='mail' AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND is_locked=0 AND due_date=$1)`, [ds]),
+        req.db.query(`SELECT COUNT(*) as cnt FROM companies WHERE pipeline_stage='email' AND status='active' AND EXISTS (SELECT 1 FROM follow_ups WHERE entity_id=companies.id AND source_type='company' AND is_locked=0 AND due_date=$1)`, [ds]),
+        req.db.query("SELECT COUNT(*) as cnt FROM visit_queue WHERE scheduled_date=$1", [ds]),
       ]);
 
       const calling = parseInt(dc.rows[0].cnt), mail = parseInt(dm.rows[0].cnt),
@@ -187,7 +179,7 @@ router.get('/stage/:stage', async (req, res) => {
       where += ` AND c.pipeline_stage = $${params.length}`;
     }
 
-    const { rows } = await pool.query(`
+    const { rows } = await req.db.query(`
       SELECT c.*,
         cc.name           as preferred_contact_name,
         cc.role_title     as preferred_role,
@@ -215,7 +207,7 @@ router.get('/stage/:stage', async (req, res) => {
 router.get('/calling', async (req, res) => {
   try {
     const today = new Date().toLocaleDateString('en-CA');
-    const { filter, industry, search, upcoming } = req.query
+    const { filter, industry, search, upcoming } = req.query;
     const params = [];
     let sql = `
       SELECT c.*,
@@ -261,12 +253,12 @@ router.get('/calling', async (req, res) => {
 
     if (filter === 'first')    { sql += ` AND (SELECT COUNT(*) FROM call_log WHERE entity_id=c.id AND log_type='company' AND log_category='call' AND counts_as_attempt=1)=0`; }
     if (filter === 'followup') { sql += ` AND (SELECT COUNT(*) FROM call_log WHERE entity_id=c.id AND log_type='company' AND log_category='call' AND counts_as_attempt=1)>0`; }
-    if (filter === 'overdue') { sql += ` AND fu.due_date < '${today}'`; }
+    if (filter === 'overdue')  { sql += ` AND fu.due_date < '${today}'`; }
     if (industry) { params.push(industry); sql += ` AND c.industry=$${params.length}`; }
     if (search)   { params.push(`%${search}%`); sql += ` AND (c.name ILIKE $${params.length} OR c.industry ILIKE $${params.length})`; }
 
     sql += ` ORDER BY due_date ASC, c.name ASC`;
-    const { rows } = await pool.query(sql, params);
+    const { rows } = await req.db.query(sql, params);
     res.json(rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -274,7 +266,7 @@ router.get('/calling', async (req, res) => {
 // ── Mail queue ────────────────────────────────────────────────────────────────
 router.get('/mail', async (req, res) => {
   try {
-    const { rows } = await pool.query(`
+    const { rows } = await req.db.query(`
       SELECT c.*,
         cc.name           as preferred_contact_name,
         cc.role_title     as preferred_role,
@@ -304,7 +296,7 @@ router.get('/mail', async (req, res) => {
 // ── Email queue ───────────────────────────────────────────────────────────────
 router.get('/email', async (req, res) => {
   try {
-    const { rows } = await pool.query(`
+    const { rows } = await req.db.query(`
       SELECT c.*,
         cc.name           as preferred_contact_name,
         cc.role_title     as preferred_role,
@@ -338,34 +330,34 @@ router.post('/move/:id', async (req, res) => {
     const { stage, notes, due_date } = req.body;
     if (!STAGES.includes(stage)) return res.status(400).json({ error: 'Invalid stage.' });
 
-    const company = await moveCompany(req.params.id, stage, req.user.id, req.user.name, notes);
+    const company = await moveCompany(req.db, req.params.id, stage, req.user.id, req.user.name, notes);
     if (!company) return res.status(404).json({ error: 'Company not found.' });
 
-    await clearAllCompanyQueues(company.id);
+    await clearAllCompanyQueues(req.db, company.id);
 
     if (['call','mail','email','visit'].includes(stage)) {
       let autoDate = due_date;
       if (!autoDate) {
         try {
-          autoDate = await calcFollowUpDate('company',
+          autoDate = await calcFollowUpDate(req.db, 'company',
             stage==='call' ? 'Call Back' : stage==='mail' ? 'Mail' : stage==='email' ? 'Email' : 'Visit');
         } catch(_) {}
       }
       if (!autoDate) autoDate = new Date(Date.now() + 30*24*60*60*1000).toISOString().split('T')[0];
 
       const nextAction = stage==='call' ? 'Call' : stage==='mail' ? 'Mail' : stage==='email' ? 'Email' : 'Visit';
-      await pool.query(`
+      await req.db.query(`
         INSERT INTO follow_ups (source_type, entity_id, entity_name, phone, industry, due_date, next_action)
         VALUES ('company',$1,$2,$3,$4,$5,$6)
         ON CONFLICT DO NOTHING
       `, [company.id, company.name, company.main_phone, company.industry, autoDate, nextAction]);
 
       if (stage === 'visit') {
-        const { rows: prefRows } = await pool.query(
+        const { rows: prefRows } = await req.db.query(
           'SELECT * FROM company_contacts WHERE company_id=$1 AND is_preferred=1', [company.company_id]
         );
         const preferred = prefRows[0];
-        await pool.query(`
+        await req.db.query(`
           INSERT INTO visit_queue (company_id, entity_id, entity_name, scheduled_date, address, city, contact_name, direct_line, email)
           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
           ON CONFLICT DO NOTHING
@@ -386,12 +378,12 @@ router.put('/status/:id', async (req, res) => {
     const valid = ['prospect','interested','customer','dead'];
     if (!valid.includes(status)) return res.status(400).json({ error: 'Invalid status.' });
     if (status === 'dead') {
-      await pool.query(
+      await req.db.query(
         `UPDATE companies SET company_status=$1, pipeline_stage='dead', stage_updated_at=to_char(now(),'YYYY-MM-DD"T"HH24:MI:SS"Z"'), updated_at=to_char(now(),'YYYY-MM-DD"T"HH24:MI:SS"Z"') WHERE id=$2`,
         [status, req.params.id]
       );
     } else {
-      await pool.query(
+      await req.db.query(
         `UPDATE companies SET company_status=$1, updated_at=to_char(now(),'YYYY-MM-DD"T"HH24:MI:SS"Z"') WHERE id=$2`,
         [status, req.params.id]
       );
@@ -403,10 +395,10 @@ router.put('/status/:id', async (req, res) => {
 // ── Toggle star ───────────────────────────────────────────────────────────────
 router.post('/star/:id', async (req, res) => {
   try {
-    const { rows } = await pool.query('SELECT is_starred FROM companies WHERE id=$1', [req.params.id]);
+    const { rows } = await req.db.query('SELECT is_starred FROM companies WHERE id=$1', [req.params.id]);
     if (!rows[0]) return res.status(404).json({ error: 'Company not found.' });
     const newVal = rows[0].is_starred ? 0 : 1;
-    await pool.query(
+    await req.db.query(
       `UPDATE companies SET is_starred=$1, updated_at=to_char(now(),'YYYY-MM-DD"T"HH24:MI:SS"Z"') WHERE id=$2`,
       [newVal, req.params.id]
     );
@@ -416,7 +408,7 @@ router.post('/star/:id', async (req, res) => {
 
 // ── Log mail action ───────────────────────────────────────────────────────────
 router.post('/log-mail/:id', async (req, res) => {
-  const client = await pool.connect();
+  const client = await req.db.connect();
   try {
     const { rows: coRows } = await client.query('SELECT * FROM companies WHERE id=$1', [req.params.id]);
     const company = coRows[0];
@@ -429,7 +421,7 @@ router.post('/log-mail/:id', async (req, res) => {
     );
 
     await client.query('BEGIN');
-    const logEntry = await appendCallLog({
+    const logEntry = await appendCallLog(req.db, {
       log_type: 'company', entity_id: company.id, company_id_str: company.company_id,
       entity_name: company.name, phone: company.main_phone, industry: company.industry,
       action_type: 'Mail', contact_type: contact_type || 'Mail Sent',
@@ -439,7 +431,7 @@ router.post('/log-mail/:id', async (req, res) => {
       log_category: 'mail', mail_piece: mail_piece || null, counts_as_attempt: 0,
     });
 
-    await scheduleNextAction(pool, {
+    await scheduleNextAction(req.db, {
       company, contact_type: contact_type||'Mail Sent', next_action: next_action||'Call',
       next_action_date_override, contact_name: null, direct_line: null, email: null, log_id: logEntry.id,
     });
@@ -454,7 +446,7 @@ router.post('/log-mail/:id', async (req, res) => {
 
 // ── Log email action ──────────────────────────────────────────────────────────
 router.post('/log-email/:id', async (req, res) => {
-  const client = await pool.connect();
+  const client = await req.db.connect();
   try {
     const { rows: coRows } = await client.query('SELECT * FROM companies WHERE id=$1', [req.params.id]);
     const company = coRows[0];
@@ -467,7 +459,7 @@ router.post('/log-email/:id', async (req, res) => {
     );
 
     await client.query('BEGIN');
-    const logEntry = await appendCallLog({
+    const logEntry = await appendCallLog(req.db, {
       log_type: 'company', entity_id: company.id, company_id_str: company.company_id,
       entity_name: company.name, phone: company.main_phone, industry: company.industry,
       action_type: 'Email', contact_type: contact_type || 'Email Sent',
@@ -478,7 +470,7 @@ router.post('/log-email/:id', async (req, res) => {
       email_to: email_to || null, counts_as_attempt: 0,
     });
 
-    await scheduleNextAction(pool, {
+    await scheduleNextAction(req.db, {
       company, contact_type: contact_type||'Email Sent', next_action: next_action||'Call',
       next_action_date_override, contact_name: null, direct_line: null, email: null, log_id: logEntry.id,
     });
@@ -494,7 +486,7 @@ router.post('/log-email/:id', async (req, res) => {
 // ── Mail pieces ───────────────────────────────────────────────────────────────
 router.get('/mail-pieces', async (req, res) => {
   try {
-    const { rows } = await pool.query('SELECT * FROM mail_pieces ORDER BY sort_order, name');
+    const { rows } = await req.db.query('SELECT * FROM mail_pieces ORDER BY sort_order, name');
     res.json(rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -502,7 +494,7 @@ router.post('/mail-pieces', async (req, res) => {
   try {
     const { name, type = 'postcard', notes } = req.body;
     if (!name?.trim()) return res.status(400).json({ error: 'Name required.' });
-    const { rows } = await pool.query(
+    const { rows } = await req.db.query(
       'INSERT INTO mail_pieces (name, type, notes) VALUES ($1,$2,$3) RETURNING *',
       [name.trim(), type, notes||null]
     );
@@ -512,7 +504,7 @@ router.post('/mail-pieces', async (req, res) => {
 router.put('/mail-pieces/:id', async (req, res) => {
   try {
     const { name, type, notes } = req.body;
-    const { rows } = await pool.query(
+    const { rows } = await req.db.query(
       'UPDATE mail_pieces SET name=COALESCE($1,name), type=COALESCE($2,type), notes=COALESCE($3,notes) WHERE id=$4 RETURNING *',
       [name||null, type||null, notes||null, req.params.id]
     );
@@ -521,7 +513,7 @@ router.put('/mail-pieces/:id', async (req, res) => {
 });
 router.delete('/mail-pieces/:id', async (req, res) => {
   try {
-    await pool.query('DELETE FROM mail_pieces WHERE id=$1', [req.params.id]);
+    await req.db.query('DELETE FROM mail_pieces WHERE id=$1', [req.params.id]);
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -529,7 +521,7 @@ router.delete('/mail-pieces/:id', async (req, res) => {
 // ── Email templates ───────────────────────────────────────────────────────────
 router.get('/email-templates', async (req, res) => {
   try {
-    const { rows } = await pool.query('SELECT * FROM email_templates ORDER BY sort_order, name');
+    const { rows } = await req.db.query('SELECT * FROM email_templates ORDER BY sort_order, name');
     res.json(rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -537,7 +529,7 @@ router.post('/email-templates', async (req, res) => {
   try {
     const { name, subject, body } = req.body;
     if (!name?.trim()) return res.status(400).json({ error: 'Name required.' });
-    const { rows } = await pool.query(
+    const { rows } = await req.db.query(
       'INSERT INTO email_templates (name, subject, body) VALUES ($1,$2,$3) RETURNING *',
       [name.trim(), subject||null, body||null]
     );
@@ -547,7 +539,7 @@ router.post('/email-templates', async (req, res) => {
 router.put('/email-templates/:id', async (req, res) => {
   try {
     const { name, subject, body } = req.body;
-    const { rows } = await pool.query(
+    const { rows } = await req.db.query(
       `UPDATE email_templates SET name=COALESCE($1,name), subject=COALESCE($2,subject), body=COALESCE($3,body), updated_at=to_char(now(),'YYYY-MM-DD"T"HH24:MI:SS"Z"') WHERE id=$4 RETURNING *`,
       [name||null, subject||null, body||null, req.params.id]
     );
@@ -556,7 +548,7 @@ router.put('/email-templates/:id', async (req, res) => {
 });
 router.delete('/email-templates/:id', async (req, res) => {
   try {
-    await pool.query('DELETE FROM email_templates WHERE id=$1', [req.params.id]);
+    await req.db.query('DELETE FROM email_templates WHERE id=$1', [req.params.id]);
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

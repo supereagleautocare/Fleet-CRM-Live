@@ -12,7 +12,6 @@ import Companies from './pages/Companies.jsx';
 import Settings from './pages/Settings.jsx';
 import QuickLog from './pages/QuickLog.jsx';
 import ScriptPopup from './pages/ScriptPopup.jsx';
-import ActiveFleet from './pages/ActiveFleet.jsx';
 import ResetPassword from './pages/ResetPassword.jsx';
 import FleetFinder from './pages/FleetFinder.jsx';
 
@@ -150,7 +149,6 @@ export default function App() {
            <div className="main-content">
               <Routes>
                 <Route path="/"             element={<Navigate to="/dashboard" />} />
-                <Route path="/active-fleet" element={<ActiveFleet />} />
                 <Route path="/dashboard"    element={<Dashboard />} />
                 <Route path="/calling"      element={<CallingQueue />} />
                 <Route path="/mail-queue"   element={<MailQueue />} />

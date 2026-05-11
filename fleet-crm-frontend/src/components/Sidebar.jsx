@@ -15,12 +15,6 @@ export default function Sidebar({ mobileOpen = false, setMobileOpen = () => {} }
         <div className="sub">Fleet CRM</div>
       </div>
 
-      <div className="sidebar-section-label">Shop</div>
-<nav className="sidebar-nav">
-  <NavLink to="/active-fleet" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
-    <span className="icon">🔧</span> Active Fleet
-  </NavLink>
-</nav>
       <div className="sidebar-section-label">Overview</div>
       <nav className="sidebar-nav">
         <NavLink to="/dashboard" onClick={() => setMobileOpen(false)} className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>

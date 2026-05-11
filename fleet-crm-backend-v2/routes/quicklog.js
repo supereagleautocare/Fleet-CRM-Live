@@ -3,7 +3,6 @@
  */
 
 const express = require('express');
-const { pool } = require('../db/schema');
 const { requireAuth } = require('../middleware/auth');
 const { appendCallLog, scheduleNextAction } = require('./shared');
 
@@ -18,7 +17,7 @@ router.get('/search', async (req, res) => {
     let results = [];
 
     if (type === 'all' || type === 'company') {
-      const { rows: companies } = await pool.query(`
+      const { rows: companies } = await req.db.query(`
         SELECT
           c.id, c.company_id, c.name, c.main_phone, c.industry, c.address, c.city,
           c.lat, c.lng, c.is_multi_location, c.location_name, c.location_group,
@@ -54,7 +53,7 @@ router.get('/search', async (req, res) => {
 
       // Find matched contact for each result
       for (const c of companies) {
-        const { rows: contact } = await pool.query(`
+        const { rows: contact } = await req.db.query(`
           SELECT name, role_title, direct_line FROM company_contacts
           WHERE company_id = (SELECT company_id FROM companies WHERE id = $1)
             AND (name ILIKE $2 OR direct_line ILIKE $2 OR email ILIKE $2)
@@ -72,7 +71,7 @@ router.get('/search', async (req, res) => {
 
 // ── Log a call for a company ──────────────────────────────────────────────────
 router.post('/company/:id', async (req, res) => {
-  const client = await pool.connect();
+  const client = await req.db.connect();
   try {
     const { rows: coRows } = await client.query('SELECT * FROM companies WHERE id = $1', [req.params.id]);
     const company = coRows[0];
@@ -105,7 +104,7 @@ router.post('/company/:id', async (req, res) => {
 
     await client.query('BEGIN');
 
-    const logEntry = await appendCallLog({
+    const logEntry = await appendCallLog(req.db, {
       log_type: 'company',
       entity_id: company.id,
       company_id_str: company.company_id,
@@ -179,7 +178,7 @@ router.post('/company/:id', async (req, res) => {
       }
     }
 
-    const { next_action_date: nad } = await scheduleNextAction(pool, {
+    const { next_action_date: nad } = await scheduleNextAction(req.db, {
       company, contact_type, next_action, next_action_date_override,
       contact_name: contact_name||null,
       direct_line:  direct_line||null,

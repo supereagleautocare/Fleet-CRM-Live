@@ -3,7 +3,6 @@
  */
 
 const express = require('express');
-const { pool } = require('../db/schema');
 const { requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
@@ -11,7 +10,7 @@ router.use(requireAuth);
 
 router.get('/check-skipped', async (req, res) => {
   try {
-    const { rows } = await pool.query(`
+    const { rows } = await req.db.query(`
       SELECT contact_type, counts_as_attempt, COUNT(*) as cnt
       FROM call_log
       WHERE contact_type IN ('Skipped', 'Do Not Call')
@@ -70,7 +69,7 @@ router.get('/', async (req, res) => {
       visitWeekResult,
       visitMonthResult,
     ] = await Promise.all([
-      pool.query(`
+      req.db.query(`
         SELECT
           COUNT(*) as total,
           SUM(CASE WHEN due_date < $1 THEN 1 ELSE 0 END) as overdue,
@@ -78,51 +77,51 @@ router.get('/', async (req, res) => {
           SUM(CASE WHEN source_type = 'company' THEN 1 ELSE 0 END) as company_followups
         FROM follow_ups WHERE due_date <= $1
       `, [today]),
-      pool.query(`
+      req.db.query(`
         SELECT
           COUNT(*) as total,
           SUM(CASE WHEN scheduled_date < $1 THEN 1 ELSE 0 END) as overdue,
           SUM(CASE WHEN scheduled_date = $1 THEN 1 ELSE 0 END) as due_today
         FROM visit_queue WHERE scheduled_date <= $1
       `, [today]),
-      pool.query(`SELECT COUNT(*) as total_in_queue FROM calling_queue WHERE queue_type = 'company'`),
+      req.db.query(`SELECT COUNT(*) as total_in_queue FROM calling_queue WHERE queue_type = 'company'`),
       // Calls today
-      pool.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) = $1 AND action_type='Call' AND counts_as_attempt=1`, [today]),
+      req.db.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) = $1 AND action_type='Call' AND counts_as_attempt=1`, [today]),
       // Calls this week (calendar week Mon–today)
-      pool.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND action_type='Call' AND counts_as_attempt=1`, [weekStart]),
+      req.db.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND action_type='Call' AND counts_as_attempt=1`, [weekStart]),
       // Calls this month
-      pool.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND action_type='Call' AND counts_as_attempt=1`, [monthStart]),
+      req.db.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND action_type='Call' AND counts_as_attempt=1`, [monthStart]),
       // Calls this year
-      pool.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND action_type='Call' AND counts_as_attempt=1`, [yearStart]),
+      req.db.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND action_type='Call' AND counts_as_attempt=1`, [yearStart]),
       // Contacts today
-      pool.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) = $1 AND action_type!='Move'`, [today]),
+      req.db.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) = $1 AND action_type!='Move'`, [today]),
       // Contacts this week
-      pool.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND action_type!='Move'`, [weekStart]),
+      req.db.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND action_type!='Move'`, [weekStart]),
       // Contacts this month
-      pool.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND action_type!='Move'`, [monthStart]),
+      req.db.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND action_type!='Move'`, [monthStart]),
       // Contacts this year
-      pool.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND action_type!='Move'`, [yearStart]),
-      pool.query(`SELECT log_type, COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 GROUP BY log_type`, [periodStart]),
-      pool.query(`SELECT contact_type, COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND counts_as_attempt=1 GROUP BY contact_type ORDER BY cnt DESC LIMIT 10`, [periodStart]),
-      pool.query(`SELECT logged_by_name, COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND counts_as_attempt=1 GROUP BY logged_by_name ORDER BY cnt DESC`, [periodStart]),
-      pool.query(`
+      req.db.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND action_type!='Move'`, [yearStart]),
+      req.db.query(`SELECT log_type, COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 GROUP BY log_type`, [periodStart]),
+      req.db.query(`SELECT contact_type, COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND counts_as_attempt=1 GROUP BY contact_type ORDER BY cnt DESC LIMIT 10`, [periodStart]),
+      req.db.query(`SELECT logged_by_name, COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND counts_as_attempt=1 GROUP BY logged_by_name ORDER BY cnt DESC`, [periodStart]),
+      req.db.query(`
         SELECT
           (SELECT COUNT(*) FROM companies WHERE status = 'active') as total_companies,
           (SELECT COUNT(*) FROM call_log WHERE log_type = 'company' AND counts_as_attempt=1) as total_company_calls,
           (SELECT COUNT(*) FROM call_log WHERE action_type = 'Visit') as total_visits
       `),
       // Mail counts
-      pool.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) = $1 AND action_type='Mail'`, [today]),
-      pool.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND action_type='Mail'`, [weekStart]),
-      pool.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND action_type='Mail'`, [monthStart]),
+      req.db.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) = $1 AND action_type='Mail'`, [today]),
+      req.db.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND action_type='Mail'`, [weekStart]),
+      req.db.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND action_type='Mail'`, [monthStart]),
       // Email counts
-      pool.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) = $1 AND action_type='Email'`, [today]),
-      pool.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND action_type='Email'`, [weekStart]),
-      pool.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND action_type='Email'`, [monthStart]),
+      req.db.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) = $1 AND action_type='Email'`, [today]),
+      req.db.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND action_type='Email'`, [weekStart]),
+      req.db.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND action_type='Email'`, [monthStart]),
       // Visit counts
-      pool.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) = $1 AND action_type='Visit'`, [today]),
-      pool.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND action_type='Visit'`, [weekStart]),
-      pool.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND action_type='Visit'`, [monthStart]),
+      req.db.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) = $1 AND action_type='Visit'`, [today]),
+      req.db.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND action_type='Visit'`, [weekStart]),
+      req.db.query(`SELECT COUNT(*) as cnt FROM call_log WHERE substring(logged_at,1,10) >= $1 AND action_type='Visit'`, [monthStart]),
     ]);
 
     res.json({
@@ -188,7 +187,7 @@ router.get('/activity-drill', async (req, res) => {
       ? `cl.action_type = 'Call' AND cl.counts_as_attempt = 1`
       : `cl.action_type != 'Move'`;
 
-    const { rows } = await pool.query(`
+    const { rows } = await req.db.query(`
       SELECT c.id, c.name, c.company_id, c.main_phone, c.industry, c.pipeline_stage, c.company_status,
         c.is_multi_location, c.location_name,
         COUNT(cl.id) as contact_count,
@@ -208,7 +207,7 @@ router.get('/activity-drill', async (req, res) => {
 
 // DELETE /api/dashboard/:id (company delete)
 router.delete('/:id', async (req, res) => {
-  const client = await pool.connect();
+  const client = await req.db.connect();
   try {
     const { rows } = await client.query('SELECT * FROM companies WHERE id = $1', [req.params.id]);
     const company = rows[0];
@@ -233,7 +232,7 @@ router.delete('/:id', async (req, res) => {
 
 // POST /api/dashboard/:id/merge/:into_id
 router.post('/:id/merge/:into_id', async (req, res) => {
-  const client = await pool.connect();
+  const client = await req.db.connect();
   try {
     const { rows: s } = await client.query('SELECT * FROM companies WHERE id = $1', [req.params.id]);
     const { rows: t } = await client.query('SELECT * FROM companies WHERE id = $1', [req.params.into_id]);

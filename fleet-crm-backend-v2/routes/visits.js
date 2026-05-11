@@ -3,7 +3,6 @@
  */
 
 const express = require('express');
-const { pool } = require('../db/schema');
 const { requireAuth } = require('../middleware/auth');
 const { appendCallLog, clearAllCompanyQueues, scheduleNextAction } = require('./shared');
 
@@ -14,7 +13,7 @@ router.use(requireAuth);
 router.get('/all', async (req, res) => {
   try {
     const today = new Date().toLocaleDateString('en-CA');
-    const { rows } = await pool.query(`
+    const { rows } = await req.db.query(`
       SELECT v.*,
         c.company_status,
         c.is_starred,
@@ -42,7 +41,7 @@ router.get('/all', async (req, res) => {
 // GET /api/visits/all
 router.get('/all', async (req, res) => {
   try {
-    const { rows } = await pool.query(`
+    const { rows } = await req.db.query(`
       SELECT v.*,
         c.company_status,
         c.is_starred,
@@ -70,7 +69,7 @@ router.get('/all', async (req, res) => {
 // PUT /api/visits/:id
 router.put('/:id', async (req, res) => {
   try {
-    const { rows } = await pool.query('SELECT * FROM visit_queue WHERE id = $1', [req.params.id]);
+    const { rows } = await req.db.query('SELECT * FROM visit_queue WHERE id = $1', [req.params.id]);
     if (!rows[0]) return res.status(404).json({ error: 'Visit not found.' });
 
     const { working_notes, is_locked, notes, scheduled_date } = req.body;
@@ -83,7 +82,7 @@ router.put('/:id', async (req, res) => {
 
     if (!updates.length) return res.status(400).json({ error: 'Nothing to update.' });
     values.push(req.params.id);
-    const { rows: updated } = await pool.query(
+    const { rows: updated } = await req.db.query(
       `UPDATE visit_queue SET ${updates.join(', ')} WHERE id = $${i} RETURNING *`,
       values
     );
@@ -94,10 +93,10 @@ router.put('/:id', async (req, res) => {
 // DELETE /api/visits/:id
 router.delete('/:id', async (req, res) => {
   try {
-    const { rows } = await pool.query('SELECT * FROM visit_queue WHERE id = $1', [req.params.id]);
+    const { rows } = await req.db.query('SELECT * FROM visit_queue WHERE id = $1', [req.params.id]);
     if (!rows[0]) return res.status(404).json({ error: 'Visit not found.' });
     if (rows[0].is_locked) return res.status(403).json({ error: 'This visit is locked. Unlock it first.' });
-    await pool.query('DELETE FROM visit_queue WHERE id = $1', [req.params.id]);
+    await req.db.query('DELETE FROM visit_queue WHERE id = $1', [req.params.id]);
     res.json({ message: 'Visit cancelled.' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -105,19 +104,19 @@ router.delete('/:id', async (req, res) => {
 // POST /api/visits/:id/cancel  — cancel and route to next action
 router.post('/:id/cancel', async (req, res) => {
   try {
-    const { rows: vRows } = await pool.query('SELECT * FROM visit_queue WHERE id = $1', [req.params.id]);
+    const { rows: vRows } = await req.db.query('SELECT * FROM visit_queue WHERE id = $1', [req.params.id]);
     const visit = vRows[0];
     if (!visit) return res.status(404).json({ error: 'Visit not found.' });
 
-    const { rows: coRows } = await pool.query('SELECT * FROM companies WHERE id = $1', [visit.entity_id]);
+    const { rows: coRows } = await req.db.query('SELECT * FROM companies WHERE id = $1', [visit.entity_id]);
     const company = coRows[0];
     if (!company) return res.status(404).json({ error: 'Company not found.' });
 
     const { next_action, next_action_date_override } = req.body;
     if (!next_action) return res.status(400).json({ error: 'next_action is required.' });
 
-    await clearAllCompanyQueues(company.id);
-    const { next_action_date } = await scheduleNextAction(pool, {
+    await clearAllCompanyQueues(req.db, company.id);
+    const { next_action_date } = await scheduleNextAction(req.db, {
       company, contact_type: 'Cancelled', next_action, next_action_date_override,
       contact_name: visit.contact_name || null,
       direct_line: visit.direct_line || null,
@@ -129,7 +128,7 @@ router.post('/:id/cancel', async (req, res) => {
 
 // POST /api/visits/:id/complete
 router.post('/:id/complete', async (req, res) => {
-  const client = await pool.connect();
+  const client = await req.db.connect();
   try {
     const { rows: vRows } = await client.query('SELECT * FROM visit_queue WHERE id = $1', [req.params.id]);
     const visit = vRows[0];
@@ -155,7 +154,7 @@ router.post('/:id/complete', async (req, res) => {
 
     await client.query('BEGIN');
 
-    const logEntry = await appendCallLog({
+    const logEntry = await appendCallLog(req.db, {
       log_type: 'company',
       entity_id: company.id,
       company_id_str: company.company_id,
@@ -204,7 +203,7 @@ router.post('/:id/complete', async (req, res) => {
       }
     }
 
-    const { next_action_date: nad } = await scheduleNextAction(pool, {
+    const { next_action_date: nad } = await scheduleNextAction(req.db, {
       company, contact_type, next_action, next_action_date_override,
       contact_name: contact_name||visit.contact_name||null,
       direct_line:  direct_line||visit.direct_line||null,
@@ -228,14 +227,14 @@ router.post('/schedule', async (req, res) => {
     const { company_id } = req.body;
     if (!company_id) return res.status(400).json({ error: 'company_id required' });
 
-    const { rows: coRows } = await pool.query('SELECT * FROM companies WHERE id = $1', [company_id]);
+    const { rows: coRows } = await req.db.query('SELECT * FROM companies WHERE id = $1', [company_id]);
     const company = coRows[0];
     if (!company) return res.status(404).json({ error: 'Company not found' });
 
-    await pool.query('DELETE FROM visit_queue WHERE entity_id = $1', [company_id]);
+    await req.db.query('DELETE FROM visit_queue WHERE entity_id = $1', [company_id]);
 
     const today = new Date().toLocaleDateString('en-CA');
-    const { rows } = await pool.query(`
+    const { rows } = await req.db.query(`
       INSERT INTO visit_queue (company_id, entity_id, entity_name, scheduled_date, address, city, contact_name)
       VALUES ($1,$2,$3,$4,$5,$6,null) RETURNING *
     `, [company.company_id, company.id, company.name, today, company.address, company.city]);
@@ -249,10 +248,10 @@ router.get('/queue-status/:company_id', async (req, res) => {
   try {
     const id = req.params.company_id;
     const [coRes, callingRes, visitRes, fuRes] = await Promise.all([
-      pool.query('SELECT pipeline_stage FROM companies WHERE id = $1', [id]),
-      pool.query("SELECT id FROM calling_queue WHERE queue_type='company' AND entity_id=$1", [id]),
-      pool.query('SELECT id FROM visit_queue WHERE entity_id=$1', [id]),
-      pool.query("SELECT due_date FROM follow_ups WHERE entity_id=$1 AND source_type='company' AND is_locked=0 ORDER BY due_date ASC LIMIT 1", [id]),
+      req.db.query('SELECT pipeline_stage FROM companies WHERE id = $1', [id]),
+      req.db.query("SELECT id FROM calling_queue WHERE queue_type='company' AND entity_id=$1", [id]),
+      req.db.query('SELECT id FROM visit_queue WHERE entity_id=$1', [id]),
+      req.db.query("SELECT due_date FROM follow_ups WHERE entity_id=$1 AND source_type='company' AND is_locked=0 ORDER BY due_date ASC LIMIT 1", [id]),
     ]);
     res.json({
       stage:        coRes.rows[0]?.pipeline_stage || null,
