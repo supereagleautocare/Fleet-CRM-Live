@@ -35,7 +35,7 @@ const STAGES = [
   { key:'mail',     label:'Mail',     icon:'✉️',  color:'#065f46', bg:'#ecfdf5' },
   { key:'email',    label:'Email',    icon:'📧', color:'#6b21a8', bg:'#faf5ff' },
   { key:'visit',    label:'Visit',    icon:'📍', color:'#92400e', bg:'#fffbeb' },
-  { key:'dead',     label:'Dead',     icon:'💀', color:'#6b7280', bg:'#f9fafb' },
+  { key:'dead',     label:'Stopped',  icon:'⏹️', color:'#6b7280', bg:'#f9fafb' },
 ];
 
 function PipelineBar({ company, onMove, onStatusChange }) {
@@ -570,7 +570,7 @@ async function handleImport(e) {
           { key:'prospect',  label:'Prospect',  icon:'',   active:'#e2e8f0', activeText:'#334155' },
           { key:'interested',label:'Interested',icon:'⭐', active:'#fef9c3', activeText:'#92400e' },
           { key:'customer',  label:'Customer',  icon:'✅', active:'#dcfce7', activeText:'#166534' },
-          { key:'dead',      label:'Dead',      icon:'💀', active:'#fee2e2', activeText:'#dc2626' },
+          { key:'dead',      label:'Stopped',   icon:'⏹️', active:'#f1f5f9', activeText:'#475569' },
         ].map(s => {
           const on = filterStatus.includes(s.key);
           return (

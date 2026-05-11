@@ -70,7 +70,6 @@ export default function RowActions({ companyStatus='prospect', onStatusChange, o
                 <option value="prospect">Prospect</option>
                 <option value="interested">⭐ Interested</option>
                 <option value="customer">✅ Customer</option>
-                <option value="dead">💀 Dead</option>
               </select>
             </div>
 

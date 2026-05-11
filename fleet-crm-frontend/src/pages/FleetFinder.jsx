@@ -373,7 +373,7 @@ function CompareModal({ company, onClose, onAddLocation, onSkip }) {
     load();
   }, [company.crm_match_id]);
 
-  const STAGE_LABELS = { new:'New', call:'Calling', visit:'Visit', mail:'Mail', email:'Email', dead:'Dead/Lost', won:'Won' };
+  const STAGE_LABELS = { new:'New', call:'Calling', visit:'Visit', mail:'Mail', email:'Email', dead:'Stopped', won:'Won' };
 
   function CRMField({ label, value }) {
     if (!value) return null;
@@ -1095,15 +1095,16 @@ export default function FleetFinder() {
     try {
       // Import as Dead so it's blocked from future searches via the CRM skip list
       await api.createCompany({
-        name:      company.name,
-        main_phone: company.main_phone || null,
-        industry:  company.industry   || null,
-        address:   company.address    || null,
-        city:      company.city       || null,
-        state:     company.state      || null,
-        zip:       company.zip        || null,
-        website:   company.website    || null,
+        name:           company.name,
+        main_phone:     company.main_phone || null,
+        industry:       company.industry   || null,
+        address:        company.address    || null,
+        city:           company.city       || null,
+        state:          company.state      || null,
+        zip:            company.zip        || null,
+        website:        company.website    || null,
         pipeline_stage: 'dead',
+        company_status: 'dead',
         notes: 'Reviewed via Fleet Finder — not a fit',
       });
       removeResult(index);

@@ -163,7 +163,7 @@ export default function EmailQueue() {
                               color:row.company_status==='interested'?'#92400e':row.company_status==='customer'?'#166534':'#dc2626',
                               background:row.company_status==='interested'?'#fef9c3':row.company_status==='customer'?'#f0fdf4':'#fef2f2',
                               display:'inline-block', padding:'1px 7px', borderRadius:8 }}>
-                              {row.company_status==='interested'?'⭐ Interested':row.company_status==='customer'?'✅ Customer':'💀 Dead'}
+                              {row.company_status==='interested'?'⭐ Interested':row.company_status==='customer'?'✅ Customer':'⏹️ Stopped'}
                             </div>
                           )}
                           <div

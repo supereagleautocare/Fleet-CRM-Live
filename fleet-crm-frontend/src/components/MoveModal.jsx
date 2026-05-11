@@ -14,7 +14,7 @@ const STAGES = [
   { key:'mail',     label:'✉️ Mail' },
   { key:'email',    label:'📧 Email' },
   { key:'visit',    label:'📍 Visit' },
-  { key:'dead',     label:'💀 Dead' },
+  { key:'dead',     label:'⏹️ Stopped' },
 ];
 
 export default function MoveModal({ companyId, onClose, onMoved }) {

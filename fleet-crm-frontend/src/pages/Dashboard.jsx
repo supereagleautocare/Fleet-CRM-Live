@@ -9,7 +9,7 @@ const STAGES = [
   { key: 'mail',  label: 'Mail',  icon: '✉️',  color: '#065f46', bg: '#ecfdf5', border: '#a7f3d0' },
   { key: 'email', label: 'Email', icon: '📧', color: '#6b21a8', bg: '#faf5ff', border: '#e9d5ff' },
   { key: 'visit', label: 'Visit', icon: '📍', color: '#92400e', bg: '#fffbeb', border: '#fde68a' },
-  { key: 'dead',  label: 'Dead',  icon: '💀', color: '#6b7280', bg: '#f9fafb', border: '#e5e7eb' },
+  { key: 'dead',  label: 'Stopped', icon: '⏹️', color: '#6b7280', bg: '#f9fafb', border: '#e5e7eb' },
 ];
 
 const DEFAULT_GOALS = { calls: 20, mail: 10, email: 5, visits: 3 };
@@ -25,7 +25,7 @@ function StatusBadge({ status }) {
   const map = {
     interested: { label:'⭐ Interested', color:'#92400e', bg:'#fef9c3' },
     customer:   { label:'✅ Customer',   color:'#166534', bg:'#f0fdf4' },
-    dead:       { label:'💀 Dead',       color:'#dc2626', bg:'#fef2f2' },
+    dead:       { label:'⏹️ Stopped',     color:'#6b7280', bg:'#f1f5f9' },
   };
   const s = map[status];
   if (!s) return null;
