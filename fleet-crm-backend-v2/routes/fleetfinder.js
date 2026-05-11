@@ -545,11 +545,7 @@ router.post('/search', auth, async (req, res) => {
 
     const industryList = industries.length ? industries.join(', ') : 'all industries';
 
-    // ── 5b. Load custom fleet signal keywords ────────────────────────────────
     const locationStr = shopCity ? `${shopCity}, ${stateList}` : stateList;
-    const kwRow = await pool.query(`SELECT value FROM config_settings WHERE key = 'ff_search_keywords'`);
-    const customKeywords = (kwRow.rows[0]?.value || 'company vehicle')
-      .split(',').map(k => k.trim()).filter(Boolean);
 
     // ── 6. Two-phase Claude search ────────────────────────────────────────────
     const anthropic = new Anthropic({ apiKey: anthropicKey });
@@ -691,8 +687,6 @@ Target area: ${locationStr}
 Industries: ${industryList}
 Vehicle types this shop services: ${vehicleDesc}
 Fleet size preference (soft preference only — include companies close to this range): ${fleetSizeDesc}
-Fleet signal keywords to watch for: "${customKeywords.join('", "')}"
-
 Run 8–10 searches. Find the 8–10 BEST leads — thoroughly confirmed, not just discovered. Quality over quantity.
 
 For every company you plan to include on your final list, you must run these two searches before finalizing:

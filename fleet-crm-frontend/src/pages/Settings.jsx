@@ -459,24 +459,6 @@ function FleetFinderSettings({ showToast }) {
         </div>
       </div>
 
-      {/* Fleet Signal Keywords */}
-      <div className="table-card" style={{ padding: '18px 22px' }}>
-        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>Fleet Signal Keywords</div>
-        <div style={{ fontSize: 12, color: 'var(--gray-400)', marginBottom: 12 }}>
-          Words to look for in job postings that signal a company has a fleet. Separate multiple keywords with commas.
-        </div>
-        <input
-          type="text"
-          defaultValue={ffSettings.ff_search_keywords || 'company vehicle'}
-          placeholder="company vehicle, take home vehicle, company truck"
-          onBlur={e => save({ ff_search_keywords: e.target.value.trim() })}
-          style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--gray-200)', borderRadius: 7, fontSize: 13 }}
-        />
-        <div style={{ fontSize: 11, color: 'var(--gray-400)', marginTop: 6 }}>
-          Default: <b>company vehicle</b> — the phrase that appears in job postings when a company provides trucks to their techs. Add more signals your market uses, like "take home truck" or "service van provided."
-        </div>
-      </div>
-
       {/* Budget + Radius */}
       <div className="table-card" style={{ padding: '18px 22px' }}>
         <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 16 }}>Budget & Search Defaults</div>
