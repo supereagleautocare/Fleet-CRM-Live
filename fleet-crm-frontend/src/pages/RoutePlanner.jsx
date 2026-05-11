@@ -88,6 +88,7 @@ export default function RoutePlanner({ embedded = false }) {
   const [order, setOrder]                 = useState([]);
   const [startMode, setStartMode]         = useState('address');
   const [startAddr, setStartAddr]         = useState('3816 Monroe Rd, Charlotte, NC 28205');
+  const [startAddrGeo, setStartAddrGeo]   = useState(null);
   const [timeMode, setTimeMode]           = useState('now');
   const [startTime, setStartTime]         = useState(nowTimeStr());
   const [endMode, setEndMode]             = useState('none');
@@ -362,6 +363,7 @@ useEffect(() => {
 
   async function getStartCoords() {
     if (startMode === 'gps' && myGps) return myGps;
+    if (startAddrGeo) return startAddrGeo;
     return await geocodeAddress(startAddr);
   }
 
@@ -652,8 +654,10 @@ useEffect(() => {
             </div>
             {startMode==='address' && (
               <div style={{width:280}}>
-                <AddressAutocomplete value={startAddr} onChange={setStartAddr}
-                  onSelect={({display})=>setStartAddr(display)} placeholder="Choose starting point"/>
+                <AddressAutocomplete value={startAddr}
+                  onChange={v=>{ setStartAddr(v); setStartAddrGeo(null); }}
+                  onSelect={({display,lat,lng})=>{ setStartAddr(display); if(lat&&lng) setStartAddrGeo({lat,lng}); }}
+                  placeholder="Choose starting point"/>
               </div>
             )}
             {startMode==='gps' && (
@@ -740,8 +744,10 @@ useEffect(() => {
                     ))}
                   </div>
                   {startMode==='address' && (
-                    <AddressAutocomplete value={startAddr} onChange={setStartAddr}
-                      onSelect={({display})=>setStartAddr(display)} placeholder="Choose starting point"/>
+                    <AddressAutocomplete value={startAddr}
+                      onChange={v=>{ setStartAddr(v); setStartAddrGeo(null); }}
+                      onSelect={({display,lat,lng})=>{ setStartAddr(display); if(lat&&lng) setStartAddrGeo({lat,lng}); }}
+                      placeholder="Choose starting point"/>
                   )}
                   {startMode==='gps' && (
                     <span style={{fontSize:12,color:'#2563eb',padding:'4px 10px',background:'#eff6ff',borderRadius:6,border:'1px solid #bfdbfe',display:'flex',alignItems:'center',gap:6}}>
