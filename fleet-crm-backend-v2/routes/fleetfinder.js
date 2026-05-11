@@ -702,8 +702,10 @@ For every company you plan to include on your final list, you must run these two
 A company confirmed only by its own website gets a lower confidence score. LinkedIn and Indeed are your independent confirmation.
 
 For each company, also record:
-• Name, industry, full street address (exact street address — "Charlotte, NC" is NOT enough, dig for the actual street from their Contact Us page or Google Maps)
-• Phone number from Google Maps or their website
+• Name, industry
+• WEBSITE — search "[company name]" right now if you don't have it. Almost every company has a website. Record it.
+• STREET ADDRESS — go to their Contact Us or Locations page. Record the exact street address (e.g. "1419 Ameron Dr, Charlotte, NC 28273"). HQ address is fine if there's no local office — just note it's HQ. "Charlotte, NC" alone is not acceptable.
+• PHONE — from their Contact Us page or Google Maps listing. Record the HQ main line if no local number. Do not leave this blank if their website or Google Maps has it.
 • Decision-maker: operations manager, branch manager, field operations manager, or regional manager. Name, exact title, LinkedIn URL.
 • National chain or local independent; if chain, confirm local branch exists
 • Your confidence they run local vehicles here and why
@@ -795,12 +797,12 @@ Required format per company:
   "name": string,
   "industry": string,
   "industry_category": "consumer_facing"|"contract_driven"|"both",
-  "address": string|null (HQ/main office street address from their Contact Us page — not a service area, the real mailing address),
+  "address": string|null (REQUIRED if findable — HQ or any known street address from their Contact Us page, Google Maps, or FMCSA. "Charlotte, NC" is not enough — must be a real street address. Use HQ address if no local office found; note that in next_step. Only null if no address was found anywhere),
   "city": string|null (HQ city),
   "state": string|null (HQ state),
   "zip": string|null (HQ zip),
-  "main_phone": string|null (phone number from their Contact Us page or Google Maps — always record this if visible),
-  "website": string|null,
+  "main_phone": string|null (REQUIRED if findable — use the phone from their Contact Us page, Google Maps listing, or any company directory. HQ main line is fine if no local number found. Only null if no phone was found anywhere after checking their website and Google Maps),
+  "website": string|null (REQUIRED — almost every company has a website. Search "[company name]" if you don't already have it. Only null if you genuinely cannot find any web presence at all),
   "contact_name": string|null (LOCAL decision-maker's full name — only if confirmed to be based in or near the search city. Do NOT use directors, VPs, presidents, or executives based in other cities. Set null if no local manager found),
   "contact_title": string|null (their exact job title — must include "manager", "operations", "regional", "field", or "owner". Set null if only national-level executives were found),
   "contact_linkedin": string|null (their LinkedIn profile URL),
@@ -897,8 +899,18 @@ Required format per company:
       if (dismissedKeys.has(key)) continue;
 
       // Fuzzy-match against CRM by name
+      // Also catches "Prince Telecom LLC" vs "Prince Telecom Charlotte" — if one normalized
+      // name fully contains the other, they're the same brand even if city/suffix differs.
       const normN = normalizeName(co.name);
-      const crmMatch = existing.rows.find(r => stringSimilarity(normN, normalizeName(r.name)) >= 0.85);
+      const crmMatch = existing.rows.find(r => {
+        const normCrm = normalizeName(r.name);
+        if (stringSimilarity(normN, normCrm) >= 0.85) return true;
+        // Substring match: minimum 4 chars to avoid false positives on short names
+        if (normN.length >= 4 && normCrm.length >= 4) {
+          if (normCrm.includes(normN) || normN.includes(normCrm)) return true;
+        }
+        return false;
+      });
 
       if (crmMatch) {
         const coAddr  = normalizeAddress(co.address   || '');
