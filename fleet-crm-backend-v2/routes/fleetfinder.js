@@ -321,11 +321,14 @@ router.get('/test-search', auth, async (req, res) => {
   }
 });
 
-// ── GET /api/fleetfinder/dismissed ──────────────────────────────────────────
+// ── GET /api/fleetfinder/dismissed ───────────────────────────────────────────
+// Returns dead CRM companies (the single source of truth for dismissed leads)
 router.get('/dismissed', auth, async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT * FROM fleet_finder_dismissed ORDER BY dismissed_at DESC`
+      `SELECT id, name, address, city, state, main_phone AS phone, created_at AS dismissed_at
+       FROM companies WHERE status = 'active' AND company_status = 'dead'
+       ORDER BY created_at DESC`
     );
     res.json(result.rows);
   } catch (e) {
@@ -334,25 +337,20 @@ router.get('/dismissed', auth, async (req, res) => {
 });
 
 // ── POST /api/fleetfinder/dismiss ────────────────────────────────────────────
+// Creates a dead company record in the CRM — single source of truth
 router.post('/dismiss', auth, async (req, res) => {
   try {
-    const { name, address, phone, city, state } = req.body;
+    const { name, address, phone, city, state, website, zip } = req.body;
     const result = await pool.query(
-      `INSERT INTO fleet_finder_dismissed (name, address, phone, city, state)
-       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-      [name, address || null, phone || null, city || null, state || null]
+      `INSERT INTO companies (name, address, city, state, zip, main_phone, website, status, company_status, pipeline_stage, created_at, updated_at, stage_updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'active','dead','dead',
+         to_char(now(),'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+         to_char(now(),'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+         to_char(now(),'YYYY-MM-DD"T"HH24:MI:SS"Z"'))
+       RETURNING id`,
+      [name, address || null, city || null, state || null, zip || null, phone || null, website || null]
     );
     res.json({ id: result.rows[0].id });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// ── DELETE /api/fleetfinder/dismiss/:id ──────────────────────────────────────
-router.delete('/dismiss/:id', auth, async (req, res) => {
-  try {
-    await pool.query(`DELETE FROM fleet_finder_dismissed WHERE id = $1`, [req.params.id]);
-    res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -503,21 +501,23 @@ router.post('/search', auth, async (req, res) => {
     const shopCity = await reverseGeocode(lat, lng);
 
     // ── 3. Pull existing companies for dedup ──────────────────────────────────
-    const existing = await pool.query(
-      `SELECT id, name, address, city, main_phone FROM companies WHERE status = 'active'`
-    );
+    const [existingRes, deadRes] = await Promise.all([
+      pool.query(`SELECT id, name, address, city, main_phone FROM companies WHERE status = 'active' AND company_status != 'dead'`),
+      pool.query(`SELECT name, address, city FROM companies WHERE status = 'active' AND company_status = 'dead'`),
+    ]);
+    const existing = existingRes;
     const existingNames = existing.rows.map(r => normalizeName(r.name)).filter(Boolean);
-    // Build a skip list of name + address pairs for Claude (name only if no address)
-    const crmSkipList = existing.rows
-      .map(r => r.address ? `${r.name} — ${r.address}` : r.name)
-      .filter(Boolean)
-      .join('\n');
 
-    // ── 4. Pull dismissed companies ────────────────────────────────────────────
+    // Build Claude skip list: active companies (full detail) + dead companies (name only)
+    const crmSkipList = [
+      ...existing.rows.map(r => r.address ? `${r.name} — ${r.address}` : r.name),
+      ...deadRes.rows.map(r => r.name),
+    ].filter(Boolean).join('\n');
+
+    // ── 4. Build dismissed key set from dead CRM companies ────────────────────
     await pool.query(`DELETE FROM fleet_finder_seen WHERE expires_at < now()::text`);
-    const dismissed = await pool.query(`SELECT name, address, city FROM fleet_finder_dismissed`);
     const dismissedKeys = new Set(
-      dismissed.rows.map(r => `${normalizeName(r.name)}|${normalizeAddress(r.address || '')}`)
+      deadRes.rows.map(r => `${normalizeName(r.name)}|${normalizeAddress(r.address || '')}`)
     );
 
     // ── 5. Build location description ─────────────────────────────────────────
