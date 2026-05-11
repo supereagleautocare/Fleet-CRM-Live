@@ -697,17 +697,6 @@ useEffect(() => {
             )}
           </div>
 
-          {!route && (
-            <button className="btn btn-primary route-plan-btn-desktop" style={{marginLeft:'auto',whiteSpace:'nowrap'}}
-              onClick={buildRoute} disabled={planning||selected.size===0}>
-              {planning ? (
-                <span style={{display:'flex',alignItems:'center',gap:6}}>
-                  <span style={{width:12,height:12,border:'2px solid rgba(0,0,0,.2)',borderTopColor:'var(--navy-950)',borderRadius:'50%',display:'inline-block',animation:'spin .7s linear infinite'}}/>
-                  {planStep||'Planning…'}
-                </span>
-              ) : `🗺️ Plan Route — ${selected.size} stop${selected.size!==1?'s':''}`}
-            </button>
-          )}
         </div>
         {/* Mobile: Plan Route + Settings */}
         {!route && (
@@ -808,6 +797,18 @@ useEffect(() => {
           {/* STOP SELECTOR */}
           {!route && (
             <>
+              {/* Plan Route — sticky at top */}
+              <div style={{padding:'8px 12px',borderBottom:'1px solid var(--gray-200)',flexShrink:0,background:'white'}}>
+                <button className="btn btn-primary" style={{width:'100%',fontWeight:800}}
+                  onClick={buildRoute} disabled={planning||selected.size===0}>
+                  {planning ? (
+                    <span style={{display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+                      <span style={{width:12,height:12,border:'2px solid rgba(0,0,0,.2)',borderTopColor:'var(--navy-950)',borderRadius:'50%',display:'inline-block',animation:'spin .7s linear infinite'}}/>
+                      {planStep||'Planning…'}
+                    </span>
+                  ) : `🗺️ Plan Route — ${selected.size} stop${selected.size!==1?'s':''}`}
+                </button>
+              </div>
               <div style={{padding:'10px 12px',borderBottom:'1px solid var(--gray-200)',flexShrink:0}}>
                 <QueueFilter value={stopFilter} onChange={setStopFilter} customFrom={customFrom} customTo={customTo} onCustomFrom={setCustomFrom} onCustomTo={setCustomTo} />
               </div>
@@ -891,10 +892,7 @@ useEffect(() => {
                                   style={{padding:'0 5px',border:'1px solid var(--gray-200)',borderRadius:3,background:'white',cursor:'pointer',fontSize:10,opacity:idx===filteredIds.length-1?.3:1}}>↓</button>
                               </div>
                             </div>
-                            <div style={{fontSize:11,color:v.address?'var(--gray-400)':'#dc2626',marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-                              {v.address ? `${v.address}${v.city?', '+v.city:''}` : '⚠️ No address'}
-                            </div>
-                            <div style={{display:'flex',alignItems:'center',gap:6,marginTop:5}} onClick={e=>e.stopPropagation()}>
+                            <div style={{display:'flex',alignItems:'center',gap:6,marginTop:4}} onClick={e=>e.stopPropagation()}>
                               {isOver  && <span className="badge badge-overdue">Overdue</span>}
                               {isToday && <span className="badge badge-today">Today</span>}
                               {!isOver && !isToday && v.scheduled_date && <span style={{fontSize:11,color:'var(--gray-500)'}}>Due {fmtDate(v.scheduled_date)}</span>}
@@ -906,14 +904,7 @@ useEffect(() => {
                                   style={{width:18,height:18,border:'1px solid var(--gray-200)',borderRadius:3,background:'white',cursor:'pointer',fontSize:12,lineHeight:1,padding:0,display:'flex',alignItems:'center',justifyContent:'center'}}>+</button>
                               </div>
                             </div>
-                            <div className="stop-card-actions" style={{display:'flex',gap:4,marginTop:6,alignItems:'center'}} onClick={e=>e.stopPropagation()}>
-                              <div className="stop-card-row-actions">
-                                <RowActions
-                                  companyStatus={v.company_status || 'prospect'}
-                                  onStatusChange={async status => { await api.updateCompanyStatus(v.entity_id, status); const d=await api.visitsAll(); setVisits(d); }}
-                                  onMove={() => setMovingId(v.entity_id)}
-                                />
-                              </div>
+                            <div style={{display:'flex',gap:4,marginTop:6,alignItems:'center'}} onClick={e=>e.stopPropagation()}>
                               <button className="btn btn-sm btn-primary" style={{flex:1,fontSize:10,padding:'3px 0'}}
                                 onClick={()=>{ setLogForm({contact_type:'',notes:'',contact_name:'',direct_line:'',next_action:'Call'}); setLoggingStop(v.id); }}>
                                 ✅ Log Visit
@@ -1059,6 +1050,14 @@ useEffect(() => {
               if (nearbyFilter !== 'all' && c.pipeline_stage !== nearbyFilter) return false;
               return true;
             })}
+            selectedStops={!route ? (() => {
+              const orderedSel = order.filter(id => selected.has(id));
+              return orderedSel.map((id, i) => {
+                const v = visits.find(v => v.id === id); if (!v) return null;
+                const c = nearbyMapped.find(c => c.id === v.entity_id);
+                return c?.lat && c?.lng ? { num: i+1, lat: c.lat, lng: c.lng, name: v.entity_name, companyId: v.entity_id } : null;
+              }).filter(Boolean);
+            })() : []}
             myGps={myGps}
             navigate={navigate}
             onMapReady={m => { mapInstanceRef2.current = m; }}
@@ -1455,13 +1454,14 @@ function MissingAddressesPopup({ missing, navigate }) {
   );
 }
 // ── Persistent Leaflet Map ────────────────────────────────────────────────────
-function PersistentMap({ routeStops=[], startGeo=null, returnHome=false, nearbyCompanies=[], onAddNearby, navigate, onMapReady, myGps=null }) {
-  const mapRef          = useRef(null);
-  const mapInstanceRef  = useRef(null);
-  const routeLayerRef   = useRef(null);
-  const nearbyLayerRef  = useRef(null);
-  const gpsLayerRef     = useRef(null);
-  const LRef            = useRef(null);
+function PersistentMap({ routeStops=[], startGeo=null, returnHome=false, nearbyCompanies=[], onAddNearby, navigate, onMapReady, myGps=null, selectedStops=[] }) {
+  const mapRef           = useRef(null);
+  const mapInstanceRef   = useRef(null);
+  const routeLayerRef    = useRef(null);
+  const nearbyLayerRef   = useRef(null);
+  const gpsLayerRef      = useRef(null);
+  const selectedLayerRef = useRef(null);
+  const LRef             = useRef(null);
   const [mapReady, setMapReady] = useState(false);
 
   // Block native browser scroll on touchmove inside the map.
@@ -1494,9 +1494,10 @@ function PersistentMap({ routeStops=[], startGeo=null, returnHome=false, nearbyC
       L.control.zoom({ position: 'bottomleft' }).addTo(map);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution:'© OpenStreetMap', maxZoom:19 }).addTo(map);
       mapInstanceRef.current = map;
-      routeLayerRef.current  = L.layerGroup().addTo(map);
-      nearbyLayerRef.current = L.layerGroup().addTo(map);
-      gpsLayerRef.current    = L.layerGroup().addTo(map);
+      routeLayerRef.current    = L.layerGroup().addTo(map);
+      selectedLayerRef.current = L.layerGroup().addTo(map);
+      nearbyLayerRef.current   = L.layerGroup().addTo(map);
+      gpsLayerRef.current      = L.layerGroup().addTo(map);
       onMapReady?.(map);
       setMapReady(true);
       // Invalidate after paint so Leaflet gets accurate dimensions
@@ -1560,6 +1561,20 @@ function PersistentMap({ routeStops=[], startGeo=null, returnHome=false, nearbyC
     }
   }, [routeStops.map(s=>s.id+','+s.lat).join('|'), startGeo?.lat, returnHome, mapReady]);
 
+  // Selected stops numbered pins (pre-route selection mode)
+  useEffect(() => {
+    const map = mapInstanceRef.current; const L = LRef.current;
+    if (!map || !L || !selectedLayerRef.current) return;
+    selectedLayerRef.current.clearLayers();
+    if (routeStops.length > 0) return; // route layer handles this when planned
+    selectedStops.forEach(({ lat, lng, name, num }) => {
+      if (!lat || !lng) return;
+      const html = `<div style="width:28px;height:28px;border-radius:50%;background:#f59e0b;border:2.5px solid white;box-shadow:0 2px 8px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;font-weight:900;font-size:12px;color:#1e293b;cursor:pointer">${num}</div>`;
+      L.marker([lat, lng], { icon: L.divIcon({ html, className:'', iconAnchor:[14,14] }), zIndexOffset:500 })
+        .addTo(selectedLayerRef.current).bindPopup(`<b>${name}</b>`);
+    });
+  }, [selectedStops.map(s=>s.num+':'+s.lat).join('|'), routeStops.length, mapReady]);
+
   // Update nearby layer
   useEffect(() => {
     const map = mapInstanceRef.current; const L = LRef.current;
@@ -1568,10 +1583,12 @@ function PersistentMap({ routeStops=[], startGeo=null, returnHome=false, nearbyC
     Object.keys(window).filter(k=>k.startsWith('_addNearby_')).forEach(k=>delete window[k]);
     const SCOLOR = { call:'#dc2626', mail:'#16a34a', email:'#2563eb', visit:'#f59e0b', new:'#64748b' };
     const SLBL   = { call:'📞 Calling', mail:'✉️ Mail', email:'📧 Email', visit:'📍 Visit', new:'New' };
-    const routeIds = new Set(routeStops.map(s => s.companyId ?? s.id));
+    const routeIds   = new Set(routeStops.map(s => s.companyId ?? s.id));
+    const selectedIds = new Set(selectedStops.map(s => s.companyId));
     nearbyCompanies.filter(c => c.geoOk && c.lat && c.lng).forEach(c => {
       const col = SCOLOR[c.pipeline_stage] || '#64748b';
       const isInRoute = routeIds.has(c.id);
+      if (selectedIds.has(c.id) && routeStops.length === 0) return; // numbered pin handles it
       const lastContactDate = c.last_contacted ? new Date(c.last_contacted).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : null;
       const followup = c.followup_due ? new Date(c.followup_due+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}) : null;
       const popup = `<div style="min-width:210px;max-width:260px;font-family:system-ui,sans-serif">
@@ -1595,7 +1612,7 @@ function PersistentMap({ routeStops=[], startGeo=null, returnHome=false, nearbyC
       if (!isInRoute && onAddNearby) window[`_addNearby_${c.id}`] = () => { onAddNearby(c); map.closePopup(); };
             window[`_navTo_${c.id}`] = () => { map.closePopup(); navigate('/companies?company=' + c.id); };
     });
-  }, [nearbyCompanies.map(c=>c.id+'@'+(c.geoOk?1:0)).join('|'), routeStops.map(s=>(s.companyId??s.id)+':'+s.id).join(','), mapReady]);
+  }, [nearbyCompanies.map(c=>c.id+'@'+(c.geoOk?1:0)).join('|'), routeStops.map(s=>(s.companyId??s.id)+':'+s.id).join(','), selectedStops.map(s=>s.companyId).join(','), mapReady]);
 
   // GPS blue dot
   useEffect(() => {
