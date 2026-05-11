@@ -570,8 +570,12 @@ Find them through LinkedIn, job boards, and contractor registries.
 LINKEDIN (primary) — your most powerful B2B source
   Field employees: site:linkedin.com/in "[company name]" "${shopCity}" — each field-role profile = 1 vehicle
   Find companies in the industry: "${industryList}" "${shopCity}" site:linkedin.com/in technician OR installer OR driver
-  Decision-maker: site:linkedin.com/in "[company name]" "${shopCity}" "operations manager" OR "branch manager" OR "field manager"
-  Priority: Operations Manager > Branch Manager > Field Ops Manager > Regional Manager > Fleet Manager
+  Local decision-maker (must be based IN or near ${shopCity}): site:linkedin.com/in "[company name]" "${shopCity}" "manager"
+  Also try: site:linkedin.com/in "[company name]" "${shopCity}" "operations" OR "regional" OR "field" OR "branch"
+  CRITICAL: Only use contacts whose LinkedIn profile shows ${shopCity} or nearby as their location. Skip anyone based in a different city.
+  Target titles: Branch Manager, Operations Manager, Field Ops Manager, Regional Manager, Field Manager
+  SKIP: Director, VP, President, CEO — national executives, not local contacts.
+  If no local manager found with those keywords, record contact as null.
 
 INDEED / GLASSDOOR (primary) — job postings reveal fleet operations
   "[industry] ${shopCity} company vehicle" or "[company name] technician ${shopCity}"
@@ -608,9 +612,12 @@ INDEED / GLASSDOOR (secondary) — confirms fleet operations
   "[company name] ${shopCity}" technician — look for "company vehicle provided", "take-home truck".
   Record exact job posting URL if found.
 
-LINKEDIN (secondary) — lower signal for consumer companies but useful for finding the decision-maker
-  site:linkedin.com/in "[company name]" "${shopCity}" — find the owner or ops manager.
-  Priority: Owner > Operations Manager > Service Manager
+LINKEDIN (secondary) — useful for finding the LOCAL decision-maker
+  site:linkedin.com/in "[company name]" "${shopCity}" "manager" OR "owner"
+  Only use contacts whose LinkedIn profile location shows ${shopCity} or nearby. Skip anyone in a different region.
+  Target: Owner, Operations Manager, Service Manager, Branch Manager — local level only.
+  SKIP: Director, VP, President, CEO — national executives, not local contacts.
+  If no local manager or owner found with those keywords, record contact as null.
 
 FMCSA — usually not applicable for local consumer companies; skip unless the company clearly crosses state lines.` : `
 ══ WHERE TO SEARCH — starting points that have worked well ═════════════════
@@ -633,11 +640,13 @@ LINKEDIN PEOPLE SEARCH — two separate goals
   GOAL 1 — count field workers (fleet size signal): site:linkedin.com/in "[company name]" "${shopCity}"
   Each field employee profile = one vehicle minimum.
 
-  GOAL 2 — find the decision-maker contact: search for someone with a management title at the local office.
-  Try: site:linkedin.com/in "[company name]" "${shopCity}" "operations manager"
-  Also try: "branch manager", "field operations manager", "regional manager", "service manager", "fleet manager"
-  These are the people who actually decide which shop services the vehicles. Record their full name, exact title, and LinkedIn profile URL.
-  Priority order: Operations Manager > Branch Manager > Field Operations Manager > Regional Manager > Service Manager > Fleet Manager
+  GOAL 2 — find a LOCAL decision-maker based IN or near ${shopCity} (not a national executive):
+  Try: site:linkedin.com/in "[company name]" "${shopCity}" "manager"
+  Also try: site:linkedin.com/in "[company name]" "${shopCity}" "operations" OR "regional" OR "field" OR "branch"
+  CRITICAL: Only use someone whose LinkedIn profile location shows ${shopCity} or nearby. If the person you find is based in Chicago, Atlanta, or any other city — they are the wrong contact. Do not use them.
+  Target titles (local/branch-level only): Branch Manager, Operations Manager, Field Operations Manager, Regional Manager, Field Manager, Service Manager
+  SKIP these: Director, VP, President, CEO, Chairman — these are national executives, not local decision-makers.
+  If you cannot find anyone with "manager", "operations", "regional", or "field" in their title who is based near ${shopCity}, record contact as null. Do not substitute a national executive.
 
 YELP / BBB — good for smaller independents
   Smaller local companies that don't rank well on Google often show up here. Reviews sometimes mention "their fleet of vans" or "the technician arrived in a company truck."
@@ -792,8 +801,8 @@ Required format per company:
   "zip": string|null (HQ zip),
   "main_phone": string|null (phone number from their Contact Us page or Google Maps — always record this if visible),
   "website": string|null,
-  "contact_name": string|null (decision-maker's full name — ops manager, branch manager, field manager, regional manager),
-  "contact_title": string|null (their exact job title),
+  "contact_name": string|null (LOCAL decision-maker's full name — only if confirmed to be based in or near the search city. Do NOT use directors, VPs, presidents, or executives based in other cities. Set null if no local manager found),
+  "contact_title": string|null (their exact job title — must include "manager", "operations", "regional", "field", or "owner". Set null if only national-level executives were found),
   "contact_linkedin": string|null (their LinkedIn profile URL),
   "local_office_found": boolean (TRUE only if a confirmed physical branch/office exists in the search area — NOT just because they list it as a service area on their website. Confirmed = Google Maps listing for a local address, or a specific local address on their locations page, or LinkedIn employees explicitly based at a local office),
   "local_office_address": string|null (street address of the LOCAL branch/office, only if different from HQ and actually confirmed — do not put HQ address here),
