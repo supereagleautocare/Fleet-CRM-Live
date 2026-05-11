@@ -944,36 +944,7 @@ export default function Settings() {
                       </div>
                     )}
                   </div>
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
-                    <div className="form-group" style={{ marginBottom:0 }}>
-                      <label className="form-label">Fuel Price ($/gal)</label>
-                      <input className="form-input" type="number" step="0.01" min="0" defaultValue={settings['fuel_price']?.value||'3.50'} onBlur={e=>updateSetting('fuel_price',e.target.value)}/>
-                    </div>
-                    <div className="form-group" style={{ marginBottom:0 }}>
-                      <label className="form-label">Vehicle MPG</label>
-                      <input className="form-input" type="number" step="1" min="1" defaultValue={settings['mpg']?.value||'22'} onBlur={e=>updateSetting('mpg',e.target.value)}/>
-                    </div>
-                  </div>
                 </div>
-                {Object.entries(settings)
-  .filter(([k])=>!['shop_address','shop_lat','shop_lng','fuel_price','mpg','mail_followup_days','email_followup_days','visit_delay_days','tekmetric_token','tekmetric_shop_id','tekmetric_env','tekmetric_poll_interval','tekmetric_oil_interval','carfax_api_key','carfax_enabled','biz_hours_start','biz_hours_end','floor_poll_seconds','twilio_to_phone','scorecard_enabled','ff_monthly_budget','ff_default_radius','ff_industries','ff_custom_industries','ff_vehicle_types','ff_anthropic_key','ff_serper_key','ff_search_keywords'].includes(k))
-  .length > 0 && (
-  <div className="table-card" style={{ padding:'20px 24px' }}>
-    <div style={{ fontWeight:700, fontSize:15, marginBottom:16 }}>⚙️ Other Settings</div>
-    {Object.entries(settings)
-      .filter(([k])=>!['shop_address','shop_lat','shop_lng','fuel_price','mpg','mail_followup_days','email_followup_days','visit_delay_days','tekmetric_token','tekmetric_shop_id','tekmetric_env','tekmetric_poll_interval','tekmetric_oil_interval','carfax_api_key','carfax_enabled','biz_hours_start','biz_hours_end','floor_poll_seconds','twilio_to_phone','scorecard_enabled','ff_monthly_budget','ff_default_radius','ff_industries','ff_custom_industries','ff_vehicle_types','ff_anthropic_key','ff_serper_key','ff_search_keywords'].includes(k))
-                      .map(([key,item])=>(
-                      <div key={key} style={{ paddingBottom:16, marginBottom:16, borderBottom:'1px solid var(--gray-100)' }}>
-                        <div style={{ fontWeight:600, fontSize:13, marginBottom:4 }}>{item.label||key}</div>
-                        <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-                          <input className="form-input" defaultValue={item.value} style={{ maxWidth:260 }}
-                            onBlur={e=>{ if(e.target.value!==item.value) updateSetting(key,e.target.value); }}/>
-                          {saving===key && <span style={{ fontSize:12, color:'var(--gray-400)' }}>Saving…</span>}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
             )}
 
