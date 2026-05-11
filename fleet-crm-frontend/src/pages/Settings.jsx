@@ -8,22 +8,58 @@ import ScoreCardModal from '../components/ScoreCardModal.jsx';
 import AddressAutocomplete from '../components/AddressAutocomplete.jsx';
 
 const DEFAULT_PERMS = {
-  can_access_settings:  false,
   can_add_companies:    true,
   can_delete_companies: false,
+  can_use_fleet_finder: true,
+  can_edit_followups:   false,
+  can_edit_scripts:     false,
+  can_edit_scorecard:   false,
   can_delete_calls:     false,
   can_manage_queue:     true,
   can_manage_team:      false,
+  can_change_permissions: false,
 };
 
-const PERM_LABELS = {
-  can_access_settings:  { label: 'Access Settings',      desc: 'View and change app settings' },
-  can_add_companies:    { label: 'Add Companies',         desc: 'Create new company records' },
-  can_delete_companies: { label: 'Delete Companies',      desc: 'Permanently remove companies' },
-  can_delete_calls:     { label: 'Delete Call Logs',      desc: 'Erase call history entries' },
-  can_manage_queue:     { label: 'Manage Calling Queue',  desc: 'Add and remove from queue' },
-  can_manage_team:      { label: 'Manage Team Members',   desc: 'Invite and remove users' },
-};
+const PERM_CATEGORIES = [
+  {
+    label: 'Companies', icon: '🏢', color: '#1e40af', bg: '#eff6ff',
+    perms: [
+      { key: 'can_add_companies',    label: 'Add Companies',    desc: 'Create new company records' },
+      { key: 'can_delete_companies', label: 'Delete Companies', desc: 'Permanently remove company records' },
+      { key: 'can_use_fleet_finder', label: 'Fleet Finder',     desc: 'Search for new fleet leads' },
+    ],
+  },
+  {
+    label: 'Settings', icon: '⚙️', color: '#6b21a8', bg: '#faf5ff',
+    perms: [
+      { key: 'can_edit_followups', label: 'Follow-Up Rules', desc: 'Change follow-up days and contact types' },
+      { key: 'can_edit_scripts',   label: 'Scripts',         desc: 'Create and edit call scripts' },
+      { key: 'can_edit_scorecard', label: 'Scorecard',       desc: 'Change scorecard settings' },
+    ],
+  },
+  {
+    label: 'Data', icon: '📋', color: '#b45309', bg: '#fff7ed',
+    perms: [
+      { key: 'can_delete_calls',  label: 'Delete Activity Logs', desc: 'Erase call, mail, email, and visit history' },
+      { key: 'can_manage_queue',  label: 'Manage Queues',        desc: 'Add and remove from all queues' },
+    ],
+  },
+  {
+    label: 'Team', icon: '👥', color: '#065f46', bg: '#f0fdf4',
+    perms: [
+      { key: 'can_manage_team',       label: 'Add & Remove Users',  desc: 'Invite and delete team members' },
+      { key: 'can_change_permissions', label: 'Change Permissions', desc: "Modify other users' permissions" },
+    ],
+  },
+];
+
+function Toggle({ on, onToggle }) {
+  return (
+    <div onClick={onToggle} style={{ width:42, height:24, borderRadius:12, cursor:'pointer', position:'relative', flexShrink:0, background: on ? '#22c55e' : 'var(--gray-300)', transition:'background .2s' }}>
+      <div style={{ position:'absolute', top:3, left: on ? 21 : 3, width:18, height:18, borderRadius:9, background:'white', transition:'left .2s', boxShadow:'0 1px 3px rgba(0,0,0,.2)' }}/>
+    </div>
+  );
+}
 
 function PermissionsPanel({ users, currentUserId, onRefresh }) {
   const [selected, setSelected] = useState(null);
@@ -61,22 +97,28 @@ function PermissionsPanel({ users, currentUserId, onRefresh }) {
     <div className="table-card" style={{ padding:'18px 20px', marginBottom:16 }}>
       <div style={{ fontWeight:700, fontSize:14, marginBottom:4 }}>🔐 User Permissions</div>
       <div style={{ fontSize:12, color:'var(--gray-400)', marginBottom:16 }}>
-        Click a team member to manage what they can do. Admins always have full access.
+        Select a team member to customize exactly what they can do.
       </div>
 
-      <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:20 }}>
+      {/* User selector */}
+      <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom: selected ? 20 : 0 }}>
         {editableUsers.map(u => (
-          <button key={u.id} onClick={() => loadUser(u)}
-            style={{
-              padding:'7px 14px', borderRadius:8, fontSize:13, fontWeight:600, cursor:'pointer',
-              border: selected?.id === u.id ? '2px solid var(--gold-500)' : '1px solid var(--gray-200)',
-              background: selected?.id === u.id ? '#fffbeb' : 'var(--gray-50)',
-              color: selected?.id === u.id ? '#92400e' : 'var(--gray-700)',
-            }}>
-            {u.name}
-            {u.role === 'admin' && (
-              <span style={{ marginLeft:6, fontSize:10, background:'#fde68a', borderRadius:4, padding:'1px 5px', color:'#92400e' }}>ADMIN</span>
-            )}
+          <button key={u.id} onClick={() => loadUser(u)} style={{
+            display:'flex', alignItems:'center', gap:8,
+            padding:'8px 14px', borderRadius:10, fontSize:13, fontWeight:600, cursor:'pointer',
+            border: selected?.id === u.id ? '2px solid var(--gold-500)' : '1px solid var(--gray-200)',
+            background: selected?.id === u.id ? '#fffbeb' : 'var(--gray-50)',
+            color: selected?.id === u.id ? '#92400e' : 'var(--gray-700)',
+          }}>
+            <div style={{ width:28, height:28, borderRadius:'50%', background: selected?.id === u.id ? 'var(--gold-500)' : 'var(--navy-700)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:800, color: selected?.id === u.id ? 'var(--navy-950)' : 'white', flexShrink:0 }}>
+              {u.name?.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()}
+            </div>
+            <div style={{ textAlign:'left' }}>
+              <div>{u.name}</div>
+              <div style={{ fontSize:10, fontWeight:400, color: selected?.id === u.id ? '#92400e' : 'var(--gray-400)' }}>
+                {u.role === 'admin' ? '⭐ Admin' : 'User'}
+              </div>
+            </div>
           </button>
         ))}
         {editableUsers.length === 0 && (
@@ -87,41 +129,55 @@ function PermissionsPanel({ users, currentUserId, onRefresh }) {
       {selected && (
         <>
           <div style={{ borderTop:'1px solid var(--gray-100)', paddingTop:16, marginBottom:16 }}>
-            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16, padding:'10px 14px', background:'var(--gray-50)', borderRadius:8, border:'1px solid var(--gray-200)' }}>
+
+            {/* Role row */}
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16, padding:'12px 16px', background:'var(--navy-950)', borderRadius:10 }}>
               <div>
-                <div style={{ fontWeight:700, fontSize:13 }}>Account Role</div>
-                <div style={{ fontSize:11, color:'var(--gray-400)', marginTop:2 }}>Admin has full access to everything</div>
+                <div style={{ fontWeight:700, fontSize:13, color:'white' }}>{selected.name}</div>
+                <div style={{ fontSize:11, color:'rgba(255,255,255,.45)', marginTop:2 }}>Admins have full access to everything — no restrictions</div>
               </div>
-              <select value={role} onChange={e => setRole(e.target.value)}
-                style={{ padding:'5px 10px', borderRadius:6, border:'1px solid var(--gray-200)', fontSize:13, fontWeight:600, background:'white', cursor:'pointer' }}>
-                <option value="user">User</option>
-                <option value="admin">Admin</option>
-              </select>
+              <div style={{ display:'flex', gap:6 }}>
+                {['user','admin'].map(r => (
+                  <button key={r} onClick={() => setRole(r)} style={{
+                    padding:'5px 14px', borderRadius:8, fontSize:12, fontWeight:700, cursor:'pointer',
+                    border: role === r ? '2px solid var(--gold-500)' : '1px solid rgba(255,255,255,.15)',
+                    background: role === r ? 'var(--gold-500)' : 'transparent',
+                    color: role === r ? 'var(--navy-950)' : 'rgba(255,255,255,.6)',
+                  }}>{r === 'admin' ? '⭐ Admin' : 'User'}</button>
+                ))}
+              </div>
             </div>
 
             {role !== 'admin' ? (
-              <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-                {Object.entries(PERM_LABELS).map(([key, { label, desc }]) => (
-                  <div key={key} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 14px', background:'var(--gray-50)', borderRadius:8, border:'1px solid var(--gray-200)' }}>
-                    <div>
-                      <div style={{ fontWeight:600, fontSize:13 }}>{label}</div>
-                      <div style={{ fontSize:11, color:'var(--gray-400)', marginTop:2 }}>{desc}</div>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+                {PERM_CATEGORIES.map(cat => (
+                  <div key={cat.label} style={{ border:'1px solid var(--gray-200)', borderRadius:10, overflow:'hidden' }}>
+                    <div style={{ padding:'10px 14px', background: cat.bg, borderBottom:'1px solid var(--gray-200)', display:'flex', alignItems:'center', gap:6 }}>
+                      <span style={{ fontSize:14 }}>{cat.icon}</span>
+                      <span style={{ fontWeight:700, fontSize:12, color: cat.color, textTransform:'uppercase', letterSpacing:'.05em' }}>{cat.label}</span>
                     </div>
-                    <div onClick={() => setPerms(p => ({ ...p, [key]: !p[key] }))}
-                      style={{ width:42, height:24, borderRadius:12, cursor:'pointer', position:'relative', flexShrink:0, background: perms[key] ? '#22c55e' : 'var(--gray-300)', transition:'background .2s' }}>
-                      <div style={{ position:'absolute', top:3, left: perms[key] ? 21 : 3, width:18, height:18, borderRadius:9, background:'white', transition:'left .2s', boxShadow:'0 1px 3px rgba(0,0,0,.2)' }}/>
+                    <div style={{ display:'flex', flexDirection:'column' }}>
+                      {cat.perms.map(({ key, label, desc }, i) => (
+                        <div key={key} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 14px', borderBottom: i < cat.perms.length - 1 ? '1px solid var(--gray-100)' : 'none', gap:10 }}>
+                          <div>
+                            <div style={{ fontWeight:600, fontSize:13 }}>{label}</div>
+                            <div style={{ fontSize:11, color:'var(--gray-400)', marginTop:1 }}>{desc}</div>
+                          </div>
+                          <Toggle on={!!perms[key]} onToggle={() => setPerms(p => ({ ...p, [key]: !p[key] }))} />
+                        </div>
+                      ))}
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <div style={{ padding:'12px 14px', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:8, fontSize:12, color:'#92400e' }}>
-                ⚡ Admins automatically have all permissions. No restrictions apply.
+              <div style={{ padding:'12px 16px', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:10, fontSize:12, color:'#92400e' }}>
+                ⭐ This user is an admin — they automatically have full access to everything in the app.
               </div>
             )}
           </div>
 
-          <button onClick={save} disabled={saving} className="btn btn-primary" style={{ width:'100%' }}>
+          <button onClick={save} disabled={saving} className="btn btn-primary" style={{ width:'100%', fontWeight:700 }}>
             {saving ? 'Saving…' : saved ? '✓ Saved!' : `Save Permissions for ${selected.name}`}
           </button>
         </>
