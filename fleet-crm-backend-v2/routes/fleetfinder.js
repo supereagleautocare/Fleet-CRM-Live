@@ -570,9 +570,9 @@ Find them through LinkedIn, job boards, and contractor registries.
 LINKEDIN (primary) — your most powerful B2B source
   Field employees: site:linkedin.com/in "[company name]" "${shopCity}" — each field-role profile = 1 vehicle
   Find companies in the industry: "${industryList}" "${shopCity}" site:linkedin.com/in technician OR installer OR driver
-  Local decision-maker (must be based IN or near ${shopCity}): site:linkedin.com/in "[company name]" "${shopCity}" "manager"
-  Also try: site:linkedin.com/in "[company name]" "${shopCity}" "operations" OR "regional" OR "field" OR "branch"
-  CRITICAL: Only use contacts whose LinkedIn profile shows ${shopCity} or nearby as their location. Skip anyone based in a different city.
+  Local decision-maker (within ~40 miles of ${shopCity}): site:linkedin.com/in "[company name]" "${shopCity}" "manager"
+  Also try: site:linkedin.com/in "[company name]" "Greater ${shopCity}" "manager"
+  CRITICAL: Only use contacts whose LinkedIn location is within ~40 miles of ${shopCity} — profile should show ${shopCity}, "Greater ${shopCity} Area", "${shopCity} Metro", or a nearby city in ${stateList}. Skip anyone based in a different state or distant city.
   Target titles: Branch Manager, Operations Manager, Field Ops Manager, Regional Manager, Field Manager
   SKIP: Director, VP, President, CEO — national executives, not local contacts.
   If no local manager found with those keywords, record contact as null.
@@ -614,7 +614,7 @@ INDEED / GLASSDOOR (secondary) — confirms fleet operations
 
 LINKEDIN (secondary) — useful for finding the LOCAL decision-maker
   site:linkedin.com/in "[company name]" "${shopCity}" "manager" OR "owner"
-  Only use contacts whose LinkedIn profile location shows ${shopCity} or nearby. Skip anyone in a different region.
+  Only use contacts whose LinkedIn location is within ~40 miles of ${shopCity} — profile should show ${shopCity}, "Greater ${shopCity} Area", or a nearby city in ${stateList}. Skip anyone in a different state or distant city.
   Target: Owner, Operations Manager, Service Manager, Branch Manager — local level only.
   SKIP: Director, VP, President, CEO — national executives, not local contacts.
   If no local manager or owner found with those keywords, record contact as null.
@@ -640,13 +640,13 @@ LINKEDIN PEOPLE SEARCH — two separate goals
   GOAL 1 — count field workers (fleet size signal): site:linkedin.com/in "[company name]" "${shopCity}"
   Each field employee profile = one vehicle minimum.
 
-  GOAL 2 — find a LOCAL decision-maker based IN or near ${shopCity} (not a national executive):
+  GOAL 2 — find a LOCAL decision-maker within ~40 miles of ${shopCity} (not a national executive):
   Try: site:linkedin.com/in "[company name]" "${shopCity}" "manager"
-  Also try: site:linkedin.com/in "[company name]" "${shopCity}" "operations" OR "regional" OR "field" OR "branch"
-  CRITICAL: Only use someone whose LinkedIn profile location shows ${shopCity} or nearby. If the person you find is based in Chicago, Atlanta, or any other city — they are the wrong contact. Do not use them.
+  Also try: site:linkedin.com/in "[company name]" "Greater ${shopCity}" "manager"
+  CRITICAL: Only use someone whose LinkedIn profile location is within ~40 miles of ${shopCity} — their profile should show ${shopCity}, "Greater ${shopCity} Area", "${shopCity} Metro", or a nearby city in ${stateList}. If the person is based in a different state or a distant city, they are the wrong contact — do not use them.
   Target titles (local/branch-level only): Branch Manager, Operations Manager, Field Operations Manager, Regional Manager, Field Manager, Service Manager
   SKIP these: Director, VP, President, CEO, Chairman — these are national executives, not local decision-makers.
-  If you cannot find anyone with "manager", "operations", "regional", or "field" in their title who is based near ${shopCity}, record contact as null. Do not substitute a national executive.
+  If you cannot find anyone with "manager", "operations", "regional", or "field" in their title within ~40 miles of ${shopCity}, record contact as null. Do not substitute a national executive.
 
 YELP / BBB — good for smaller independents
   Smaller local companies that don't rank well on Google often show up here. Reviews sometimes mention "their fleet of vans" or "the technician arrived in a company truck."
