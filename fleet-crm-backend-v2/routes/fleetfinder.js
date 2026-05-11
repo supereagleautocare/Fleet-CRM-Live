@@ -898,17 +898,22 @@ Required format per company:
       // Hard skip dismissed companies
       if (dismissedKeys.has(key)) continue;
 
-      // Fuzzy-match against CRM by name
-      // Also catches "Prince Telecom LLC" vs "Prince Telecom Charlotte" — if one normalized
-      // name fully contains the other, they're the same brand even if city/suffix differs.
+      // Fuzzy-match against CRM by name.
+      // Prefix check catches "Prince Telecom LLC" vs "Prince Telecom Charlotte":
+      // after normalization the shorter is ["prince","telecom"] and the longer is
+      // ["prince","telecom","charlotte"] — longer starts with the shorter in word order.
+      // This avoids false positives like "Charlotte Telecom" matching "Prince Telecom Charlotte"
+      // (both have those two words but in different positions — prefix order fails, no match).
+      // Requires ≥2 words in the shorter name so a single industry word can't trigger it.
       const normN = normalizeName(co.name);
       const crmMatch = existing.rows.find(r => {
         const normCrm = normalizeName(r.name);
         if (stringSimilarity(normN, normCrm) >= 0.85) return true;
-        // Substring match: minimum 4 chars to avoid false positives on short names
-        if (normN.length >= 4 && normCrm.length >= 4) {
-          if (normCrm.includes(normN) || normN.includes(normCrm)) return true;
-        }
+        const tokensN   = normN.split(' ').filter(Boolean);
+        const tokensCrm = normCrm.split(' ').filter(Boolean);
+        const shorter = tokensN.length <= tokensCrm.length ? tokensN : tokensCrm;
+        const longer  = tokensN.length <= tokensCrm.length ? tokensCrm : tokensN;
+        if (shorter.length >= 2 && longer.slice(0, shorter.length).every((t, i) => t === shorter[i])) return true;
         return false;
       });
 
