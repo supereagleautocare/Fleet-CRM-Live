@@ -262,7 +262,7 @@ export default function RoutePlanner({ embedded = false }) {
         const today = new Date().toISOString().split('T')[0];
         setSelected(new Set(data.filter(v=>v.scheduled_date<=today).map(v=>v.id)));
         const t={}, o=[];
-        data.forEach(v=>{ t[v.id]=20; o.push(v.id); });
+        data.forEach(v=>{ t[v.id]=5; o.push(v.id); });
         setStopTimes(t); setOrder(o);
       })
       .catch(e => console.error('Failed to load visits page:', e))
@@ -400,7 +400,7 @@ useEffect(() => {
           notes: v.notes || '',
           workingNotes: v.working_notes || '',
           scheduledDate: v.scheduled_date || '',
-          stopMins: stopTimes[v.id] || 20,
+          stopMins: stopTimes[v.id] || 5,
           lat, lng,
           geoOk: !!(lat && lng),
           visitId: v.id,
@@ -481,6 +481,18 @@ useEffect(() => {
     return nextDay ? label + ' (+1)' : label;
   }
 
+  const ARRIVE_OPTIONS = (() => {
+    const opts = [];
+    for (let h = 6; h <= 21; h++) {
+      for (let m = 0; m < 60; m += 15) {
+        const val = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+        const d = new Date(); d.setHours(h, m, 0, 0);
+        opts.push({ val, label: d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true}) });
+      }
+    }
+    return opts;
+  })();
+
   function recalcTimeline(stops, stopMins, startTimeStr, startGeo, returnHome, arriveAtMap={}) {
     const [h,m] = startTimeStr.split(':').map(Number);
     let clockMin = h * 60 + m;
@@ -497,7 +509,7 @@ useEffect(() => {
       }
       clockMin = displayArriveMin;
       const arriveTime = fmtMinOfDay(displayArriveMin);
-      const mins = stopMins[stop.id] ?? stop.stopMins ?? 20;
+      const mins = stopMins[stop.id] ?? stop.stopMins ?? 5;
       clockMin += mins;
       const leaveTime = fmtMinOfDay(clockMin);
       return {...stop, stopMins: mins, arriveTime, leaveTime, arriveMinOfDay: displayArriveMin, leaveMinOfDay: clockMin};
@@ -596,7 +608,7 @@ useEffect(() => {
       const data = await api.visitsAll();
       setVisits(data);
       const t = {...stopTimes}, o = [...order];
-      data.forEach(v => { if (!t[v.id]) t[v.id]=20; if (!o.includes(v.id)) o.push(v.id); });
+      data.forEach(v => { if (!t[v.id]) t[v.id]=5; if (!o.includes(v.id)) o.push(v.id); });
       setStopTimes(t); setOrder(o);
       setSelected(prev => new Set([...prev, visit.id]));
     } catch(e) { showToast(e.message, 'error'); }
@@ -905,10 +917,11 @@ useEffect(() => {
                               {isToday && <span className="badge badge-today">Today</span>}
                               {!isOver && !isToday && v.scheduled_date && <span style={{fontSize:11,color:'var(--gray-500)'}}>Due {fmtDate(v.scheduled_date)}</span>}
                               <div style={{display:'flex',alignItems:'center',gap:3,marginLeft:'auto'}}>
-                                <button onClick={()=>setStopTimes(p=>({...p,[v.id]:Math.max(5,(stopTimes[v.id]||20)-5)}))}
+                                <span style={{fontSize:10,color:'var(--gray-400)'}}>at stop:</span>
+                                <button onClick={()=>setStopTimes(p=>({...p,[v.id]:Math.max(5,(stopTimes[v.id]||5)-5)}))}
                                   style={{width:18,height:18,border:'1px solid var(--gray-200)',borderRadius:3,background:'white',cursor:'pointer',fontSize:12,lineHeight:1,padding:0,display:'flex',alignItems:'center',justifyContent:'center'}}>−</button>
-                                <span style={{fontWeight:700,fontSize:12,minWidth:28,textAlign:'center'}}>{stopTimes[v.id]||20}m</span>
-                                <button onClick={()=>setStopTimes(p=>({...p,[v.id]:Math.min(240,(stopTimes[v.id]||20)+5)}))}
+                                <span style={{fontWeight:700,fontSize:12,minWidth:28,textAlign:'center'}}>{stopTimes[v.id]||5}m</span>
+                                <button onClick={()=>setStopTimes(p=>({...p,[v.id]:Math.min(240,(stopTimes[v.id]||5)+5)}))}
                                   style={{width:18,height:18,border:'1px solid var(--gray-200)',borderRadius:3,background:'white',cursor:'pointer',fontSize:12,lineHeight:1,padding:0,display:'flex',alignItems:'center',justifyContent:'center'}}>+</button>
                               </div>
                             </div>
@@ -968,7 +981,7 @@ useEffect(() => {
                   </div>
 
                   {liveStops.map((stop, i) => {
-                    const stopMins = routeStopMins[stop.id] ?? stop.stopMins ?? 20;
+                    const stopMins = routeStopMins[stop.id] ?? stop.stopMins ?? 5;
                     const target = arriveAt[stop.id];
                     const info = target ? computeArriveAtInfo(i, target, liveStops, routeStopMins, route.startTime, timeMode) : null;
                     const bufferOk = info ? info.bufferMin >= 0 : true;
@@ -999,15 +1012,17 @@ useEffect(() => {
                               </div>
                               <div style={{fontSize:10,color:'var(--gray-400)',marginTop:1}}>{stop.address}{stop.city?', '+stop.city:''}</div>
                               <div style={{display:'flex',gap:5,marginTop:6,alignItems:'center',flexWrap:'wrap'}}>
+                                <span style={{fontSize:10,color:'var(--gray-400)'}}>at stop:</span>
                                 <button onClick={()=>setRouteStopMins(p=>({...p,[stop.id]:Math.max(5,stopMins-5)}))} style={{width:18,height:18,border:'1px solid var(--gray-200)',borderRadius:3,background:'white',cursor:'pointer',fontSize:12,padding:0,display:'flex',alignItems:'center',justifyContent:'center'}}>−</button>
                                 <span style={{fontWeight:700,fontSize:11,minWidth:26,textAlign:'center'}}>{stopMins}m</span>
                                 <button onClick={()=>setRouteStopMins(p=>({...p,[stop.id]:Math.min(240,stopMins+5)}))} style={{width:18,height:18,border:'1px solid var(--gray-200)',borderRadius:3,background:'white',cursor:'pointer',fontSize:12,padding:0,display:'flex',alignItems:'center',justifyContent:'center'}}>+</button>
                                 <span style={{width:1,height:14,background:'var(--gray-200)',margin:'0 2px'}}/>
                                 <span style={{fontSize:10,color:'var(--gray-500)'}}>arrive at:</span>
-                                <input type="time" value={target||''}
-                                  onChange={e=>setArriveAt(p=>({...p,[stop.id]:e.target.value||undefined}))}
-                                  style={{fontSize:10,padding:'1px 4px',border:`1.5px solid ${target?bufferOk?'#22c55e':'#ef4444':'var(--gray-200)'}`,borderRadius:4,color:target?bufferOk?'#15803d':'#dc2626':'var(--gray-500)',background:target?bufferOk?'#f0fdf4':'#fef2f2':'white'}}/>
-                                {target && <button onClick={()=>setArriveAt(p=>{ const n={...p}; delete n[stop.id]; return n; })} style={{fontSize:11,color:'var(--gray-400)',background:'none',border:'none',cursor:'pointer',padding:'0 2px'}}>✕</button>}
+                                <select value={target||''} onChange={e=>setArriveAt(p=>({...p,[stop.id]:e.target.value||undefined}))}
+                                  style={{fontSize:10,padding:'1px 4px',border:`1.5px solid ${target?bufferOk?'#22c55e':'#ef4444':'var(--gray-200)'}`,borderRadius:4,color:target?bufferOk?'#15803d':'#dc2626':'var(--gray-500)',background:target?bufferOk?'#f0fdf4':'#fef2f2':'white',cursor:'pointer'}}>
+                                  <option value="">— none —</option>
+                                  {ARRIVE_OPTIONS.map(o=><option key={o.val} value={o.val}>{o.label}</option>)}
+                                </select>
                               </div>
                               <div style={{display:'flex',gap:5,marginTop:8}}>
                                 <button className="btn btn-primary btn-sm" style={{flex:1,fontSize:11,padding:'6px 0',fontWeight:700}}
@@ -1079,7 +1094,7 @@ useEffect(() => {
                     const result = await geocodeViaBackend(comp.id);
                     if (result) { lat = result.lat; lng = result.lng; }
                   }
-                  const newStop = { id:tempId, name:comp.name, address:comp.address||'', city:comp.city||'', lat, lng, geoOk:!!(lat&&lng), driveMiles:0, driveMinutes:0, stopMins:20, visitId:null, companyId:comp.id, stopNum:route.stops.length+1 };
+                  const newStop = { id:tempId, name:comp.name, address:comp.address||'', city:comp.city||'', lat, lng, geoOk:!!(lat&&lng), driveMiles:0, driveMinutes:0, stopMins:5, visitId:null, companyId:comp.id, stopNum:route.stops.length+1 };
                   setRouteStopMins(p=>({...p,[tempId]:20}));
                   setRoute(r => {
                     const allStops = [...r.stops, newStop];
