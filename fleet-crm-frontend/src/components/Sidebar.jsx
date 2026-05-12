@@ -64,6 +64,13 @@ export default function Sidebar({ mobileOpen = false, setMobileOpen = () => {} }
       </nav>
 
       <div className="sidebar-footer">
+        {user?.role === 'admin' && (
+          <a href="/admin" target="_blank" rel="noreferrer"
+            style={{ display: 'block', textAlign: 'center', fontSize: 10, color: 'var(--gray-500)',
+              textDecoration: 'none', marginBottom: 8, letterSpacing: '.06em' }}>
+            ⚙ PLATFORM ADMIN
+          </a>
+        )}
         <div className="sidebar-user" onClick={() => { logout(); navigate('/'); }} title="Click to log out">
           <div className="user-avatar">{initials}</div>
           <div>

@@ -77,6 +77,11 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', service: 'Fleet CRM API', version: '1.0.0' });
 });
 
+// ─── Platform admin dashboard ─────────────────────────────────────────────────
+app.get('/admin', (_req, res) => {
+  res.sendFile(path.join(__dirname, 'admin.html'));
+});
+
 // ─── Serve React frontend ─────────────────────────────────────────────────────
 const PUBLIC = path.join(__dirname, 'public');
 app.use(express.static(PUBLIC));
