@@ -16,6 +16,9 @@ COPY . .
 # Build frontend → outputs to fleet-crm-backend-v2/public
 RUN cd fleet-crm-frontend && npm run build
 
+# Copy admin dashboard into the public folder so it's served as a static file
+RUN cp fleet-crm-backend-v2/admin.html fleet-crm-backend-v2/public/admin.html
+
 EXPOSE 3001
 
 CMD ["node", "fleet-crm-backend-v2/server.js"]

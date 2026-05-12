@@ -79,7 +79,7 @@ app.get('/api/health', (_req, res) => {
 
 // ─── Platform admin dashboard ─────────────────────────────────────────────────
 app.get('/admin', (_req, res) => {
-  res.sendFile(path.join(__dirname, 'admin.html'));
+  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 
 // ─── Serve React frontend ─────────────────────────────────────────────────────
