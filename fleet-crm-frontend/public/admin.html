@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Fleet Searcher — Platform Admin</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,sans-serif;background:#060d1f;color:#e2e8f0;min-height:100vh}
+/* LOGIN */
+.login-wrap{display:flex;align-items:center;justify-content:center;min-height:100vh}
+.login-box{background:#0a1628;border:1px solid rgba(255,255,255,.1);border-radius:16px;padding:48px 40px;width:100%;max-width:400px;text-align:center}
+.login-box h1{color:#fbbf24;font-size:22px;margin-bottom:6px}
+.login-box p{color:rgba(255,255,255,.4);font-size:13px;margin-bottom:32px}
+.login-box input{width:100%;background:#060d1f;border:1px solid rgba(255,255,255,.15);color:#fff;padding:12px 16px;border-radius:8px;font-size:14px;margin-bottom:14px;outline:none}
+.login-box input:focus{border-color:#fbbf24}
+.login-box button{width:100%;background:#f59e0b;color:#060d1f;border:none;padding:13px;border-radius:8px;font-weight:700;font-size:15px;cursor:pointer}
+.login-box .err{color:#f87171;font-size:13px;margin-top:10px}
+/* LAYOUT */
+.app{display:none;min-height:100vh;flex-direction:column}
+.app.visible{display:flex}
+.topbar{background:#0a1628;border-bottom:1px solid rgba(255,255,255,.07);padding:0 24px;height:56px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10}
+.topbar-logo{display:flex;align-items:center;gap:10px;font-weight:700;font-size:16px}
+.topbar-logo span{color:#fbbf24}
+.topbar-right{display:flex;align-items:center;gap:16px}
+.topbar-right button{background:none;border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.6);padding:6px 14px;border-radius:6px;font-size:12px;cursor:pointer}
+.tab-bar{background:#0f2040;border-bottom:1px solid rgba(255,255,255,.07);display:flex;padding:0 24px;gap:4px}
+.tab{padding:14px 18px;font-size:13px;font-weight:600;color:rgba(255,255,255,.4);cursor:pointer;border-bottom:2px solid transparent;transition:.2s}
+.tab:hover{color:rgba(255,255,255,.8)}
+.tab.active{color:#fbbf24;border-bottom-color:#fbbf24}
+.content{padding:28px 24px;flex:1;max-width:1200px;width:100%;margin:0 auto}
+/* CARDS */
+.stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:28px}
+.stat-card{background:#0a1628;border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:20px 24px}
+.stat-card .label{font-size:11px;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px}
+.stat-card .val{font-size:28px;font-weight:800;color:#fbbf24}
+.stat-card .sub{font-size:12px;color:rgba(255,255,255,.3);margin-top:4px}
+/* TABLE */
+.section-title{font-size:16px;font-weight:700;color:#fff;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between}
+.table-wrap{background:#0a1628;border:1px solid rgba(255,255,255,.08);border-radius:12px;overflow:hidden}
+table{width:100%;border-collapse:collapse}
+th{font-size:11px;font-weight:600;color:rgba(255,255,255,.35);text-transform:uppercase;letter-spacing:.07em;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.07);text-align:left;background:#060d1f}
+td{padding:13px 16px;font-size:13px;border-bottom:1px solid rgba(255,255,255,.05);color:rgba(255,255,255,.8)}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(255,255,255,.02)}
+.badge{display:inline-block;font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px}
+.badge.green{background:rgba(34,197,94,.15);color:#22c55e}
+.badge.gold{background:rgba(251,191,36,.15);color:#fbbf24}
+.badge.red{background:rgba(239,68,68,.15);color:#f87171}
+.badge.blue{background:rgba(59,130,246,.15);color:#60a5fa}
+/* BUTTONS */
+.btn{display:inline-block;padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;border:none;transition:.15s}
+.btn-gold{background:#f59e0b;color:#060d1f}
+.btn-gold:hover{background:#fbbf24}
+.btn-outline{background:none;border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.7)}
+.btn-outline:hover{border-color:rgba(255,255,255,.5);color:#fff}
+.btn-red{background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.2)}
+.btn-red:hover{background:rgba(239,68,68,.25)}
+.btn-row{display:flex;gap:8px;align-items:center}
+/* MODAL */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100;align-items:center;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal{background:#0a1628;border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:32px;width:100%;max-width:480px}
+.modal h3{font-size:17px;font-weight:700;margin-bottom:20px;color:#fff}
+.modal label{display:block;font-size:12px;color:rgba(255,255,255,.5);margin-bottom:6px;margin-top:16px}
+.modal input,.modal select{width:100%;background:#060d1f;border:1px solid rgba(255,255,255,.15);color:#fff;padding:10px 14px;border-radius:7px;font-size:14px;outline:none}
+.modal input:focus,.modal select:focus{border-color:#fbbf24}
+.modal .modal-btns{display:flex;gap:10px;justify-content:flex-end;margin-top:24px}
+.loading{color:rgba(255,255,255,.3);font-size:13px;padding:20px;text-align:center}
+.err-msg{color:#f87171;font-size:13px;margin-top:8px}
+@media(max-width:700px){.stat-row{grid-template-columns:1fr 1fr}.content{padding:16px}.tab{padding:12px 12px;font-size:12px}}
+@media(max-width:480px){.stat-row{grid-template-columns:1fr}td,th{padding:10px 12px;font-size:12px}}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div class="login-wrap" id="loginWrap">
+  <div class="login-box">
+    <h1>🦅 Fleet Searcher</h1>
+    <p>Platform Admin — Enter your admin key to continue</p>
+    <input type="password" id="keyInput" placeholder="Platform admin key" onkeydown="if(event.key==='Enter')doLogin()"/>
+    <button onclick="doLogin()">Sign In →</button>
+    <div class="err" id="loginErr"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div class="app" id="app">
+  <div class="topbar">
+    <div class="topbar-logo">🦅 <span>Fleet Searcher</span> Admin</div>
+    <div class="topbar-right">
+      <span id="topbarDate" style="font-size:12px;color:rgba(255,255,255,.3)"></span>
+      <button onclick="signOut()">Sign Out</button>
+    </div>
+  </div>
+
+  <div class="tab-bar">
+    <div class="tab active" onclick="switchTab('overview')">📊 Overview</div>
+    <div class="tab" onclick="switchTab('shops')">🏪 Shops</div>
+    <div class="tab" onclick="switchTab('users')">👤 Users</div>
+    <div class="tab" onclick="switchTab('logs')">📋 Activity Logs</div>
+  </div>
+
+  <div class="content">
+
+    <!-- OVERVIEW TAB -->
+    <div id="tab-overview">
+      <div class="stat-row" id="overviewStats">
+        <div class="stat-card"><div class="label">Total Shops</div><div class="val" id="statShops">—</div></div>
+        <div class="stat-card"><div class="label">AI Spend This Month</div><div class="val" id="statSpend">—</div><div class="sub">across all shops</div></div>
+        <div class="stat-card"><div class="label">Total Extra Credits</div><div class="val" id="statCredits">—</div><div class="sub">purchased balance</div></div>
+        <div class="stat-card"><div class="label">Monthly Revenue</div><div class="val" id="statRevenue">—</div><div class="sub">$199 × active shops</div></div>
+      </div>
+      <div class="section-title">All Shops — Quick View</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Shop</th><th>Schema</th><th>Budget</th><th>Spent</th><th>Credits</th><th>Remaining</th><th>Created</th></tr></thead>
+          <tbody id="overviewTable"><tr><td colspan="7" class="loading">Loading...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- SHOPS TAB -->
+    <div id="tab-shops" style="display:none">
+      <div class="section-title">
+        Shops
+        <button class="btn btn-gold" onclick="openNewShopModal()">+ New Shop</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Shop Name</th><th>Schema</th><th>Monthly Budget</th><th>Extra Credits</th><th>Spent This Month</th><th>Remaining</th><th>Actions</th></tr></thead>
+          <tbody id="shopsTable"><tr><td colspan="7" class="loading">Loading...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- USERS TAB -->
+    <div id="tab-users" style="display:none">
+      <div class="section-title">
+        Users
+        <div class="btn-row">
+          <select id="userShopSelect" onchange="loadUsers()" style="background:#060d1f;border:1px solid rgba(255,255,255,.15);color:#fff;padding:7px 12px;border-radius:7px;font-size:13px">
+            <option value="">Select a shop...</option>
+          </select>
+          <button class="btn btn-gold" onclick="openAddUserModal()">+ Add User</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Created</th><th>Actions</th></tr></thead>
+          <tbody id="usersTable"><tr><td colspan="5" class="loading">Select a shop to view users</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- LOGS TAB -->
+    <div id="tab-logs" style="display:none">
+      <div class="section-title">
+        Fleet Finder Activity Logs
+        <select id="logShopSelect" onchange="loadLogs()" style="background:#060d1f;border:1px solid rgba(255,255,255,.15);color:#fff;padding:7px 12px;border-radius:7px;font-size:13px">
+          <option value="">Select a shop...</option>
+        </select>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Date</th><th>Search Label</th><th>Industries</th><th>Radius</th><th>Results</th><th>Cost</th></tr></thead>
+          <tbody id="logsTable"><tr><td colspan="6" class="loading">Select a shop to view logs</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- MODAL: Edit Shop Budget/Credits -->
+<div class="modal-overlay" id="shopModal">
+  <div class="modal">
+    <h3 id="shopModalTitle">Manage Shop</h3>
+    <label>Monthly AI Budget ($)</label>
+    <input type="number" id="modalBudget" placeholder="50" step="0.01" min="0"/>
+    <label>Add Extra Credits ($) <span style="color:rgba(255,255,255,.3);font-weight:400">(adds to existing balance)</span></label>
+    <input type="number" id="modalCredits" placeholder="0" step="0.01" min="0"/>
+    <div class="err-msg" id="shopModalErr"></div>
+    <div class="modal-btns">
+      <button class="btn btn-outline" onclick="closeModal('shopModal')">Cancel</button>
+      <button class="btn btn-gold" onclick="saveShop()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Add User -->
+<div class="modal-overlay" id="addUserModal">
+  <div class="modal">
+    <h3>Add User</h3>
+    <label>Name</label>
+    <input type="text" id="newUserName" placeholder="John Smith"/>
+    <label>Email</label>
+    <input type="email" id="newUserEmail" placeholder="john@shop.com"/>
+    <label>Temporary Password</label>
+    <input type="text" id="newUserPassword" placeholder="TempPass123"/>
+    <label>Role</label>
+    <select id="newUserRole">
+      <option value="user">User</option>
+      <option value="admin">Admin</option>
+    </select>
+    <div class="err-msg" id="addUserErr"></div>
+    <div class="modal-btns">
+      <button class="btn btn-outline" onclick="closeModal('addUserModal')">Cancel</button>
+      <button class="btn btn-gold" onclick="saveUser()">Add User</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: New Shop -->
+<div class="modal-overlay" id="newShopModal">
+  <div class="modal">
+    <h3>Provision New Shop</h3>
+    <label>Shop Name</label>
+    <input type="text" id="nsName" placeholder="Acme Auto Care"/>
+    <label>Admin Name</label>
+    <input type="text" id="nsAdminName" placeholder="John Smith"/>
+    <label>Admin Email</label>
+    <input type="email" id="nsAdminEmail" placeholder="john@acmeauto.com"/>
+    <label>Temporary Password</label>
+    <input type="text" id="nsPassword" placeholder="TempPass123"/>
+    <div class="err-msg" id="newShopErr"></div>
+    <div class="modal-btns">
+      <button class="btn btn-outline" onclick="closeModal('newShopModal')">Cancel</button>
+      <button class="btn btn-gold" onclick="createShop()">Create Shop</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = '/api/platform';
+let KEY = '';
+let tenants = [];
+let currentShopSchema = '';
+
+// ── AUTH ──────────────────────────────────────────────────────────────────────
+async function doLogin() {
+  const k = document.getElementById('keyInput').value.trim();
+  if (!k) return;
+  const res = await fetch(`${API}/tenants`, { headers: { 'x-platform-key': k } });
+  if (!res.ok) {
+    document.getElementById('loginErr').textContent = 'Invalid key — try again.';
+    return;
+  }
+  KEY = k;
+  sessionStorage.setItem('pk', k);
+  showApp();
+}
+
+function signOut() {
+  sessionStorage.removeItem('pk');
+  KEY = '';
+  document.getElementById('app').classList.remove('visible');
+  document.getElementById('loginWrap').style.display = 'flex';
+}
+
+function showApp() {
+  document.getElementById('loginWrap').style.display = 'none';
+  document.getElementById('app').classList.add('visible');
+  document.getElementById('topbarDate').textContent = new Date().toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric', year:'numeric' });
+  loadAll();
+}
+
+// ── API HELPERS ───────────────────────────────────────────────────────────────
+async function api(path, opts = {}) {
+  const res = await fetch(`${API}${path}`, {
+    ...opts,
+    headers: { 'x-platform-key': KEY, 'Content-Type': 'application/json', ...(opts.headers || {}) }
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+// ── TABS ──────────────────────────────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('[id^="tab-"]').forEach(t => t.style.display = 'none');
+  event.target.classList.add('active');
+  document.getElementById(`tab-${name}`).style.display = '';
+}
+
+// ── LOAD ALL ──────────────────────────────────────────────────────────────────
+async function loadAll() {
+  try {
+    tenants = await api('/tenants');
+    renderOverview();
+    renderShops();
+    populateShopSelects();
+  } catch(e) { console.error(e); }
+}
+
+function populateShopSelects() {
+  ['userShopSelect','logShopSelect'].forEach(id => {
+    const sel = document.getElementById(id);
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">Select a shop...</option>';
+    tenants.forEach(t => {
+      const o = document.createElement('option');
+      o.value = t.schema; o.textContent = t.name;
+      sel.appendChild(o);
+    });
+    if (cur) sel.value = cur;
+  });
+}
+
+// ── OVERVIEW ──────────────────────────────────────────────────────────────────
+function renderOverview() {
+  const totalSpend = tenants.reduce((s,t) => s + (t.ff_spent_this_month||0), 0);
+  const totalCredits = tenants.reduce((s,t) => s + (t.ff_extra_credits||0), 0);
+  document.getElementById('statShops').textContent = tenants.length;
+  document.getElementById('statSpend').textContent = '$' + totalSpend.toFixed(2);
+  document.getElementById('statCredits').textContent = '$' + totalCredits.toFixed(2);
+  document.getElementById('statRevenue').textContent = '$' + (tenants.length * 199).toLocaleString();
+
+  document.getElementById('overviewTable').innerHTML = tenants.map(t => `
+    <tr>
+      <td><strong>${t.name}</strong></td>
+      <td><code style="font-size:11px;color:rgba(255,255,255,.4)">${t.schema}</code></td>
+      <td>$${(t.ff_monthly_budget||0).toFixed(2)}</td>
+      <td>$${(t.ff_spent_this_month||0).toFixed(2)}</td>
+      <td>${(t.ff_extra_credits||0) > 0 ? `<span class="badge gold">$${(t.ff_extra_credits).toFixed(2)}</span>` : '—'}</td>
+      <td><span class="badge ${(t.ff_remaining||0) > 5 ? 'green' : 'red'}">$${(t.ff_remaining||0).toFixed(2)}</span></td>
+      <td style="color:rgba(255,255,255,.3);font-size:11px">${t.created_at?.slice(0,10) || '—'}</td>
+    </tr>
+  `).join('') || '<tr><td colspan="7" class="loading">No shops found</td></tr>';
+}
+
+// ── SHOPS ─────────────────────────────────────────────────────────────────────
+function renderShops() {
+  document.getElementById('shopsTable').innerHTML = tenants.map(t => `
+    <tr>
+      <td><strong>${t.name}</strong></td>
+      <td><code style="font-size:11px;color:rgba(255,255,255,.4)">${t.schema}</code></td>
+      <td>$${(t.ff_monthly_budget||0).toFixed(2)}/mo</td>
+      <td>${(t.ff_extra_credits||0) > 0 ? `<span class="badge gold">$${(t.ff_extra_credits).toFixed(2)}</span>` : '$0.00'}</td>
+      <td>$${(t.ff_spent_this_month||0).toFixed(2)}</td>
+      <td><span class="badge ${(t.ff_remaining||0) > 5 ? 'green' : 'red'}">$${(t.ff_remaining||0).toFixed(2)}</span></td>
+      <td><button class="btn btn-outline" onclick="openShopModal('${t.schema}','${t.name}',${t.ff_monthly_budget||0})">Edit</button></td>
+    </tr>
+  `).join('') || '<tr><td colspan="7" class="loading">No shops found</td></tr>';
+}
+
+let editingSchema = '';
+function openShopModal(schema, name, budget) {
+  editingSchema = schema;
+  document.getElementById('shopModalTitle').textContent = `Manage: ${name}`;
+  document.getElementById('modalBudget').value = budget;
+  document.getElementById('modalCredits').value = '';
+  document.getElementById('shopModalErr').textContent = '';
+  document.getElementById('shopModal').classList.add('open');
+}
+
+async function saveShop() {
+  const budget = parseFloat(document.getElementById('modalBudget').value);
+  const credits = parseFloat(document.getElementById('modalCredits').value) || 0;
+  try {
+    await api(`/tenants/${editingSchema}/budget`, { method:'PUT', body: JSON.stringify({ budget }) });
+    if (credits > 0) await api(`/tenants/${editingSchema}/credits`, { method:'POST', body: JSON.stringify({ amount: credits }) });
+    closeModal('shopModal');
+    loadAll();
+  } catch(e) { document.getElementById('shopModalErr').textContent = e.message; }
+}
+
+function openNewShopModal() {
+  document.getElementById('newShopErr').textContent = '';
+  ['nsName','nsAdminName','nsAdminEmail','nsPassword'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('newShopModal').classList.add('open');
+}
+
+async function createShop() {
+  const body = {
+    shopName: document.getElementById('nsName').value.trim(),
+    adminName: document.getElementById('nsAdminName').value.trim(),
+    adminEmail: document.getElementById('nsAdminEmail').value.trim(),
+    adminPassword: document.getElementById('nsPassword').value.trim(),
+  };
+  if (!body.shopName || !body.adminEmail || !body.adminPassword) {
+    document.getElementById('newShopErr').textContent = 'All fields required'; return;
+  }
+  try {
+    await api('/tenants', { method:'POST', body: JSON.stringify(body) });
+    closeModal('newShopModal');
+    loadAll();
+  } catch(e) { document.getElementById('newShopErr').textContent = e.message; }
+}
+
+// ── USERS ─────────────────────────────────────────────────────────────────────
+async function loadUsers() {
+  const schema = document.getElementById('userShopSelect').value;
+  if (!schema) return;
+  currentShopSchema = schema;
+  document.getElementById('usersTable').innerHTML = '<tr><td colspan="5" class="loading">Loading...</td></tr>';
+  try {
+    const users = await api(`/tenants/${schema}/users`);
+    document.getElementById('usersTable').innerHTML = users.map(u => `
+      <tr>
+        <td><strong>${u.name}</strong></td>
+        <td>${u.email}</td>
+        <td><span class="badge ${u.role==='admin'?'gold':'blue'}">${u.role}</span></td>
+        <td style="color:rgba(255,255,255,.3);font-size:11px">${u.created_at?.slice(0,10)||'—'}</td>
+        <td><button class="btn btn-red" onclick="deleteUser('${schema}',${u.id},'${u.name}')">Remove</button></td>
+      </tr>
+    `).join('') || '<tr><td colspan="5" class="loading">No users</td></tr>';
+  } catch(e) { document.getElementById('usersTable').innerHTML = `<tr><td colspan="5" class="loading">${e.message}</td></tr>`; }
+}
+
+function openAddUserModal() {
+  if (!currentShopSchema) { alert('Select a shop first'); return; }
+  document.getElementById('addUserErr').textContent = '';
+  ['newUserName','newUserEmail','newUserPassword'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('addUserModal').classList.add('open');
+}
+
+async function saveUser() {
+  const body = {
+    name: document.getElementById('newUserName').value.trim(),
+    email: document.getElementById('newUserEmail').value.trim(),
+    password: document.getElementById('newUserPassword').value.trim(),
+    role: document.getElementById('newUserRole').value,
+  };
+  if (!body.name || !body.email || !body.password) { document.getElementById('addUserErr').textContent = 'All fields required'; return; }
+  try {
+    await api(`/tenants/${currentShopSchema}/users`, { method:'POST', body: JSON.stringify(body) });
+    closeModal('addUserModal');
+    loadUsers();
+  } catch(e) { document.getElementById('addUserErr').textContent = e.message; }
+}
+
+async function deleteUser(schema, id, name) {
+  if (!confirm(`Remove ${name}?`)) return;
+  await api(`/tenants/${schema}/users/${id}`, { method:'DELETE' });
+  loadUsers();
+}
+
+// ── LOGS ──────────────────────────────────────────────────────────────────────
+async function loadLogs() {
+  const schema = document.getElementById('logShopSelect').value;
+  if (!schema) return;
+  document.getElementById('logsTable').innerHTML = '<tr><td colspan="6" class="loading">Loading...</td></tr>';
+  try {
+    const logs = await api(`/tenants/${schema}/logs`);
+    document.getElementById('logsTable').innerHTML = logs.map(l => `
+      <tr>
+        <td style="font-size:11px;color:rgba(255,255,255,.4)">${l.ran_at?.slice(0,16).replace('T',' ')||'—'}</td>
+        <td>${l.search_label||'—'}</td>
+        <td style="font-size:11px">${l.industries||'—'}</td>
+        <td>${l.radius_miles ? l.radius_miles+'mi' : '—'}</td>
+        <td>${l.result_count||0}</td>
+        <td><span class="badge gold">$${(l.cost_usd||0).toFixed(4)}</span></td>
+      </tr>
+    `).join('') || '<tr><td colspan="6" class="loading">No logs</td></tr>';
+  } catch(e) { document.getElementById('logsTable').innerHTML = `<tr><td colspan="6" class="loading">${e.message}</td></tr>`; }
+}
+
+// ── MODALS ────────────────────────────────────────────────────────────────────
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+document.querySelectorAll('.modal-overlay').forEach(m => m.addEventListener('click', e => { if(e.target===m) m.classList.remove('open'); }));
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+const saved = sessionStorage.getItem('pk');
+if (saved) { KEY = saved; showApp(); }
+</script>
+</body>
+</html>
