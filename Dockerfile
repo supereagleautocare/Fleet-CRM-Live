@@ -8,7 +8,7 @@ RUN cd fleet-crm-backend-v2 && npm ci --omit=dev
 
 # Install frontend dependencies
 COPY fleet-crm-frontend/package*.json ./fleet-crm-frontend/
-RUN cd fleet-crm-frontend && npm ci
+RUN cd fleet-crm-frontend && npm install
 
 # Copy all source files
 COPY . .
