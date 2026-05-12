@@ -176,8 +176,10 @@ router.get('/settings', auth, async (req, res) => {
 router.put('/settings', auth, async (req, res) => {
   try {
     const updates = req.body;
+    const PLATFORM_CONTROLLED = ['ff_monthly_budget', 'ff_extra_credits'];
     for (const [key, value] of Object.entries(updates)) {
       if (!key.startsWith('ff_')) continue;
+      if (PLATFORM_CONTROLLED.includes(key)) continue;
       const val = typeof value === 'string' ? value : JSON.stringify(value);
       await req.db.query(
         `INSERT INTO config_settings (key, value, label) VALUES ($1, $2, $3)
@@ -194,17 +196,25 @@ router.put('/settings', auth, async (req, res) => {
 // ── GET /api/fleetfinder/budget ──────────────────────────────────────────────
 router.get('/budget', auth, async (req, res) => {
   try {
-    const [budgetRow, spentRow] = await Promise.all([
+    const [budgetRow, extraRow, spentRow] = await Promise.all([
       req.db.query(`SELECT value FROM config_settings WHERE key = 'ff_monthly_budget'`),
+      req.db.query(`SELECT value FROM config_settings WHERE key = 'ff_extra_credits'`),
       req.db.query(
         `SELECT COALESCE(SUM(cost_usd), 0) as spent
          FROM fleet_finder_cost_log
          WHERE ran_at >= date_trunc('month', now())::text`
       ),
     ]);
-    const budget = parseFloat(budgetRow.rows[0]?.value || 50);
-    const spent  = parseFloat(spentRow.rows[0]?.spent || 0);
-    res.json({ budget, spent, remaining: Math.max(0, budget - spent) });
+    const budget       = parseFloat(budgetRow.rows[0]?.value || 50);
+    const extraCredits = parseFloat(extraRow.rows[0]?.value  || 0);
+    const spent        = parseFloat(spentRow.rows[0]?.spent  || 0);
+    res.json({
+      budget,
+      extra_credits:          extraCredits,
+      spent,
+      remaining:              Math.max(0, budget - spent),
+      remaining_with_credits: Math.max(0, budget + extraCredits - spent),
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -479,18 +489,23 @@ router.post('/search', auth, async (req, res) => {
 
   try {
     // ── 1. Budget check ───────────────────────────────────────────────────────
-    const [budgetRow, spentRow] = await Promise.all([
+    const [budgetRow, extraRow, spentRow] = await Promise.all([
       req.db.query(`SELECT value FROM config_settings WHERE key = 'ff_monthly_budget'`),
+      req.db.query(`SELECT value FROM config_settings WHERE key = 'ff_extra_credits'`),
       req.db.query(
         `SELECT COALESCE(SUM(cost_usd), 0) as spent
          FROM fleet_finder_cost_log
          WHERE ran_at >= date_trunc('month', now())::text`
       ),
     ]);
-    const budget  = parseFloat(budgetRow.rows[0]?.value || 50);
-    const spent   = parseFloat(spentRow.rows[0]?.spent || 0);
-    if (spent >= budget) {
-      return res.status(402).json({ error: `Monthly budget of $${budget} reached. Update your limit in Fleet Finder settings.` });
+    const budget       = parseFloat(budgetRow.rows[0]?.value || 50);
+    const extraCredits = parseFloat(extraRow.rows[0]?.value  || 0);
+    const spent        = parseFloat(spentRow.rows[0]?.spent  || 0);
+    if (spent >= budget && extraCredits <= 0) {
+      return res.status(402).json({
+        error: `Monthly Fleet Finder budget of $${budget.toFixed(2)} reached. Contact support to add more credits.`,
+        budget, spent, extra_credits: extraCredits,
+      });
     }
 
     // ── 2. Determine search states ─────────────────────────────────────────────
@@ -984,6 +999,19 @@ Required format per company:
         costUsd,
       ]
     );
+
+    // Deduct from extra credits for any spend that exceeded the monthly budget
+    if (extraCredits > 0) {
+      const spentAfter = spent + costUsd;
+      if (spentAfter > budget) {
+        const creditDeduction = spentAfter - Math.max(spent, budget);
+        const newCredits = Math.max(0, extraCredits - creditDeduction);
+        await req.db.query(
+          `UPDATE config_settings SET value = $1 WHERE key = 'ff_extra_credits'`,
+          [newCredits.toFixed(5)]
+        );
+      }
+    }
 
     res.json({
       results:         filtered,

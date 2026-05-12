@@ -401,7 +401,8 @@ async function initShopSchema(client, schemaName) {
       ('ff_industries',       '["Pest Control","Telecom & Cable","HVAC","Plumbing","Electrical Contractors","Landscaping & Lawn Care","Delivery & Courier","Construction","Utilities","Security & Alarm","Medical & Home Health","Government & Municipal","Vending & Distribution","Cleaning & Janitorial","Fire Protection"]', 'Fleet Finder Enabled Industries'),
       ('ff_custom_industries','[]',    'Fleet Finder Custom Industries'),
       ('ff_vehicle_types',    '["passenger","light_duty","cargo_van","medium_duty","heavy_duty","diesel"]', 'Fleet Finder Vehicle Types'),
-      ('ff_anthropic_key',    '',      'Fleet Finder Anthropic API Key')
+      ('ff_anthropic_key',    '',      'Fleet Finder Anthropic API Key'),
+      ('ff_extra_credits',   '0',     'Fleet Finder Extra Credits ($)')
     ON CONFLICT (key) DO NOTHING;
   `);
 

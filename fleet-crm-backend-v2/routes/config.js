@@ -81,6 +81,10 @@ router.get('/settings', async (req, res) => {
 });
 
 router.put('/settings/:key', async (req, res) => {
+  const PLATFORM_CONTROLLED = ['ff_monthly_budget', 'ff_extra_credits'];
+  if (PLATFORM_CONTROLLED.includes(req.params.key)) {
+    return res.status(403).json({ error: 'This setting is managed by the platform.' });
+  }
   try {
     const { rows } = await req.db.query('SELECT * FROM config_settings WHERE key = $1', [req.params.key]);
     if (!rows[0]) return res.status(404).json({ error: 'Setting not found.' });
