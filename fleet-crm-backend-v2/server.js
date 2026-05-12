@@ -26,6 +26,9 @@ const app  = express();
 app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3001;
 
+// ─── Stripe webhook (raw body — must be before express.json) ─────────────────
+app.use('/api/webhooks/stripe', require('./routes/webhook'));
+
 // ─── Middleware ───────────────────────────────────────────────────────────────
 app.use(cors({ origin: '*', credentials: true }));
 app.use(express.json({ limit: '10mb' }));
